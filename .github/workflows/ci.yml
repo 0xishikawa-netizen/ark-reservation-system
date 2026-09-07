@@ -1,0 +1,93 @@
+name: CI
+
+# Phase 0 時点の雛形。Laravel 本体（composer create-project）導入後に有効化される。
+# git remote は未設定。push/PR で走らせるのは remote 接続後。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        # Phase 0 の実測でサーバーの MySQL バージョンが判明したら合わせる
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: ark_app
+          MYSQL_ROOT_PASSWORD: secret
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -psecret"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, bcmath, intl, gd, openssl, curl, zip
+          coverage: none
+
+      - name: Guard — 秘密情報・本番接続がコミットされていないこと
+        run: |
+          set -e
+          test ! -f .env || (echo "::error::.env はコミット禁止" && exit 1)
+          ! grep -rInE 'sk_live_[A-Za-z0-9]{16,}|pk_live_[A-Za-z0-9]{16,}|rk_live_[A-Za-z0-9]{16,}' \
+              --include='*.php' --include='*.env' --include='*.js' --include='*.ts' --include='*.json' --include='*.yaml' --include='*.yml' . \
+            || (echo "::error::Stripe Live キーらしき値を検出" && exit 1)
+          ! (grep -rInE 'whsec_[A-Za-z0-9]{16,}' --include='*.php' --include='*.env' --include='*.json' . | grep -v 'whsec_test') \
+            || (echo "::error::Stripe webhook 本番 secret らしき値を検出" && exit 1)
+          ! grep -rInE "(DB_DATABASE\\s*=\\s*|['\"]database['\"]\\s*=>\\s*['\"])64ssq_ark_db" \
+              --include='*.php' --include='*.env' --include='compose.yaml' --include='compose.yml' . \
+            || (echo "::error::WordPress DB 名が接続設定に混入" && exit 1)
+
+      - name: Composer install
+        run: |
+          if [ -f composer.json ]; then composer install --no-interaction --prefer-dist --no-progress; \
+          else echo "composer.json 未生成（Phase 0）。スキップ"; fi
+
+      - name: Prepare app
+        if: hashFiles('artisan') != ''
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+        env:
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: ark_app
+          DB_USERNAME: root
+          DB_PASSWORD: secret
+
+      - name: Migrate
+        if: hashFiles('artisan') != ''
+        run: php artisan migrate --force
+        env:
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: ark_app
+          DB_USERNAME: root
+          DB_PASSWORD: secret
+
+      - name: Frontend build (TypeScript 型エラー 0)
+        if: hashFiles('package.json') != ''
+        run: |
+          npm ci
+          npm run build
+
+      - name: PHP tests (Pest/PHPUnit)
+        if: hashFiles('artisan') != ''
+        run: php artisan test
+        env:
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: ark_app
+          DB_USERNAME: root
+          DB_PASSWORD: secret
