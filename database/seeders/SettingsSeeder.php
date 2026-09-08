@@ -18,6 +18,7 @@ class SettingsSeeder extends Seeder
         'admin.idle_timeout' => ['value' => '1800', 'type' => 'int'],
         'ticket.no_show_policy' => ['value' => 'restore', 'type' => 'string'],
         'ticket.expiration_hold_policy' => ['value' => 'preserve_hold', 'type' => 'string'],
+        'membership.no_show_policy' => ['value' => 'consume', 'type' => 'string'],
     ];
 
     public function run(): void

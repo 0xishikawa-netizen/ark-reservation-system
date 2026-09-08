@@ -37,12 +37,25 @@ interface TicketAvailability {
     wallets: TicketWalletOption[];
 }
 
-type PaymentMethod = 'onsite' | 'ticket' | 'card';
+interface MembershipAvailability {
+    available: number;
+    status: string | null;
+}
+
+type PaymentMethod = 'onsite' | 'ticket' | 'card' | 'membership';
 
 const props = defineProps<{
     services: ServiceOption[];
     ticket: TicketAvailability;
+    membership: MembershipAvailability;
 }>();
+
+const bookableMembershipStatuses = ['active', 'grace', 'canceling'];
+const canUseMembership = computed(
+    () => props.membership.available >= 1
+        && props.membership.status !== null
+        && bookableMembershipStatuses.includes(props.membership.status),
+);
 
 const step = ref(1);
 const serviceId = ref<number | null>(null);
@@ -358,6 +371,11 @@ function submit(): void {
                         value="ticket"
                         :disabled="ticket.available_total < 1"
                     />
+                    <v-radio
+                        :label="`利用権を使う（当期残り ${membership.available} 回）`"
+                        value="membership"
+                        :disabled="!canUseMembership"
+                    />
                 </v-radio-group>
                 <v-alert
                     v-if="form.payment_method === 'card'"
@@ -392,6 +410,24 @@ function submit(): void {
                         {{ wallet.product_name }}：{{ wallet.available }}回
                         （有効期限 {{ formatDate(wallet.expires_at) }}）
                     </div>
+                </v-alert>
+                <v-alert
+                    v-if="!canUseMembership"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-4"
+                >
+                    利用可能回数がないか、現在の状態では利用権を選択できません。
+                </v-alert>
+                <v-alert
+                    v-else-if="form.payment_method === 'membership'"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-4"
+                >
+                    当期の利用権を 1 回分使用します。
                 </v-alert>
                 <v-alert
                     v-if="form.errors.reservation"

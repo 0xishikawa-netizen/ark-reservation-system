@@ -23,3 +23,10 @@ Schedule::command('payments:expire')->everyMinute()->withoutOverlapping();
 
 // 決済の突合（read-only）。差異があれば非 zero exit で失敗として記録される。
 Schedule::command('payments:reconcile')->dailyAt('03:45')->withoutOverlapping();
+
+Schedule::command('memberships:grant-current')->dailyAt('04:00')->withoutOverlapping();
+
+Schedule::command('memberships:expire-grace')->dailyAt('04:15')->withoutOverlapping();
+
+// 利用権の突合（read-only）。差異があれば非 zero exit。
+Schedule::command('memberships:reconcile')->dailyAt('04:30')->withoutOverlapping();

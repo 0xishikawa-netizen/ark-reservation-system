@@ -7,15 +7,20 @@ namespace App\Providers;
 use App\Domain\Auth\Sms\FakeSmsSender;
 use App\Domain\Auth\Sms\LogSmsSender;
 use App\Domain\Auth\Sms\SmsSender;
+use App\Domain\Membership\Gateway\FakeMembershipStripeGateway;
+use App\Domain\Membership\Gateway\MembershipStripeGateway;
+use App\Domain\Membership\Gateway\StripeApiMembershipGateway;
 use App\Domain\Payment\Gateway\FakeStripeGateway;
 use App\Domain\Payment\Gateway\StripeApiGateway;
 use App\Domain\Payment\Gateway\StripeGateway;
 use App\Listeners\AuditAuthEvents;
 use App\Listeners\AuditPasskeyEvents;
+use App\Models\Customer;
 use App\Support\Settings\Settings;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Laravel\Cashier\Cashier;
 use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
@@ -25,6 +30,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Cashier は「Stripe 課金契約の記録」に限定して使う（業務状態は memberships が SoR）。
+        // - webhook 入口は Phase 5 の POST /stripe/webhook 1 つに統合する（Cashier の /stripe/webhook は登録しない）。
+        // - migration は publish 済みのものだけが走る（Cashier v16 は vendor migration を loadMigrationsFrom しない）。
+        // - billable は App\Models\Customer。
+        Cashier::ignoreRoutes();
+        Cashier::useCustomerModel(Customer::class);
+
         $this->app->scoped(Settings::class);
         $this->app->alias(Settings::class, 'settings');
 
@@ -34,8 +46,15 @@ class AppServiceProvider extends ServiceProvider
                 StripeGateway::class,
                 static fn ($app): StripeGateway => $app->make(FakeStripeGateway::class),
             );
+
+            $this->app->singleton(FakeMembershipStripeGateway::class);
+            $this->app->bind(
+                MembershipStripeGateway::class,
+                static fn ($app): MembershipStripeGateway => $app->make(FakeMembershipStripeGateway::class),
+            );
         } else {
             $this->app->singleton(StripeGateway::class, StripeApiGateway::class);
+            $this->app->singleton(MembershipStripeGateway::class, StripeApiMembershipGateway::class);
         }
 
         $this->registerSmsSender();

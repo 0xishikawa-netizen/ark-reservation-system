@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reservation;
 
+use App\Domain\Membership\MembershipReservationService;
 use App\Domain\Ticket\TicketReservationService;
 use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\PaymentStatus;
@@ -35,6 +36,7 @@ final class ReservationService
     public function __construct(
         private readonly AuditLogger $auditLogger,
         private readonly TicketReservationService $tickets,
+        private readonly MembershipReservationService $memberships,
     ) {}
 
     /** @throws ValidationException|SlotUnavailableException */
@@ -89,9 +91,12 @@ final class ReservationService
                     slots: $slots,
                 ));
 
-                // カード決済予約では Ticket HOLD を作らない（Phase 5 の分離要件）。
+                // 支払い方法ごとに排他。1 予約で ticket と membership を同時消費しない。
+                // カード（single）は Stripe 側で処理し、ここでは台帳 HOLD を作らない（Phase 5 の分離要件）。
                 if ($in->paymentMethod === PaymentMethod::Ticket) {
                     $this->tickets->hold($reservation, $this->actor($in->actorUserId));
+                } elseif ($in->paymentMethod === PaymentMethod::Membership) {
+                    $this->memberships->reserve($reservation, $this->actor($in->actorUserId));
                 }
 
                 return $reservation;
@@ -214,6 +219,7 @@ final class ReservationService
                 ->delete();
 
             $this->tickets->release($reservation, $actor);
+            $this->memberships->release($reservation, $actor);
 
             return $reservation;
         });
@@ -238,6 +244,7 @@ final class ReservationService
             $this->applyStatus($reservation, ReservationStatus::Completed);
             $reservation->forceFill(['attended_at' => now()])->save();
             $this->tickets->consume($reservation, $actor);
+            $this->memberships->consume($reservation, $actor);
 
             return $reservation;
         });
@@ -261,6 +268,7 @@ final class ReservationService
             $reservation = $this->lockReservation($reservation);
             $this->applyStatus($reservation, ReservationStatus::NoShow);
             $this->tickets->handleNoShow($reservation, $actor);
+            $this->memberships->handleNoShow($reservation, $actor);
 
             return $reservation;
         });

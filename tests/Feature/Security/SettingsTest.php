@@ -25,7 +25,8 @@ class SettingsTest extends TestCase
             'preserve_hold',
             app(Settings::class)->get('ticket.expiration_hold_policy'),
         );
-        $this->assertSame(7, Setting::query()->count());
+        $this->assertSame('consume', app(Settings::class)->get('membership.no_show_policy'));
+        $this->assertSame(8, Setting::query()->count());
     }
 
     public function test_missing_setting_returns_the_given_default(): void

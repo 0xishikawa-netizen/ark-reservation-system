@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Reserve;
 
+use App\Domain\Membership\MembershipLedgerService;
 use App\Domain\Reservation\AvailabilityService;
 use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
@@ -14,6 +15,7 @@ use App\Exceptions\Reservation\SlotUnavailableException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\StoreReservationRequest;
 use App\Models\Customer;
+use App\Models\Membership;
 use App\Models\TicketWallet;
 use App\Models\User;
 use App\Queries\OnlineBookableServiceQuery;
@@ -49,12 +51,23 @@ class ReserveController extends Controller
                 'expires_at' => $wallet->expires_at->toDateString(),
             ])
             ->values();
+        $membership = Membership::query()
+            ->where('customer_id', $customer->user_id)
+            ->bookable()
+            ->latest('id')
+            ->first();
 
         return Inertia::render('Customer/Reserve/Index', [
             'services' => $query->get(),
             'ticket' => [
                 'available_total' => $ticketWallets->sum('available'),
                 'wallets' => $ticketWallets->all(),
+            ],
+            'membership' => [
+                'available' => $membership === null
+                    ? 0
+                    : app(MembershipLedgerService::class)->available($membership),
+                'status' => $membership?->status->value,
             ],
         ]);
     }
@@ -103,6 +116,7 @@ class ReserveController extends Controller
             : null;
         $paymentMethod = match ($request->string('payment_method')->toString()) {
             'ticket' => PaymentMethod::Ticket,
+            'membership' => PaymentMethod::Membership,
             // single = Stripe カード決済（pending_payment で枠を確保し、capture 後に確定）
             'card' => PaymentMethod::Single,
             default => PaymentMethod::Onsite,

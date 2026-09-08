@@ -12,9 +12,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
+use Laravel\Cashier\Billable;
 
 class Customer extends Model
 {
+    /**
+     * Cashier（Stripe 課金契約の記録専用）。業務状態・残回数・予約可否は memberships が SoR。
+     */
+    use Billable;
+
     use HasFactory;
 
     protected $primaryKey = 'user_id';
@@ -47,6 +53,23 @@ class Customer extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Cashier は billable の `stripe_id` 属性を読み書きする。ARK は Phase 1 から
+     * `customers.stripe_customer_id` を SoR にしているため、rename せずここでエイリアスする。
+     * （旧式アクセサ/ミューテタ。`stripeId()` メソッドと衝突しない命名を使う。）
+     */
+    public function getStripeIdAttribute(): ?string
+    {
+        $value = $this->attributes['stripe_customer_id'] ?? null;
+
+        return $value === null ? null : (string) $value;
+    }
+
+    public function setStripeIdAttribute(?string $value): void
+    {
+        $this->attributes['stripe_customer_id'] = $value;
     }
 
     /** @return HasMany<Payment, $this> */

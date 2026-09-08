@@ -58,6 +58,12 @@ const createdViaLabel = (value: string): string => {
                 回数券
             </v-btn>
             <v-btn
+                variant="tonal"
+                :href="`/admin/customers/${customer.user_id}/membership`"
+            >
+                会員
+            </v-btn>
+            <v-btn
                 v-if="page.props.auth.can.customersManage"
                 color="primary"
                 :href="`/admin/customers/${customer.user_id}/edit`"

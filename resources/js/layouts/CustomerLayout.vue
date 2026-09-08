@@ -57,6 +57,13 @@ const logout = (): void => {
                     <v-btn
                         variant="text"
                         color="primary"
+                        @click="router.visit('/mypage/membership')"
+                    >
+                        会員
+                    </v-btn>
+                    <v-btn
+                        variant="text"
+                        color="primary"
                         @click="router.visit('/mypage/profile')"
                     >
                         プロフィール

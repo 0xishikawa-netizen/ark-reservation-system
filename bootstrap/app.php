@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\Membership\InsufficientMembershipBalanceException;
 use App\Exceptions\Reservation\SlotUnavailableException;
 use App\Exceptions\Reservation\StaleReservationException;
 use App\Exceptions\Ticket\InsufficientTicketBalanceException;
@@ -63,6 +64,9 @@ return Application::configure(basePath: dirname(__DIR__))
         );
         $exceptions->render(
             fn (InsufficientTicketBalanceException $exception, Request $request) => $renderConflict($exception, $request),
+        );
+        $exceptions->render(
+            fn (InsufficientMembershipBalanceException $exception, Request $request) => $renderConflict($exception, $request),
         );
 
         $exceptions->shouldRenderJsonWhen(

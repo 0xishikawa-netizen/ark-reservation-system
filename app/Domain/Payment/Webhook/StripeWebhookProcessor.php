@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Payment\Webhook;
 
+use App\Domain\Membership\Webhook\MembershipWebhookHandler;
 use App\Domain\Payment\ReservationCheckoutSaga;
 use App\Enums\Payment\WebhookEventStatus;
 use App\Models\Payment;
@@ -26,8 +27,8 @@ use Throwable;
  */
 final class StripeWebhookProcessor
 {
-    /** Phase 5 で処理するイベント。invoice.* / customer.subscription.* は Phase 6。 */
-    private const HANDLED = [
+    /** Phase 5: PaymentIntent / Refund 系。invoice.* / customer.subscription.* は Phase 6（MembershipWebhookHandler）。 */
+    private const PAYMENT_HANDLED = [
         'payment_intent.succeeded',
         'payment_intent.amount_capturable_updated',
         'payment_intent.payment_failed',
@@ -37,6 +38,7 @@ final class StripeWebhookProcessor
 
     public function __construct(
         private readonly ReservationCheckoutSaga $saga,
+        private readonly MembershipWebhookHandler $membership,
     ) {}
 
     /**
@@ -59,7 +61,11 @@ final class StripeWebhookProcessor
             return 'duplicate';
         }
 
-        if (! in_array($type, self::HANDLED, true)) {
+        if ($this->membership->handles($type)) {
+            return $this->processMembership($record, $eventId, $type, $event);
+        }
+
+        if (! in_array($type, self::PAYMENT_HANDLED, true)) {
             $this->finish($record, WebhookEventStatus::Ignored);
 
             return 'ignored';
@@ -103,6 +109,47 @@ final class StripeWebhookProcessor
             ]);
 
             return 'failed';
+        }
+
+        $this->finish($record, WebhookEventStatus::Processed);
+
+        return 'processed';
+    }
+
+    /**
+     * invoice.* / customer.subscription.* を Membership へ反映する。
+     * 冪等は webhook_events.stripe_event_id UNIQUE、順序耐性は「現在オブジェクト retrieve + 前進のみ」。
+     *
+     * @param  array<string, mixed>  $event
+     * @return 'processed'|'ignored'|'failed'
+     */
+    private function processMembership(WebhookEvent $record, string $eventId, string $type, array $event): string
+    {
+        try {
+            $outcome = $this->membership->handle($type, $event);
+        } catch (Throwable $exception) {
+            $this->finish($record, WebhookEventStatus::Failed, $exception::class);
+
+            Log::warning('stripe membership webhook processing failed', [
+                'event_id' => $eventId,
+                'type' => $type,
+                'reason' => $exception::class,
+            ]);
+
+            return 'failed';
+        }
+
+        if ($outcome['membership_id'] !== null) {
+            $record->forceFill([
+                'related_type' => 'membership',
+                'related_id' => (string) $outcome['membership_id'],
+            ])->save();
+        }
+
+        if ($outcome['result'] === 'ignored') {
+            $this->finish($record, WebhookEventStatus::Ignored, $outcome['note']);
+
+            return 'ignored';
         }
 
         $this->finish($record, WebhookEventStatus::Processed);

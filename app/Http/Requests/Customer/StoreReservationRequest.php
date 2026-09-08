@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Customer;
 
+use App\Domain\Membership\MembershipLedgerService;
 use App\Domain\Ticket\TicketLedgerService;
+use App\Models\Membership;
 use App\Models\Service;
 use App\Models\Staff;
 use App\Models\TicketWallet;
@@ -30,7 +32,7 @@ class StoreReservationRequest extends FormRequest
             'service_id' => ['required', 'integer', 'exists:services,id'],
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
             'starts_at' => ['required', 'date', 'after:now'],
-            'payment_method' => ['nullable', 'string', Rule::in(['onsite', 'ticket', 'card'])],
+            'payment_method' => ['nullable', 'string', Rule::in(['onsite', 'ticket', 'card', 'membership'])],
         ];
     }
 
@@ -51,6 +53,7 @@ class StoreReservationRequest extends FormRequest
             $this->validateStaff($validator, $service);
             $this->validateBoundary($validator);
             $this->validateTicketBalance($validator);
+            $this->validateMembershipBalance($validator);
         });
     }
 
@@ -128,6 +131,34 @@ class StoreReservationRequest extends FormRequest
             $validator->errors()->add(
                 'payment_method',
                 '利用可能な回数券がありません。',
+            );
+        }
+    }
+
+    private function validateMembershipBalance(Validator $validator): void
+    {
+        if ($this->input('payment_method') !== 'membership'
+            || $validator->errors()->has('payment_method')) {
+            return;
+        }
+
+        $customer = $this->user()?->customer;
+
+        if ($customer === null) {
+            return;
+        }
+
+        $membership = Membership::query()
+            ->where('customer_id', $customer->user_id)
+            ->bookable()
+            ->latest('id')
+            ->first();
+
+        if ($membership === null
+            || app(MembershipLedgerService::class)->available($membership) < 1) {
+            $validator->errors()->add(
+                'payment_method',
+                '利用可能な利用権がありません。',
             );
         }
     }

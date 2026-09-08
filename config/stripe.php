@@ -48,6 +48,12 @@ return [
         'payment_intent_capture' => 'pi-capture:{payment_operation_id}',
         'payment_intent_cancel' => 'pi-cancel:{payment_operation_id}',
         'refund' => 'refund:{refund_operation_id}',
+        // Phase 6 Membership。すべて memberships.membership_operation_id（DB 永続値）だけから導出。
+        // retry / reload / job 再実行で新しい operation ID を発行しない。
+        'subscription_create' => 'sub-create:{membership_operation_id}',
+        'subscription_cancel' => 'sub-cancel:{membership_operation_id}',
+        'subscription_resume' => 'sub-resume:{membership_operation_id}',
+        'subscription_cancel_now' => 'sub-cancel-now:{membership_operation_id}',
     ],
 
     /*

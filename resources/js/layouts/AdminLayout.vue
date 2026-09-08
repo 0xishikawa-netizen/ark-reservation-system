@@ -40,6 +40,15 @@ const navigationItems = computed<NavigationItem[]>(() => {
                   },
               ]
             : []),
+        ...(can.membershipManage
+            ? [
+                  {
+                      title: '会員プラン',
+                      href: '/admin/membership-plans',
+                      disabled: false,
+                  },
+              ]
+            : []),
         ...(can.customersView
             ? [{ title: '顧客', href: '/admin/customers', disabled: false }]
             : []),

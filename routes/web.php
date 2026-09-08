@@ -5,9 +5,12 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\BoothController;
 use App\Http\Controllers\Admin\CustomerController;
+use App\Http\Controllers\Admin\CustomerMembershipController as AdminCustomerMembershipController;
 use App\Http\Controllers\Admin\CustomerTicketController;
 use App\Http\Controllers\Admin\FailedJobsController;
+use App\Http\Controllers\Admin\MembershipPlanController;
 use App\Http\Controllers\Admin\MfaController;
+use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\ReservationController as AdminReservationController;
 use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
@@ -16,7 +19,7 @@ use App\Http\Controllers\Admin\StaffShiftController;
 use App\Http\Controllers\Admin\TicketPolicySettingsController;
 use App\Http\Controllers\Admin\TicketProductController;
 use App\Http\Controllers\Admin\TwoFactorSetupController;
-use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
+use App\Http\Controllers\Customer\MembershipController as CustomerMembershipController;
 use App\Http\Controllers\Customer\PaymentController as CustomerPaymentController;
 use App\Http\Controllers\Customer\ProfileController;
 use App\Http\Controllers\Customer\ReservationController as CustomerReservationController;
@@ -65,6 +68,17 @@ Route::middleware(['web', 'auth', 'verified'])
             ->name('reservations.payment.sync');
         Route::get('tickets', [CustomerTicketPageController::class, 'index'])
             ->name('tickets.index');
+        Route::get('membership', [CustomerMembershipController::class, 'show'])
+            ->name('membership.show');
+        Route::post('membership/subscribe', [CustomerMembershipController::class, 'subscribe'])
+            ->middleware('throttle:reserve')
+            ->name('membership.subscribe');
+        Route::post('membership/cancel', [CustomerMembershipController::class, 'cancel'])
+            ->name('membership.cancel');
+        Route::post('membership/resume', [CustomerMembershipController::class, 'resume'])
+            ->name('membership.resume');
+        Route::put('membership/payment-method', [CustomerMembershipController::class, 'updatePaymentMethod'])
+            ->name('membership.payment-method');
         Route::get('profile', [ProfileController::class, 'show'])
             ->name('profile.show');
         Route::get('profile/edit', [ProfileController::class, 'edit'])
@@ -131,6 +145,9 @@ Route::middleware([
     Route::get('customers/{customer}/tickets', [CustomerTicketController::class, 'show'])
         ->middleware('can:customers.view')
         ->name('customers.tickets');
+    Route::get('customers/{customer}/membership', [AdminCustomerMembershipController::class, 'show'])
+        ->middleware('can:customers.view')
+        ->name('customers.membership');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])
         ->name('customers.show');
     Route::get('customers/{customer}/edit', [CustomerController::class, 'edit'])
@@ -185,6 +202,29 @@ Route::middleware([
         Route::patch('ticket-products/{ticketProduct}/active', [TicketProductController::class, 'setActive'])
             ->name('ticket-products.set-active');
     });
+    Route::middleware('can:membership.manage')->group(function (): void {
+        Route::get('membership-plans', [MembershipPlanController::class, 'index'])
+            ->name('membership-plans.index');
+        Route::get('membership-plans/create', [MembershipPlanController::class, 'create'])
+            ->name('membership-plans.create');
+        Route::post('membership-plans', [MembershipPlanController::class, 'store'])
+            ->name('membership-plans.store');
+        Route::get('membership-plans/{membershipPlan}/edit', [MembershipPlanController::class, 'edit'])
+            ->name('membership-plans.edit');
+        Route::put('membership-plans/{membershipPlan}', [MembershipPlanController::class, 'update'])
+            ->name('membership-plans.update');
+        Route::patch('membership-plans/{membershipPlan}/active', [MembershipPlanController::class, 'setActive'])
+            ->name('membership-plans.set-active');
+    });
+    Route::middleware(['can:membership.manage', 'password.confirm'])->group(function (): void {
+        Route::post('memberships/{membership}/adjust', [AdminCustomerMembershipController::class, 'adjust'])
+            ->name('memberships.adjust');
+        Route::post('memberships/{membership}/cancel-now', [AdminCustomerMembershipController::class, 'cancelNow'])
+            ->name('memberships.cancel-now');
+    });
+    Route::post('memberships/{membership}/sync', [AdminCustomerMembershipController::class, 'sync'])
+        ->middleware('can:membership.manage')
+        ->name('memberships.sync');
     Route::middleware(['can:ticket.grant', 'password.confirm'])->group(function (): void {
         Route::post('customers/{customer}/tickets/grant', [CustomerTicketController::class, 'grant'])
             ->name('customers.tickets.grant');

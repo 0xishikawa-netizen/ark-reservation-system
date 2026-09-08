@@ -188,6 +188,13 @@ function cancelReservation(): void {
             >
                 お支払い：回数券
             </v-chip>
+            <v-chip
+                v-if="reservation.payment_method === 'membership'"
+                color="secondary"
+                class="mb-4 ml-2"
+            >
+                お支払い：利用権
+            </v-chip>
             <v-list lines="two">
                 <v-list-item title="日時" :subtitle="formatDateTime(reservation.starts_at)" />
                 <v-list-item title="サービス" :subtitle="reservation.service_name" />

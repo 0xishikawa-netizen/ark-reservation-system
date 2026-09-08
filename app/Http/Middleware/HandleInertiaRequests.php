@@ -51,6 +51,7 @@ class HandleInertiaRequests extends Middleware
                     'ticketPolicyManage' => $user?->can('ticket_policy.manage') ?? false,
                     'ticketProductsManage' => $user?->can('ticket_products.manage') ?? false,
                     'ticketGrant' => $user?->can('ticket.grant') ?? false,
+                    'membershipManage' => $user?->can('membership.manage') ?? false,
                 ],
             ],
             'flash' => [
