@@ -17,6 +17,11 @@ class RolePermissionSeeder extends Seeder
         'failed_jobs.view',
         'audit_logs.view',
         'staff.manage',
+        'services.manage',
+        'booths.manage',
+        'shifts.manage',
+        'customers.view',
+        'customers.manage',
         'settings.manage',
         'refund.execute',
         'ticket.grant',
@@ -50,12 +55,16 @@ class RolePermissionSeeder extends Seeder
             'admin.access',
             'failed_jobs.view',
             'audit_logs.view',
+            'customers.view',
             'refund.execute',
             'ticket.grant',
             'membership.manage',
             'settings.manage',
         ])->values());
-        $roles['staff']->syncPermissions([$permissions['admin.access']]);
+        $roles['staff']->syncPermissions([
+            $permissions['admin.access'],
+            $permissions['customers.view'],
+        ]);
         $roles['customer']->syncPermissions([]);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();

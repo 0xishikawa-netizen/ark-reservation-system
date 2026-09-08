@@ -22,6 +22,18 @@ const navigationItems = computed<NavigationItem[]>(() => {
         ...(can.staffManage
             ? [{ title: 'スタッフ', href: '/admin/staff', disabled: false }]
             : []),
+        ...(can.shiftsManage
+            ? [{ title: '勤務枠', href: '/admin/staff-shifts', disabled: false }]
+            : []),
+        ...(can.servicesManage
+            ? [{ title: 'サービス', href: '/admin/services', disabled: false }]
+            : []),
+        ...(can.boothsManage
+            ? [{ title: 'ブース', href: '/admin/booths', disabled: false }]
+            : []),
+        ...(can.customersView
+            ? [{ title: '顧客', href: '/admin/customers', disabled: false }]
+            : []),
         ...(can.failedJobsView
             ? [
                   {

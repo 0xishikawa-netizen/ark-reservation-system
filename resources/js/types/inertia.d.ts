@@ -11,6 +11,11 @@ interface AuthUser {
 
 interface AuthPermissions {
     staffManage: boolean;
+    servicesManage: boolean;
+    boothsManage: boolean;
+    shiftsManage: boolean;
+    customersView: boolean;
+    customersManage: boolean;
     failedJobsView: boolean;
     auditLogsView: boolean;
 }

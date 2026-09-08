@@ -95,6 +95,11 @@ class AdminAccessTest extends TestCase
                 ->component('Admin/Dashboard')
                 ->where('failedJobsCount', 0)
                 ->where('auth.can.staffManage', false)
+                ->where('auth.can.servicesManage', false)
+                ->where('auth.can.boothsManage', false)
+                ->where('auth.can.shiftsManage', false)
+                ->where('auth.can.customersView', true)
+                ->where('auth.can.customersManage', false)
                 ->where('auth.can.failedJobsView', false)
                 ->where('auth.can.auditLogsView', false));
     }

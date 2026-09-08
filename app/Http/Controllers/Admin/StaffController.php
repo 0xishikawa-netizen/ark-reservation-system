@@ -5,23 +5,23 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Staff\CreateStaff;
+use App\Actions\Staff\DeactivateStaff;
+use App\Actions\Staff\UpdateStaff;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreStaffRequest;
+use App\Http\Requests\Admin\UpdateStaffRequest;
 use App\Models\Staff;
+use App\Queries\StaffListQuery;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class StaffController extends Controller
 {
-    public function index(): Response
+    public function index(StaffListQuery $query): Response
     {
-        $staff = Staff::query()
-            ->select(['user_id', 'display_name', 'color', 'is_bookable', 'sort_order'])
-            ->with('user:id,name,email')
-            ->orderBy('sort_order')
-            ->orderBy('display_name')
-            ->get()
+        $staff = $query->get()
             ->map(fn (Staff $staffMember): array => [
                 'user_id' => $staffMember->user_id,
                 'name' => $staffMember->user->name,
@@ -29,6 +29,8 @@ class StaffController extends Controller
                 'display_name' => $staffMember->display_name,
                 'color' => $staffMember->color,
                 'is_bookable' => $staffMember->is_bookable,
+                'sort_order' => $staffMember->sort_order,
+                'role' => $staffMember->user->getRoleNames()->first(),
             ]);
 
         return Inertia::render('Admin/Staff/Index', [
@@ -47,5 +49,50 @@ class StaffController extends Controller
 
         return redirect()->route('admin.staff.index')
             ->with('success', 'スタッフを作成し、パスワード設定メールを送信しました。');
+    }
+
+    public function edit(Staff $staff, StaffListQuery $query): Response
+    {
+        $staff = $query->forEdit($staff);
+
+        return Inertia::render('Admin/Staff/Edit', [
+            'staff' => [
+                'user_id' => $staff->user_id,
+                'name' => $staff->user->name,
+                'email' => $staff->user->email,
+                'display_name' => $staff->display_name,
+                'color' => $staff->color,
+                'is_bookable' => $staff->is_bookable,
+                'sort_order' => $staff->sort_order,
+                'role' => $staff->user->getRoleNames()->first(),
+            ],
+            'roles' => [
+                ['title' => 'スタッフ', 'value' => 'staff'],
+                ['title' => 'マネージャー', 'value' => 'manager'],
+                ['title' => '管理者', 'value' => 'admin'],
+            ],
+        ]);
+    }
+
+    public function update(
+        UpdateStaffRequest $request,
+        Staff $staff,
+        UpdateStaff $updateStaff,
+    ): RedirectResponse {
+        $updateStaff->execute($staff, $request->validated(), $request->user());
+
+        return redirect()->route('admin.staff.index')
+            ->with('success', 'スタッフを更新しました。');
+    }
+
+    public function deactivate(
+        Request $request,
+        Staff $staff,
+        DeactivateStaff $deactivateStaff,
+    ): RedirectResponse {
+        $deactivateStaff->execute($staff, $request->user());
+
+        return redirect()->route('admin.staff.index')
+            ->with('success', 'スタッフを予約受付不可にしました。');
     }
 }

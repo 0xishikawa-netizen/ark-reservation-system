@@ -33,6 +33,13 @@ const logout = (): void => {
                     <v-btn variant="text" color="primary" @click="router.visit('/')">
                         マイページ
                     </v-btn>
+                    <v-btn
+                        variant="text"
+                        color="primary"
+                        @click="router.visit('/mypage/profile')"
+                    >
+                        プロフィール
+                    </v-btn>
                 </nav>
 
                 <v-alert

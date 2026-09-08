@@ -23,9 +23,26 @@ class RolePermissionSeederTest extends TestCase
 
         $this->assertSame($firstCounts, $this->permissionTableCounts());
         $this->assertSame(4, $firstCounts['roles']);
-        $this->assertSame(8, $firstCounts['permissions']);
-        $this->assertSame(16, $firstCounts['role_has_permissions']);
+        $this->assertSame(13, $firstCounts['permissions']);
+        $this->assertSame(23, $firstCounts['role_has_permissions']);
+        $this->assertTrue($this->roleHasPermission('admin', 'booths.manage'));
+        $this->assertTrue($this->roleHasPermission('admin', 'shifts.manage'));
+        $this->assertTrue($this->roleHasPermission('admin', 'customers.view'));
+        $this->assertTrue($this->roleHasPermission('admin', 'customers.manage'));
+        $this->assertTrue($this->roleHasPermission('manager', 'customers.view'));
+        $this->assertFalse($this->roleHasPermission('manager', 'customers.manage'));
+        $this->assertTrue($this->roleHasPermission('staff', 'customers.view'));
+        $this->assertFalse($this->roleHasPermission('staff', 'customers.manage'));
         $this->assertFalse($this->roleHasPermission('manager', 'staff.manage'));
+        $this->assertFalse($this->roleHasPermission('manager', 'services.manage'));
+        $this->assertFalse($this->roleHasPermission('manager', 'booths.manage'));
+        $this->assertFalse($this->roleHasPermission('manager', 'shifts.manage'));
+        $this->assertFalse($this->roleHasPermission('staff', 'booths.manage'));
+        $this->assertFalse($this->roleHasPermission('staff', 'shifts.manage'));
+        $this->assertFalse($this->roleHasPermission('customer', 'booths.manage'));
+        $this->assertFalse($this->roleHasPermission('customer', 'shifts.manage'));
+        $this->assertFalse($this->roleHasPermission('customer', 'customers.view'));
+        $this->assertFalse($this->roleHasPermission('customer', 'customers.manage'));
     }
 
     /** @return array{roles: int, permissions: int, role_has_permissions: int} */

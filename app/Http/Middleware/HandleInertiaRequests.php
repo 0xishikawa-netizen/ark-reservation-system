@@ -39,6 +39,11 @@ class HandleInertiaRequests extends Middleware
                 ],
                 'can' => [
                     'staffManage' => $user?->can('staff.manage') ?? false,
+                    'servicesManage' => $user?->can('services.manage') ?? false,
+                    'boothsManage' => $user?->can('booths.manage') ?? false,
+                    'shiftsManage' => $user?->can('shifts.manage') ?? false,
+                    'customersView' => $user?->can('customers.view') ?? false,
+                    'customersManage' => $user?->can('customers.manage') ?? false,
                     'failedJobsView' => $user?->can('failed_jobs.view') ?? false,
                     'auditLogsView' => $user?->can('audit_logs.view') ?? false,
                 ],

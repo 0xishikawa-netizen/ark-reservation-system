@@ -3,13 +3,14 @@
 
 SAIL := ./vendor/bin/sail
 
-.PHONY: help up down restart migrate fresh test tinker logs queue schedule probe
+.PHONY: help up down restart migrate fresh demo test tinker logs queue schedule probe
 
 help:
 	@echo "make up        - コンテナ起動 (sail up -d)"
 	@echo "make down      - コンテナ停止"
 	@echo "make migrate   - php artisan migrate"
 	@echo "make fresh     - migrate:fresh --seed （ローカルのみ）"
+	@echo "make demo      - DB を再作成しデモ用マスタを投入（ローカルのみ）"
 	@echo "make test      - php artisan test"
 	@echo "make queue     - queue:work（前景）"
 	@echo "make schedule  - schedule:work（前景）"
@@ -21,6 +22,7 @@ down:      ; $(SAIL) down
 restart:   ; $(SAIL) down && $(SAIL) up -d
 migrate:   ; $(SAIL) artisan migrate
 fresh:     ; $(SAIL) artisan migrate:fresh --seed
+demo:      ; $(SAIL) artisan migrate:fresh --seed && $(SAIL) artisan db:seed --class=DemoMasterSeeder
 test:      ; $(SAIL) artisan test
 tinker:    ; $(SAIL) artisan tinker
 queue:     ; $(SAIL) artisan queue:work --tries=3
