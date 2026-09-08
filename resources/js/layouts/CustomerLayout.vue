@@ -29,9 +29,23 @@ const logout = (): void => {
 
         <v-main class="bg-grey-lighten-4">
             <v-container class="customer-content px-4 py-6">
-                <nav aria-label="顧客メニュー" class="mb-4">
+                <nav aria-label="顧客メニュー" class="d-flex flex-wrap ga-1 mb-4">
                     <v-btn variant="text" color="primary" @click="router.visit('/')">
                         マイページ
+                    </v-btn>
+                    <v-btn
+                        variant="text"
+                        color="primary"
+                        @click="router.visit('/reserve')"
+                    >
+                        予約する
+                    </v-btn>
+                    <v-btn
+                        variant="text"
+                        color="primary"
+                        @click="router.visit('/mypage/reservations')"
+                    >
+                        予約一覧
                     </v-btn>
                     <v-btn
                         variant="text"

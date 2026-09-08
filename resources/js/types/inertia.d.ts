@@ -16,6 +16,8 @@ interface AuthPermissions {
     shiftsManage: boolean;
     customersView: boolean;
     customersManage: boolean;
+    reservationsView: boolean;
+    reservationsManage: boolean;
     failedJobsView: boolean;
     auditLogsView: boolean;
 }

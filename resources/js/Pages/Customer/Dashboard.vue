@@ -10,7 +10,7 @@ defineOptions({ layout: CustomerLayout });
 
     <v-card title="マイページ">
         <v-card-text>
-            予約・回数券・利用権の機能は、今後のタスクで追加します。
+            「予約する」から新しい予約を、「予約一覧」から予約内容を確認できます。
         </v-card-text>
     </v-card>
 </template>

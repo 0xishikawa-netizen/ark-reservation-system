@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\StateMachine;
 
 use App\Support\StateMachine\Events\StateTransitioned;
+use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -40,7 +41,10 @@ abstract class StateMachine
 
     public function apply(Model $model, string $column, string $to): void
     {
-        $from = (string) $model->{$column};
+        $current = $model->{$column};
+        $from = $current instanceof BackedEnum
+            ? (string) $current->value
+            : (string) $current;
 
         $this->assert($from, $to);
 

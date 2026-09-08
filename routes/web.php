@@ -6,12 +6,16 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\BoothController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\FailedJobsController;
+use App\Http\Controllers\Admin\ReservationController as AdminReservationController;
+use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\StaffController;
 use App\Http\Controllers\Admin\StaffShiftController;
 use App\Http\Controllers\Admin\TwoFactorSetupController;
 use App\Http\Controllers\Customer\ProfileController;
+use App\Http\Controllers\Customer\ReservationController as CustomerReservationController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\Reserve\ReserveController;
 use App\Http\Middleware\AdminAccess;
 use App\Http\Middleware\AdminIdleTimeout;
 use App\Http\Middleware\EnsureStaffTwoFactor;
@@ -19,8 +23,27 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
 
+Route::middleware(['web', 'auth', 'verified'])->group(function (): void {
+    Route::get('reserve', [ReserveController::class, 'create'])
+        ->name('reserve.create');
+    Route::get('reserve/availability', [ReserveController::class, 'availability'])
+        ->name('reserve.availability');
+    Route::post('reserve', [ReserveController::class, 'store'])
+        ->middleware('throttle:reserve')
+        ->name('reserve.store');
+});
+
 Route::middleware(['web', 'auth', 'verified'])
     ->prefix('mypage')->name('mypage.')->group(function (): void {
+        Route::get('reservations', [CustomerReservationController::class, 'index'])
+            ->name('reservations.index');
+        Route::get('reservations/{reservation}', [CustomerReservationController::class, 'show'])
+            ->name('reservations.show');
+        Route::put('reservations/{reservation}', [CustomerReservationController::class, 'update'])
+            ->middleware('throttle:reserve')
+            ->name('reservations.update');
+        Route::delete('reservations/{reservation}', [CustomerReservationController::class, 'destroy'])
+            ->name('reservations.destroy');
         Route::get('profile', [ProfileController::class, 'show'])
             ->name('profile.show');
         Route::get('profile/edit', [ProfileController::class, 'edit'])
@@ -40,6 +63,39 @@ Route::middleware([
     Route::get('/', AdminDashboardController::class)->name('dashboard');
     Route::get('two-factor-setup', [TwoFactorSetupController::class, 'show'])
         ->name('two-factor-setup');
+    Route::get('reservations', [AdminReservationController::class, 'index'])
+        ->middleware('can:reservations.view')
+        ->name('reservations.index');
+    Route::get('schedule', [ScheduleController::class, 'index'])
+        ->middleware('can:reservations.view')
+        ->name('schedule.index');
+    Route::get('reservations/customer-search', [AdminReservationController::class, 'customerSearch'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.customer-search');
+    Route::get('reservations/availability', [AdminReservationController::class, 'availability'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.availability');
+    Route::get('reservations/create', [AdminReservationController::class, 'create'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.create');
+    Route::post('reservations', [AdminReservationController::class, 'store'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.store');
+    Route::get('reservations/{reservation}/edit', [AdminReservationController::class, 'edit'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.edit');
+    Route::put('reservations/{reservation}', [AdminReservationController::class, 'update'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.update');
+    Route::patch('reservations/{reservation}/cancel', [AdminReservationController::class, 'cancel'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.cancel');
+    Route::patch('reservations/{reservation}/complete', [AdminReservationController::class, 'complete'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.complete');
+    Route::patch('reservations/{reservation}/no-show', [AdminReservationController::class, 'noShow'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.no-show');
     Route::get('customers', [CustomerController::class, 'index'])
         ->name('customers.index');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])

@@ -1,0 +1,139 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers\Reserve;
+
+use App\Domain\Reservation\AvailabilityService;
+use App\Domain\Reservation\ReservationInput;
+use App\Domain\Reservation\ReservationService;
+use App\Enums\Reservation\ReservationSource;
+use App\Exceptions\Reservation\SlotUnavailableException;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Customer\StoreReservationRequest;
+use App\Models\Customer;
+use App\Models\User;
+use App\Queries\OnlineBookableServiceQuery;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class ReserveController extends Controller
+{
+    public function create(
+        Request $request,
+        OnlineBookableServiceQuery $query,
+    ): Response {
+        $this->customerFor($request);
+
+        return Inertia::render('Customer/Reserve/Index', [
+            'services' => $query->get(),
+        ]);
+    }
+
+    public function availability(
+        Request $request,
+        AvailabilityService $availabilityService,
+    ): JsonResponse {
+        $this->customerFor($request);
+
+        $validated = $request->validate([
+            'service_id' => [
+                'required',
+                'integer',
+                Rule::exists('services', 'id')->where(
+                    fn (Builder $query): Builder => $query
+                        ->where('is_active', true)
+                        ->where('is_online_bookable', true)
+                        ->where('requires_staff', true),
+                ),
+            ],
+            'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
+            'date' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        return response()->json($availabilityService->openStartTimes(
+            (int) $validated['service_id'],
+            isset($validated['staff_id']) ? (int) $validated['staff_id'] : null,
+            null,
+            CarbonImmutable::parse((string) $validated['date']),
+        ));
+    }
+
+    public function store(
+        StoreReservationRequest $request,
+        AvailabilityService $availabilityService,
+        ReservationService $reservationService,
+    ): RedirectResponse {
+        $user = $this->userFor($request);
+        $customer = $this->customerFor($request);
+        $validated = $request->validated();
+        $serviceId = (int) $validated['service_id'];
+        $startsAt = CarbonImmutable::parse((string) $validated['starts_at']);
+        $staffId = isset($validated['staff_id'])
+            ? (int) $validated['staff_id']
+            : null;
+
+        if ($staffId === null) {
+            $candidate = collect($availabilityService->openStartTimes(
+                $serviceId,
+                null,
+                null,
+                $startsAt->startOfDay(),
+            ))->first(
+                static fn (array $slot): bool => $slot['starts_at'] === $startsAt->format('Y-m-d H:i:s'),
+            );
+
+            $staffId = is_array($candidate)
+                ? ($candidate['available_staff_ids'][0] ?? null)
+                : null;
+
+            if ($staffId === null) {
+                throw new SlotUnavailableException;
+            }
+        }
+
+        $reservation = $reservationService->create(new ReservationInput(
+            customerId: (int) $customer->user_id,
+            serviceId: $serviceId,
+            staffId: $staffId,
+            boothId: null,
+            startsAt: $startsAt,
+            source: ReservationSource::ArkWeb,
+            actorUserId: (int) $user->id,
+            notes: null,
+            adminContext: false,
+        ));
+
+        return redirect()
+            ->route('mypage.reservations.show', $reservation)
+            ->with('success', '予約が確定しました。');
+    }
+
+    private function userFor(Request $request): User
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            abort(403);
+        }
+
+        return $user;
+    }
+
+    private function customerFor(Request $request): Customer
+    {
+        $customer = $this->userFor($request)->customer;
+
+        if (! $customer instanceof Customer) {
+            abort(403);
+        }
+
+        return $customer;
+    }
+}

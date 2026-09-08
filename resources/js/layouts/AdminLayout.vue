@@ -34,6 +34,12 @@ const navigationItems = computed<NavigationItem[]>(() => {
         ...(can.customersView
             ? [{ title: '顧客', href: '/admin/customers', disabled: false }]
             : []),
+        ...(can.reservationsView
+            ? [
+                  { title: '予約', href: '/admin/reservations', disabled: false },
+                  { title: '予約台帳', href: '/admin/schedule', disabled: false },
+              ]
+            : []),
         ...(can.failedJobsView
             ? [
                   {

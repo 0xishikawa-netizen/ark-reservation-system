@@ -22,6 +22,8 @@ class RolePermissionSeeder extends Seeder
         'shifts.manage',
         'customers.view',
         'customers.manage',
+        'reservations.view',
+        'reservations.manage',
         'settings.manage',
         'refund.execute',
         'ticket.grant',
@@ -56,6 +58,8 @@ class RolePermissionSeeder extends Seeder
             'failed_jobs.view',
             'audit_logs.view',
             'customers.view',
+            'reservations.view',
+            'reservations.manage',
             'refund.execute',
             'ticket.grant',
             'membership.manage',
@@ -64,6 +68,7 @@ class RolePermissionSeeder extends Seeder
         $roles['staff']->syncPermissions([
             $permissions['admin.access'],
             $permissions['customers.view'],
+            $permissions['reservations.view'],
         ]);
         $roles['customer']->syncPermissions([]);
 
