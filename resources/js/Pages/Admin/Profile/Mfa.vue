@@ -51,8 +51,9 @@ const registerPasskey = async (): Promise<void> => {
             throw new Error('options-failed');
         }
 
-        const options = await optionsResponse.json();
-        const credential = await createPasskey(options.publicKey ?? options);
+        const body = await optionsResponse.json();
+        // laravel/passkeys は { options: {...} } 形式で返す。旧 { publicKey: {...} } も許容。
+        const credential = await createPasskey(body.options ?? body.publicKey ?? body);
 
         router.post(
             '/user/passkeys',

@@ -41,8 +41,9 @@ const loginWithPasskey = async (): Promise<void> => {
             throw new Error('options-failed');
         }
 
-        const options = await response.json();
-        const assertion = await getPasskeyAssertion(options.publicKey ?? options);
+        const body = await response.json();
+        // laravel/passkeys は { options: {...} } 形式で返す。旧 { publicKey: {...} } も許容。
+        const assertion = await getPasskeyAssertion(body.options ?? body.publicKey ?? body);
 
         router.post('/passkeys/login', { credential: assertion }, {
             onError: () => {

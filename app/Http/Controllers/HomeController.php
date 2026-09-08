@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Customer\DashboardController;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -22,7 +23,8 @@ class HomeController extends Controller
         }
 
         if ($user->hasRole('customer')) {
-            return Inertia::render('Customer/Dashboard');
+            // メソッド依存（Request / CustomerDashboardQuery）をコンテナに解決させる。
+            return app()->call([app(DashboardController::class), '__invoke']);
         }
 
         if ($user->hasAnyRole(['staff', 'manager', 'admin'])) {

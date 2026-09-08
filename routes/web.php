@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\TicketProductController;
 use App\Http\Controllers\Admin\TwoFactorSetupController;
 use App\Http\Controllers\Customer\MembershipController as CustomerMembershipController;
 use App\Http\Controllers\Customer\PaymentController as CustomerPaymentController;
+use App\Http\Controllers\Customer\PaymentHistoryController as CustomerPaymentHistoryController;
 use App\Http\Controllers\Customer\ProfileController;
 use App\Http\Controllers\Customer\ReservationController as CustomerReservationController;
 use App\Http\Controllers\Customer\TicketController as CustomerTicketPageController;
@@ -68,6 +69,8 @@ Route::middleware(['web', 'auth', 'verified'])
             ->name('reservations.payment.sync');
         Route::get('tickets', [CustomerTicketPageController::class, 'index'])
             ->name('tickets.index');
+        Route::get('payments', [CustomerPaymentHistoryController::class, 'index'])
+            ->name('payments.index');
         Route::get('membership', [CustomerMembershipController::class, 'show'])
             ->name('membership.show');
         Route::post('membership/subscribe', [CustomerMembershipController::class, 'subscribe'])

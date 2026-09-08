@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Customer;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,12 +28,15 @@ class HomeRoutingTest extends TestCase
             'email_verified_at' => now(),
         ]);
         $customer->assignRole('customer');
+        Customer::factory()->create(['user_id' => $customer->id]);
 
         $this->actingAs($customer)
             ->get('/')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Customer/Dashboard'));
+                ->component('Customer/Dashboard')
+                ->has('tickets')
+                ->has('attention'));
     }
 
     public function test_staff_with_confirmed_two_factor_is_redirected_to_admin(): void
