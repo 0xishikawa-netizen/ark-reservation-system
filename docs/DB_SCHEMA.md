@@ -209,6 +209,25 @@ index: `(payment_id)`
 - Cashier 標準テーブル（`subscriptions` / `subscription_items`）は**課金契約の記録専用**。
   「月何回」は置かない。`memberships.stripe_subscription_id` で参照。
 
+### 認証・MFA（Phase 5.5）
+
+**passkeys**（`laravel/passkeys` 同梱 migration をそのまま使用。独自 credential schema を作らない）
+| id | user_id FK users cascade | name varchar | credential_id varchar **UNIQUE** | credential json（公開鍵・sign counter 等） | last_used_at timestamp null | timestamps |
+
+- WebAuthn の challenge / origin / RP ID 検証・replay 防止はライブラリの責務。アプリ側で暗号処理を書かない。
+- **RP ID は環境ごとに異なる**ため、Staging で登録した Passkey は本番では使えない。
+
+**staff**（Phase 5.5 で追加）
+| phone **text** null `encrypted` | phone_hmac char(64) index | phone_verified_at datetime null |
+
+- `customers.phone` と同じ PII 方針。等価検索は `PII_LOOKUP_KEY` による keyed HMAC（`APP_KEY` に依存しない）。
+
+**mfa_sms_challenges**（技術データ・保持 7 日で `model:prune`）
+| id | user_id FK cascade | purpose varchar(20)（`login` / `phone_verification`）| phone_hmac char(64) | code_hash varchar(255) | expires_at datetime | attempts tinyint | used_at datetime null | sent_at datetime | ip varchar(45) null | timestamps |
+
+- **OTP の平文を保存しない**（`code_hash` のみ）。**平文電話番号も保存しない**（`phone_hmac` で照合）。
+- 一回使用で無効（`used_at`）。試行上限で失効。TTL・上限値はすべて `config/mfa.php`。
+
 ### 基盤・技術
 
 - `webhook_events` / `sync_logs` / `audit_logs` / `db_size_snapshots`：§2 の表のとおり。

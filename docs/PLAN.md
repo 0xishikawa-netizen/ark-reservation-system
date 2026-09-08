@@ -170,8 +170,26 @@ Staging/Prod は小規模 VPS を推奨。ローカル開発は環境非依存�
 
 単一 `web` guard。顧客/スタッフは spatie role（customer / staff / manager / admin）+ Policy で分離。
 顧客はセルフ登録 + メール確認 + リセット + rate limit。スタッフは管理者作成。
-管理者保護：TOTP MFA 必須、`/admin` の短い idle timeout、`/admin/*` は deny-by-default、
-機微操作（返金・回数券/利用権の付与/取消/調整/期限変更・契約解約）は manager 以上 + 理由必須 + パスワード再入力 + 監査。
+管理者保護：**MFA 必須**、`/admin` の短い idle timeout、`/admin/*` は deny-by-default、
+機微操作（返金・回数券/利用権の付与/取消/調整/期限変更・契約解約）は manager 以上 + 理由必須 + 再認証 + 監査。
+
+**MFA 方式（Phase 5.5 で TOTP 必須から移行）**：認証強度は **Passkey > TOTP > SMS OTP**。
+
+| 手段 | 位置づけ |
+|---|---|
+| Passkey / WebAuthn | **第一選択**。`laravel/fortify` 同梱の `laravel/passkeys`（公式）。独自 WebAuthn 実装はしない |
+| TOTP | 代替。既存ユーザーの互換と移行期のバックアップ。**一括削除しない** |
+| SMS OTP | フォールバック。**単独では MFA 要件を満たさない**（SIM スワップ耐性が無いため） |
+| Recovery Code | 最終復旧（Fortify 標準） |
+
+- 要件判定は `App\Domain\Auth\MfaPolicy` に集約する。`two_factor_confirmed_at` を各所で直接見ない
+  （Passkey のみのユーザーが「MFA 未設定」と誤判定され全員ロックアウトされるため）。
+- 満たす条件：**Passkey が 1 つ以上 OR TOTP 確認済み**。
+- **最後の MFA 手段は削除できない**（自己ロックアウト対策）。裏口の master password や
+  local だけの MFA バイパスは作らない。
+- 再認証は `password.confirm` を基本とし、Passkey 登録者は Passkey 再認証も選べる
+  （Fortify の passkey confirm が `session()->passwordConfirmed()` を立てるため既存 middleware がそのまま機能する）。
+- 顧客には MFA を課さない。
 
 ## 13. セキュリティ
 
@@ -207,6 +225,7 @@ Production（`member...`、新規 DB、Stripe Live、VPS 推奨）。
 | 3 自作予約（gateway=null） | reservations + state machine + `reservation_resource_slots` UNIQUE + `ReservationService` + 予約台帳 + 仮予約失効 + 同時実行テスト |
 | 4 回数券 | ticket_products / wallets / transactions（追記型・`dedupe_key`）+ FEFO + HOLD/RELEASE/CONSUME/EXPIRE + reconcile |
 | 5 Stripe 単発決済（Test） | Cashier / Payment Element / `pending_payment` + `payment_expires_at` / manual capture 経路 / 操作別 Idempotency-Key / Webhook 冪等化 / `stripe:replay` / 孤立決済「要対応」 |
+| 5.5 認証強化（MFA） | Passkey（第一選択）/ SMS OTP フォールバック / Recovery Code / TOTP 移行 / `MfaPolicy` / 最後の手段削除禁止 |
 | 6 利用権 + Stripe 課金（Test） | membership_plans / memberships / membership_usage_transactions（`dedupe_key`）+ Cashier 課金 + 期首 GRANT + reconcile |
 | 7 顧客マイページ | 集約ダッシュボード + 支払い方法管理 + 予約変更/キャンセル（巻き戻し） |
 | 8 店舗管理 + システム状態 | ダッシュボード / 予約一覧 / 顧客 360 / 回数券管理 / 契約管理 / `Admin/SystemStatus` / DB 容量スナップショット + 通知 |

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Support\Security\PiiHasher;
 
 class Staff extends Model
 {
@@ -26,7 +27,24 @@ class Staff extends Model
         'color',
         'is_bookable',
         'sort_order',
+        'phone',
+        'phone_verified_at',
     ];
+
+    /** @var list<string> */
+    protected $hidden = ['phone', 'phone_hmac'];
+
+    protected static function booted(): void
+    {
+        // 平文の検索コピーを持たず、正規化値の keyed HMAC で等価検索する（PLAN §13）。
+        static::saving(function (self $staff): void {
+            if (! $staff->isDirty('phone')) {
+                return;
+            }
+
+            $staff->phone_hmac = PiiHasher::phoneHmac($staff->phone);
+        });
+    }
 
     public function user(): BelongsTo
     {
@@ -46,6 +64,8 @@ class Staff extends Model
     {
         return [
             'is_bookable' => 'boolean',
+            'phone' => 'encrypted',
+            'phone_verified_at' => 'datetime',
         ];
     }
 }

@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\BoothController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\CustomerTicketController;
 use App\Http\Controllers\Admin\FailedJobsController;
+use App\Http\Controllers\Admin\MfaController;
 use App\Http\Controllers\Admin\ReservationController as AdminReservationController;
 use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
@@ -25,7 +26,7 @@ use App\Http\Controllers\Reserve\ReserveController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Middleware\AdminAccess;
 use App\Http\Middleware\AdminIdleTimeout;
-use App\Http\Middleware\EnsureStaffTwoFactor;
+use App\Http\Middleware\EnsureStaffMfa;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
@@ -78,11 +79,20 @@ Route::middleware([
     'verified',
     AdminAccess::class,
     AdminIdleTimeout::class,
-    EnsureStaffTwoFactor::class,
+    EnsureStaffMfa::class,
 ])->prefix('admin')->name('admin.')->group(function (): void {
     Route::get('/', AdminDashboardController::class)->name('dashboard');
     Route::get('two-factor-setup', [TwoFactorSetupController::class, 'show'])
         ->name('two-factor-setup');
+    // MFA 管理（Passkey 一覧 / TOTP / SMS フォールバック）。自分の資格情報のみ。
+    Route::get('mfa', [MfaController::class, 'show'])->name('mfa.show');
+    // 電話番号の登録・変更は機微操作: 再認証 + OTP 検証 + 監査
+    Route::post('mfa/phone', [MfaController::class, 'startPhoneVerification'])
+        ->middleware(['password.confirm', 'throttle:6,1'])
+        ->name('mfa.phone.start');
+    Route::post('mfa/phone/verify', [MfaController::class, 'verifyPhone'])
+        ->middleware(['password.confirm', 'throttle:6,1'])
+        ->name('mfa.phone.verify');
     Route::get('reservations', [AdminReservationController::class, 'index'])
         ->middleware('can:reservations.view')
         ->name('reservations.index');

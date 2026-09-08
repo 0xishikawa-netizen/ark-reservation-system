@@ -134,3 +134,22 @@ interface ExternalReservationGateway
 - Phase 5〜8：決済失敗 / Webhook 失敗 / 同期失敗 / 仮予約滞留のリスト + 再実行、`db_size_snapshots` 日次 + 閾値通知、バックアップ通知。
 - Phase 8：`Admin/SystemStatus`（Stripe / Reservation Authority / Queue / 仮予約滞留 / 同期失敗 / 最終バックアップ / DB 使用量）。
 - **自動復旧と人間判断を分ける**（OPERATIONS.md の切り分け表）。
+
+## 認証 / MFA レイヤ（Phase 5.5）
+
+```
+App\Domain\Auth\MfaPolicy          … MFA 要件判定の唯一の入口（middleware / UI / テストが共有）
+App\Domain\Auth\SmsOtpService      … OTP 発行・検証（平文を保存もログ出力もしない）
+App\Domain\Auth\Sms\SmsSender      … SMS 送信の抽象（provider 固有コードを外へ出さない）
+  ├ LogSmsSender                     … local / staging（実送信しない）
+  └ FakeSmsSender                    … testing
+App\Http\Middleware\EnsureStaffMfa       … MFA 未設定なら設定画面へ誘導
+App\Http\Middleware\PreventLastMfaRemoval … 最後の MFA 手段の削除を拒否
+```
+
+- Passkey / WebAuthn は `laravel/fortify` 同梱の `laravel/passkeys`（公式）に委ねる。
+  challenge / origin / RP ID 検証・replay 防止・credential 保存はライブラリの責務であり、
+  **アプリ側で暗号処理や独自 credential テーブルを実装しない**。
+- 再認証は `password.confirm` を基本とし、Passkey 再認証（Fortify の passkey confirm）も
+  同じ `auth.password_confirmed_at` セッションを立てるため、**機微操作のルート定義は変更不要**。
+- `two_factor_confirmed_at` を各所で直接判定しない。必ず `MfaPolicy` を通す。

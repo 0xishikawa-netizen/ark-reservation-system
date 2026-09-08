@@ -1,8 +1,16 @@
 # MFA Modernization — Passkey 中心の認証への移行（Phase 5.5 候補）
 
-> **本書は調査・設計のみ。Phase 5（Stripe 単発決済）では実装しない。**
-> 実装はユーザーの明示許可後、Phase 5.5 として行う。
+> **調査・設計文書。Phase 5.5 で実装済み**（実装計画と実行ログは `docs/tasks/phase-05-5.md`）。
 > 調査日: 2026-09-08 / 調査者: Claude Opus 5 / 対象: `ark-reservation-system`
+>
+> **実装との差分（Phase 5.5 実施結果）**
+> - 採用: `laravel/passkeys`（Fortify 同梱）。`Features::passkeys()` を有効化。
+> - `MfaPolicy` を実装し `EnsureStaffTwoFactor` → `EnsureStaffMfa` へ置換。
+> - MFA 要件は **Passkey OR 確認済み TOTP**。SMS は単独では満たさない（本書 §6 の推奨「最終形」を最初から採用）。
+> - SMS OTP は `mfa_sms_challenges`（案 A）+ `SmsSender` interface。**実 provider は未契約のため未接続**。
+> - `staff.phone` / `phone_hmac` / `phone_verified_at` を追加（本書 §3-2 のとおり）。
+> - 最後の MFA 手段の削除を `PreventLastMfaRemoval` で拒否。
+> - 再認証は `password.confirm` を維持しつつ Passkey 再認証を追加（本書 §6 の段階置換を前倒しで実施）。
 
 ## 0. 結論（先に要点）
 

@@ -144,8 +144,10 @@ return [
     */
 
     'passkeys' => [
-        'relying_party_id' => parse_url(config('app.url'), PHP_URL_HOST),
+        'relying_party_id' => env('PASSKEYS_RELYING_PARTY_ID', parse_url(config('app.url'), PHP_URL_HOST)),
         'allowed_origins' => [config('app.url')],
+        // WebAuthn user handle の導出鍵。APP_KEY ローテーションで既存 Passkey を失わないよう独立させる。
+        'user_handle_secret' => env('PASSKEYS_USER_HANDLE_SECRET', config('app.key')),
         'timeout' => 60000,
     ],
 
@@ -171,7 +173,9 @@ return [
             'confirmPassword' => true,
             // 'window' => 0,
         ]),
-        // Passkeys（WebAuthn）は Phase 1 では有効化しない
+        // Phase 5.5: Passkey（WebAuthn）を staff/manager/admin の第一 MFA 手段として有効化。
+        // 登録・削除は password.confirm 配下（fortify-options.passkeys.confirmPassword 既定 true）。
+        Features::passkeys(),
     ],
 
 ];

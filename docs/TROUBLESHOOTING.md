@@ -72,6 +72,42 @@
 
 ---
 
+## 認証 / MFA
+
+### Passkey だけ登録したのに MFA 設定画面へ飛ばされる
+
+Phase 5.5 以前の判定（`two_factor_confirmed_at` 直参照）が残っている疑い。
+判定は `App\Domain\Auth\MfaPolicy` に集約されている。`grep -rn "two_factor_confirmed_at" app/` で
+`MfaPolicy` 以外に判定ロジックが無いか確認する。
+
+### Passkey を削除できない
+
+**最後の MFA 手段は削除できない**仕様（自己ロックアウト対策）。
+別の Passkey を追加するか、認証アプリ（TOTP）を設定してから削除する。
+
+### Staging で登録した Passkey が本番で使えない
+
+**仕様どおり。** WebAuthn の RP ID はドメインに紐づくため、環境ごとに登録が必要。
+`PASSKEYS_RELYING_PARTY_ID` が各環境のホスト名と一致しているか確認する。
+
+### Passkey 登録・ログインが必ず失敗する
+
+- `PASSKEYS_RELYING_PARTY_ID` と実際のホスト名が一致しているか。
+- `fortify.passkeys.allowed_origins` に実際のオリジン（スキーム込み）が含まれているか。
+- **本番は HTTPS 必須。** http では WebAuthn が動作しない（localhost は例外）。
+- ブラウザが対応しているか（未対応なら TOTP へ誘導される）。
+
+### SMS の認証コードが届かない
+
+現在 SMS provider は**未契約**で `MFA_SMS_DRIVER=log`。実送信されない。
+local では `storage/logs` に送信記録（`mfa.sms.dispatched`）だけが残る。
+**コード本体はログに出力しない**設計のため、ログからコードは取得できない。
+
+### 「認証コードの再送は N 秒後に可能になります」
+
+再送レート制限。`config/mfa.php` の `sms.resend` で調整する。
+連打による SMS 費用の濫用を防ぐための意図的な制限。
+
 ## 環境 / 起動
 
 ### 起動時に「Stripe Live キーが検出されました」と例外

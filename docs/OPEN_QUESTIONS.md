@@ -25,6 +25,11 @@
 | 17 | スタッフシフトの管理元：本システムか外部取込か | 本システム | 店舗 | Phase 2 |
 | 18 | Phase 11 の集計項目・LINE/Slack 送信要否（LINE 依存実装は API 仕様確定まで着手しない） | 未定 | 店舗 | Phase 11 |
 | 19 | Codex CLI の利用可否（インストール・認証状況）。未整備なら Phase 1 着手前に整備が必要 | 未確認 | 開発者 | Phase 1 |
+| 20 | **SMS provider の選定**：国内直収接続（空電プッシュ等）か Twilio（ソフトバンク取扱）か。到達率＞価格で判断。SMS 不達は「管理者がログインできない」可用性リスク | 国内直収を推奨・未契約 | 経営 / 開発者 | Phase 5.5 以降 |
+| 21 | 移行完了後の最終 MFA ポリシー：`Passkey OR TOTP` 必須 + SMS はフォールバック専用で確定してよいか | 左記で実装済み | 経営 | Phase 6 前 |
+| 22 | admin を 2 名以上にできるか（自己ロックアウト対策）。不可なら Recovery Code の保管方法を決める | 未定 | 経営 | Phase 6 前 |
+| 23 | Staging / 本番で Passkey が別登録になる運用を受容できるか（RP ID がドメイン依存のため） | 受容 | 店舗 | Phase 5.5 |
+| 24 | スタッフ電話番号の収集・本人確認の業務手順（SMS OTP の前提） | 未定 | 店舗 | SMS provider 契約後 |
 
 ## 決定ログ
 
@@ -32,3 +37,7 @@
 - 2026-09-07: 予約の二重防止は `reservation_resource_slots` の UNIQUE 制約を DB レベルの正とする。
 - 2026-09-07: 回数券・利用権はどちらも追記型台帳。`available = SUM(delta)`、二重減算しない。
 - 2026-09-07: `NullExternalReservationGateway` は no-op 成功にせず `UnsupportedOperationException` で fail-fast。
+- 2026-09-08: Phase 5 で Idempotency-Key を `payment_operation_id` / `refund_operation_id` ベースへ変更（rev.5 の `:{attempt}` / `:{reason_hash}` 案は二重課金・返金漏れを招くため撤回）。
+- 2026-09-08: Phase 5 で Cashier を導入しない（subscription は Phase 6）。`stripe/stripe-php` のみ。
+- 2026-09-08: Phase 5.5 で MFA を Passkey 標準へ。判定は `MfaPolicy` に集約し、SMS 単独では要件を満たさない。
+- 2026-09-08: SMS provider 未契約のため `SmsSender` interface + log/fake のみ実装。実 provider へは接続しない。

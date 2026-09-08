@@ -47,14 +47,18 @@ class AdminAccessTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_staff_without_confirmed_two_factor_is_redirected_to_setup(): void
+    /**
+     * Phase 5.5: MFA 手段が 1 つも無い場合の誘導先は
+     * TOTP 専用画面ではなく統合 MFA 画面（Passkey を第一選択として提示する）。
+     */
+    public function test_staff_without_any_mfa_method_is_redirected_to_mfa_setup(): void
     {
         $staff = User::factory()->create();
         $staff->assignRole('staff');
 
         $this->actingAs($staff)
             ->get('/admin')
-            ->assertRedirect(route('admin.two-factor-setup'));
+            ->assertRedirect(route('admin.mfa.show'));
     }
 
     public function test_two_factor_setup_page_is_excluded_from_the_mfa_redirect(): void
