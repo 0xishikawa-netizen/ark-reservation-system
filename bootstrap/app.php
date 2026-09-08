@@ -27,6 +27,11 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             ThrottleFortifyRequests::class,
         ]);
+
+        // Stripe webhook は署名検証で真正性を担保するため CSRF トークンを持たない。
+        $middleware->validateCsrfTokens(except: [
+            'stripe/webhook',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $renderConflict = static function (

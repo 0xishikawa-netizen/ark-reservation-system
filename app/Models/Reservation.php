@@ -77,6 +77,12 @@ class Reservation extends Model
         return $this->hasMany(ReservationResourceSlot::class);
     }
 
+    /** @return HasMany<Payment, $this> */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
     /** @param  Builder<Reservation>  $query */
     public function scopeForDate(Builder $query, CarbonInterface $date): void
     {

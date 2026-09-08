@@ -30,7 +30,7 @@ class StoreReservationRequest extends FormRequest
             'service_id' => ['required', 'integer', 'exists:services,id'],
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
             'starts_at' => ['required', 'date', 'after:now'],
-            'payment_method' => ['nullable', 'string', Rule::in(['onsite', 'ticket'])],
+            'payment_method' => ['nullable', 'string', Rule::in(['onsite', 'ticket', 'card'])],
         ];
     }
 

@@ -15,17 +15,26 @@ use App\Http\Controllers\Admin\StaffShiftController;
 use App\Http\Controllers\Admin\TicketPolicySettingsController;
 use App\Http\Controllers\Admin\TicketProductController;
 use App\Http\Controllers\Admin\TwoFactorSetupController;
+use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
+use App\Http\Controllers\Customer\PaymentController as CustomerPaymentController;
 use App\Http\Controllers\Customer\ProfileController;
 use App\Http\Controllers\Customer\ReservationController as CustomerReservationController;
 use App\Http\Controllers\Customer\TicketController as CustomerTicketPageController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Reserve\ReserveController;
+use App\Http\Controllers\StripeWebhookController;
 use App\Http\Middleware\AdminAccess;
 use App\Http\Middleware\AdminIdleTimeout;
 use App\Http\Middleware\EnsureStaffTwoFactor;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
+
+// Stripe webhook。署名検証で認証するため auth を掛けない。
+// CSRF は bootstrap/app.php で除外。Stripe の retry を阻害する rate limit は付けない。
+Route::post('stripe/webhook', StripeWebhookController::class)
+    ->withoutMiddleware([\App\Http\Middleware\ThrottleFortifyRequests::class])
+    ->name('stripe.webhook');
 
 Route::middleware(['web', 'auth', 'verified'])->group(function (): void {
     Route::get('reserve', [ReserveController::class, 'create'])
@@ -48,6 +57,11 @@ Route::middleware(['web', 'auth', 'verified'])
             ->name('reservations.update');
         Route::delete('reservations/{reservation}', [CustomerReservationController::class, 'destroy'])
             ->name('reservations.destroy');
+        Route::get('reservations/{reservation}/checkout', [CustomerPaymentController::class, 'show'])
+            ->name('reservations.checkout');
+        Route::post('reservations/{reservation}/payment/sync', [CustomerPaymentController::class, 'sync'])
+            ->middleware('throttle:reserve')
+            ->name('reservations.payment.sync');
         Route::get('tickets', [CustomerTicketPageController::class, 'index'])
             ->name('tickets.index');
         Route::get('profile', [ProfileController::class, 'show'])
@@ -175,6 +189,19 @@ Route::middleware([
         Route::patch('booths/{booth}/active', [BoothController::class, 'setActive'])
             ->name('booths.set-active');
     });
+    Route::middleware('can:reservations.view')->group(function (): void {
+        Route::get('payments', [AdminPaymentController::class, 'index'])
+            ->name('payments.index');
+        Route::get('payments/{payment}', [AdminPaymentController::class, 'show'])
+            ->name('payments.show');
+    });
+    Route::post('payments/{payment}/sync', [AdminPaymentController::class, 'sync'])
+        ->middleware('can:reservations.manage')
+        ->name('payments.sync');
+    // 返金は機微操作: manager 以上 + 専用 permission + パスワード再確認 + 理由必須 + 監査
+    Route::post('payments/{payment}/refund', [AdminPaymentController::class, 'refund'])
+        ->middleware(['can:refund.execute', 'password.confirm'])
+        ->name('payments.refund');
     Route::get('system/failed-jobs', FailedJobsController::class)
         ->middleware('can:failed_jobs.view')
         ->name('system.failed-jobs');

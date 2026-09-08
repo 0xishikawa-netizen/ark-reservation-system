@@ -158,11 +158,53 @@ index: `(starts_at)`, `(staff_id, starts_at)`, `(customer_id, starts_at)`, `(sta
 ### 決済（Stripe 課金）
 
 **payments**
-| id | customer_id FK | reservation_id FK null | membership_id FK null | ticket_wallet_id FK null | kind enum(single,ticket_purchase,membership_invoice) | amount int | currency char(3) | status enum(pending,authorized,succeeded,failed,refunded,partially_refunded) | stripe_payment_intent_id varchar(40) index | stripe_charge_id varchar(40) null | stripe_invoice_id varchar(40) null | idempotency_key varchar(100) **UNIQUE** | paid_at datetime null | failure_reason varchar(255) null | created_by FK null | timestamps |
+| 列 | 型 | 備考 |
+|---|---|---|
+| id | bigint PK | |
+| customer_id | FK `customers.user_id` restrict | |
+| reservation_id | FK `reservations` null restrict | Phase 5 は常に非 null |
+| kind | varchar(20) | `single`（Phase 5 で使うのはこれのみ）/ `ticket_purchase` / `membership_invoice` は将来用 |
+| provider | varchar(20) | 既定 `stripe` |
+| payment_operation_id | char(36) **UNIQUE** | UUID。全 Idempotency-Key の安定な根（PLAN §7） |
+| amount | int unsigned | JPY はゼロ十進通貨 |
+| currency | char(3) | 既定 `jpy` |
+| status | varchar(24) | `pending`/`authorized`/`succeeded`/**`voided`**/`failed`/`partially_refunded`/`refunded` |
+| capture_method | varchar(10) | 既定 `manual` |
+| stripe_payment_intent_id | varchar(40) null **UNIQUE** | |
+| stripe_charge_id | varchar(40) null | capture 後 |
+| authorized_at / paid_at / voided_at | datetime null | `paid_at` は capture 成功時のみ |
+| refunded_amount | int unsigned | キャッシュ。正本は `payment_refunds` の SUM |
+| failure_code | varchar(50) null | 要約コードのみ |
+| failure_message | varchar(255) null | 生の Stripe メッセージを顧客へ出さない |
+| needs_attention | bool | 孤立決済・曖昧結果の「要対応」 |
+| last_synced_at | datetime null | reconcile / webhook sync の最終突合 |
+| created_by | FK users null | |
+| timestamps | | |
+
+index: `(reservation_id)`, `(status)`, `(needs_attention)`
+
+- **旧 rev.5 案の `idempotency_key varchar(100) UNIQUE` は採用しない。** 1 カラムでは create/capture/cancel の 3 種を保持できないため、
+  `payment_operation_id` から都度導出する（PLAN §7）。
+- カード PAN / CVC / `client_secret` / Stripe レスポンス全文を保存しない。
 index: `(reservation_id)`, `(stripe_payment_intent_id)`
 
 **payment_refunds**
-| id | payment_id FK | amount int | reason varchar(255) null | stripe_refund_id varchar(40) | status enum(pending,succeeded,failed) | created_by FK | timestamps |
+| 列 | 型 | 備考 |
+|---|---|---|
+| id | bigint PK | |
+| payment_id | FK `payments` restrict | |
+| refund_operation_id | char(36) **UNIQUE** | UUID。返金は payment とは別の論理操作 |
+| amount | int unsigned | |
+| reason | varchar(255) **NOT NULL** | 機微操作のため必須（PLAN §12） |
+| status | varchar(16) | `pending` / `succeeded` / `failed` |
+| stripe_refund_id | varchar(40) null | |
+| failure_code / failure_message | varchar null | |
+| created_by | FK users **NOT NULL** | |
+| timestamps | | |
+
+index: `(payment_id)`
+
+- `SUM(succeeded の amount) + pending <= payments.amount` を transaction 内で `FOR UPDATE` 検査し、二重・過剰返金を防ぐ。
 
 - Cashier 標準テーブル（`subscriptions` / `subscription_items`）は**課金契約の記録専用**。
   「月何回」は置かない。`memberships.stripe_subscription_id` で参照。
@@ -191,7 +233,10 @@ index: `(reservation_id)`, `(stripe_payment_intent_id)`
   `unpaid → pending_payment → authorized → paid`、
   `pending_payment|authorized → failed → unpaid`、`authorized → (補償で取消) → voided`、`paid → refunded|partially_refunded`
 - `payments.status`:
-  `pending → authorized → succeeded(=capture 済み) → refunded|partially_refunded`、`authorized → voided`、`pending|authorized → failed`
+  `pending → authorized → succeeded(=capture 済み) → partially_refunded|refunded`、`partially_refunded → refunded`、
+  `authorized → voided`、`pending → voided`、`pending|authorized → failed`
+  - **後退遷移は定義しない。** 到着が遅れた古い Stripe イベントで状態が巻き戻ることを構造的に防ぐ。
+  - 中間状態を観測できなかった場合は `StateMachine::pathTo()` が定義済み遷移だけを辿って追いつく。
   - authorize 成功＝`authorized`（顧客表示「予約確保中」）。**capture 成功後のみ `paid`/`succeeded`、顧客へ「決済完了」**。
 - `ticket_wallets.status`: `active → exhausted`(balance=0) / `active → expired`
 - `memberships.status`: `active → paused`(invoice 失敗) → `active`(invoice.paid) / `active|paused → canceled`

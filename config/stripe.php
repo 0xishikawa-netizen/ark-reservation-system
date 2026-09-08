@@ -27,23 +27,37 @@ return [
     |               authorize 成功時 payment_status=authorized、capture 成功後のみ paid。
     |               利用可否は OPEN_QUESTIONS #10b で確定。
     */
-    'capture_method' => env('STRIPE_CAPTURE_METHOD', 'automatic'),
+    'capture_method' => env('STRIPE_CAPTURE_METHOD', 'manual'),
+
+    /*
+    | Stripe API HTTP 設定
+    */
+    'http' => [
+        'timeout' => (int) env('STRIPE_HTTP_TIMEOUT', 30),
+        'connect_timeout' => (int) env('STRIPE_HTTP_CONNECT_TIMEOUT', 10),
+        'max_network_retries' => (int) env('STRIPE_MAX_NETWORK_RETRIES', 2),
+    ],
 
     /*
     | Idempotency-Key テンプレート（操作ごとに安定生成）。実装は Payment モジュール。
+    | retry 回数や理由を含めると同一の論理操作で key が変化・衝突し、二重課金や
+    | 返金漏れを招くため、永続化した operation ID だけから導出する。
     */
     'idempotency_key_templates' => [
-        'payment_intent_create' => 'pi-create:{reservation_id}:{attempt}',
-        'payment_intent_capture' => 'pi-capture:{payment_id}',
-        'payment_intent_cancel' => 'pi-cancel:{payment_id}',
-        'refund' => 'refund:{payment_id}:{reason_hash}',
+        'payment_intent_create' => 'pi-create:{payment_operation_id}',
+        'payment_intent_capture' => 'pi-capture:{payment_operation_id}',
+        'payment_intent_cancel' => 'pi-cancel:{payment_operation_id}',
+        'refund' => 'refund:{refund_operation_id}',
     ],
 
     /*
     | 処理対象の webhook イベント（設計プラン §9）
+    | PaymentIntent / Refund 系は Phase 5 で処理する。
+    | invoice.* / customer.subscription.* は Phase 6 対象のため Phase 5 では処理しない。
     */
     'handled_events' => [
         'payment_intent.succeeded',
+        'payment_intent.amount_capturable_updated',
         'payment_intent.payment_failed',
         'payment_intent.canceled',
         'charge.refunded',

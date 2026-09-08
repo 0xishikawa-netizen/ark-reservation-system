@@ -101,9 +101,12 @@ class ReserveController extends Controller
         $staffId = isset($validated['staff_id'])
             ? (int) $validated['staff_id']
             : null;
-        $paymentMethod = $request->string('payment_method')->toString() === 'ticket'
-            ? PaymentMethod::Ticket
-            : PaymentMethod::Onsite;
+        $paymentMethod = match ($request->string('payment_method')->toString()) {
+            'ticket' => PaymentMethod::Ticket,
+            // single = Stripe カード決済（pending_payment で枠を確保し、capture 後に確定）
+            'card' => PaymentMethod::Single,
+            default => PaymentMethod::Onsite,
+        };
 
         if ($staffId === null) {
             $candidate = collect($availabilityService->openStartTimes(
@@ -136,6 +139,13 @@ class ReserveController extends Controller
             adminContext: false,
             paymentMethod: $paymentMethod,
         ));
+
+        // カード決済は与信・capture が済むまで確定しない。決済画面へ送る。
+        if ($paymentMethod === PaymentMethod::Single) {
+            return redirect()
+                ->route('mypage.reservations.checkout', $reservation)
+                ->with('info', 'お支払いを完了すると予約が確定します。');
+        }
 
         return redirect()
             ->route('mypage.reservations.show', $reservation)

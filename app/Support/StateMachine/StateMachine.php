@@ -39,6 +39,48 @@ abstract class StateMachine
         }
     }
 
+    /**
+     * from から to への最短の前進経路を返す（to を含む。到達不能なら空配列）。
+     *
+     * 遅延・順序逆転した外部イベントで中間状態を観測できなかった場合に、
+     * 定義済みの遷移だけを辿って安全に追いつくために使う。
+     * $avoid に指定した状態は経由しない（例: failed を経由して先へ進めない）。
+     *
+     * @param  list<string>  $avoid
+     * @return list<string>
+     */
+    public function pathTo(string $from, string $to, array $avoid = []): array
+    {
+        if ($from === $to) {
+            return [];
+        }
+
+        $transitions = $this->transitions();
+        $queue = [[$from, []]];
+        $seen = [$from => true];
+
+        while ($queue !== []) {
+            [$current, $path] = array_shift($queue);
+
+            foreach ($transitions[$current] ?? [] as $next) {
+                if (isset($seen[$next]) || in_array($next, $avoid, true)) {
+                    continue;
+                }
+
+                $nextPath = [...$path, $next];
+
+                if ($next === $to) {
+                    return $nextPath;
+                }
+
+                $seen[$next] = true;
+                $queue[] = [$next, $nextPath];
+            }
+        }
+
+        return [];
+    }
+
     public function apply(Model $model, string $column, string $to): void
     {
         $current = $model->{$column};

@@ -21,6 +21,7 @@ use App\Models\Staff;
 use App\Models\StaffShift;
 use App\Models\User;
 use App\Support\Audit\AuditLogger;
+use App\Support\Settings\Settings;
 use App\Support\SlotKey;
 use App\Support\StateMachine\InvalidStateTransitionException;
 use Carbon\CarbonImmutable;
@@ -55,6 +56,10 @@ final class ReservationService
 
         try {
             $reservation = DB::transaction(function () use ($in, $endsAt, $slots): Reservation {
+                // カード決済（single）は Stripe の与信が済むまで確定しない。
+                // 枠は pending_payment + payment_expires_at で HOLD する（PLAN §7）。
+                $isCard = $in->paymentMethod === PaymentMethod::Single;
+
                 $reservation = Reservation::query()->create([
                     'customer_id' => $in->customerId,
                     'service_id' => $in->serviceId,
@@ -64,8 +69,13 @@ final class ReservationService
                     'ends_at' => $endsAt,
                     'source' => $in->source,
                     'payment_method' => $in->paymentMethod,
-                    'payment_status' => PaymentStatus::Unpaid,
-                    'status' => ReservationStatus::Confirmed,
+                    'payment_status' => $isCard
+                        ? PaymentStatus::PendingPayment
+                        : PaymentStatus::Unpaid,
+                    'status' => $isCard
+                        ? ReservationStatus::PendingPayment
+                        : ReservationStatus::Confirmed,
+                    'payment_expires_at' => $isCard ? $this->paymentDeadline() : null,
                     'sync_status' => SyncStatus::NotRequired,
                     'version' => 0,
                     'notes' => $in->notes,
@@ -79,6 +89,7 @@ final class ReservationService
                     slots: $slots,
                 ));
 
+                // カード決済予約では Ticket HOLD を作らない（Phase 5 の分離要件）。
                 if ($in->paymentMethod === PaymentMethod::Ticket) {
                     $this->tickets->hold($reservation, $this->actor($in->actorUserId));
                 }
@@ -393,6 +404,20 @@ final class ReservationService
         } catch (InvalidStateTransitionException) {
             $this->throwValidation('status', 'この予約はその操作を実行できません。');
         }
+    }
+
+    /**
+     * 支払い期限。settings('reservation.hold_minutes') を正とする（ハードコードしない）。
+     */
+    private function paymentDeadline(): CarbonImmutable
+    {
+        $minutes = (int) app(Settings::class)->get('reservation.hold_minutes', 10);
+
+        if ($minutes < 1) {
+            $minutes = 10;
+        }
+
+        return CarbonImmutable::now()->addMinutes($minutes);
     }
 
     private function actor(?int $actorUserId): ?Authenticatable

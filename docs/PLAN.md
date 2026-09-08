@@ -109,7 +109,8 @@ Staging/Prod は小規模 VPS を推奨。ローカル開発は環境非依存�
 - State Machine（`app/Support/StateMachine` 経由でのみ遷移）：
   - `reservations.status`: `pending_payment → pending_external_sync|confirmed` / `pending_payment → expired` / `pending_external_sync → confirmed|sync_failed 扱い` / `confirmed → completed` / `confirmed|pending_external_sync → canceled|no_show`
   - `reservations.payment_status`: `unpaid → pending_payment → authorized → paid` / `pending_payment|authorized → failed → unpaid` / `authorized → voided` / `paid → refunded|partially_refunded`
-  - `payments.status`: `pending → authorized → succeeded(=capture 済み) → refunded|partially_refunded` / `authorized → voided` / `pending|authorized → failed`
+  - `payments.status`: `pending → authorized → succeeded(=capture 済み) → partially_refunded|refunded` / `partially_refunded → refunded` / `pending|authorized → voided` / `pending|authorized → failed`
+    （**後退遷移は定義しない**。古い webhook で巻き戻さない）
     - authorize 成功＝`authorized`（顧客表示「予約確保中」）。**capture 成功後のみ `paid`/`succeeded`、顧客へ「決済完了」**。
   - `ticket_wallets.status`: `active → exhausted|expired`
   - `memberships.status`: `active → paused → active` / `active|paused → canceled`
@@ -122,7 +123,12 @@ Staging/Prod は小規模 VPS を推奨。ローカル開発は環境非依存�
 - 決済と外部登録の補償 Saga（`authority != local`）：
   `capture_method=manual` で authorize → `pushReservation()` → 成功で capture（`paid`・「予約完了」＋「決済完了」）/ 失敗で authorization cancel（`voided`・`expired`）。
   capture 済みで後段失敗 → 自動返金 → `refunded` → `expired`。
-  各ステップ・補償ステップは操作ごとに安定した Idempotency-Key（`pi-create:{reservation_id}:{attempt}` / `pi-capture:{payment_id}` / `pi-cancel:{payment_id}` / `refund:{payment_id}:{reason_hash}`）で冪等（二重返金・二重取消・二重 capture 防止）。途中失敗は `failed_jobs` + 「要対応」。
+  各ステップ・補償ステップは**論理的な決済試行ごとに安定した** Idempotency-Key で冪等（二重返金・二重取消・二重 capture 防止）。
+  key は `payments.payment_operation_id`（UUID・DB 永続）と `payment_refunds.refund_operation_id`（UUID・DB 永続）からのみ導出する:
+  `pi-create:{payment_operation_id}` / `pi-capture:{payment_operation_id}` / `pi-cancel:{payment_operation_id}` / `refund:{refund_operation_id}`。
+  **retry 回数・時刻・乱数・理由文字列を key に含めない**（rev.5 の `:{attempt}` / `:{reason_hash}` 案は Phase 5 で撤回。
+  前者は retry ごとに key が変わり二重課金を招き、後者は同一理由の 2 回目の部分返金が握り潰される）。
+  新しい `payment_operation_id` を発行してよいのは、顧客が明示的に**新しい決済試行**を開始したときだけ。途中失敗は `failed_jobs` + 「要対応」。
 - 顧客に「成功」を出すのは自作 DB へ commit 確定時のみ。`authority != local` は `pushReservation()` 成功後のみ「予約完了」。決済完了表示は capture 完了後のみ。
 
 ## 8. 外部予約ゲートウェイ
@@ -139,7 +145,7 @@ Staging/Prod は小規模 VPS を推奨。ローカル開発は環境非依存�
 - laravel/cashier は課金契約の管理専用。「月何回」は Membership モジュールが持つ。
 - 初期は必ず Test Mode。`APP_ENV in (local,testing)` で Live キー検出 → 起動時例外。
 - 保存は ID と要約のみ。カード情報・レスポンス全体・webhook payload は保存しない。
-- Idempotency-Key を create / capture / cancel / refund の操作ごとに安定生成。
+- Idempotency-Key を create / capture / cancel / refund の操作ごとに安定生成（§7 のとおり operation ID から導出。retry で変化させない）。
 - Webhook：署名検証必須、`webhook_events.stripe_event_id` UNIQUE で冪等化。
 - 復旧：A. `stripe:replay {event_id}`（約 30 日）/ B. Stripe オブジェクトから `*:reconcile`（無期限・本命）/ C.（任意）raw payload を暗号化して DB 外へ 30〜90 日保管。
 

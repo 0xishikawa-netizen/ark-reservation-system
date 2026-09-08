@@ -76,7 +76,8 @@ interface ExternalReservationGateway
 - 初期は必ず Test Mode。`APP_ENV in (local, testing)` で Live キー（`sk_live_` / `pk_live_`）検出 → 起動時例外。
 - 自作 DB に保存するのは **ID と要約のみ**。カード情報・レスポンス全体は保存しない。カード入力は Payment Element（PAN 非通過＝SAQ A 想定）。
 - Idempotency-Key を **create / capture / cancel / refund の操作ごとに安定生成**
-  （`pi-create:{reservation_id}:{attempt}` / `pi-capture:{payment_id}` / `pi-cancel:{payment_id}` / `refund:{payment_id}:{reason_hash}`）。
+  （`pi-create:{payment_operation_id}` / `pi-capture:{payment_operation_id}` / `pi-cancel:{payment_operation_id}` / `refund:{refund_operation_id}`。
+  operation ID は DB 永続の UUID。**retry 回数・理由文字列を key に含めない**）。
 - Webhook：`POST /stripe/webhook`、署名検証必須、`webhook_events.stripe_event_id` UNIQUE で冪等化。**payload は DB に保存しない**。
 - Webhook 復旧（詳細は OPERATIONS.md）：
   - A. `stripe:replay {event_id}`（Stripe が event を保持する約 30 日以内）

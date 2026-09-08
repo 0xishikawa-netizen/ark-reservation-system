@@ -32,6 +32,10 @@
         <env name="PII_LOOKUP_KEY" value="base64:dGVzdC1waWktbG9va3VwLWtleS0zMi1ieXRlcy0hIQ=="/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <env name="STRIPE_CAPTURE_METHOD" value="manual"/>
+        <env name="STRIPE_HTTP_CONNECT_TIMEOUT" value="10"/>
+        <env name="STRIPE_HTTP_TIMEOUT" value="30"/>
+        <env name="STRIPE_MAX_NETWORK_RETRIES" value="2"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Domain\Payment\Gateway\FakeStripeGateway;
+use App\Domain\Payment\Gateway\StripeApiGateway;
+use App\Domain\Payment\Gateway\StripeGateway;
 use App\Listeners\AuditAuthEvents;
 use App\Support\Settings\Settings;
 use Illuminate\Support\Facades\Event;
@@ -20,6 +23,16 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->scoped(Settings::class);
         $this->app->alias(Settings::class, 'settings');
+
+        if ($this->app->environment('testing')) {
+            $this->app->singleton(FakeStripeGateway::class);
+            $this->app->bind(
+                StripeGateway::class,
+                static fn ($app): StripeGateway => $app->make(FakeStripeGateway::class),
+            );
+        } else {
+            $this->app->singleton(StripeGateway::class, StripeApiGateway::class);
+        }
     }
 
     /**

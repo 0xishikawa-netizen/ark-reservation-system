@@ -37,7 +37,7 @@ interface TicketAvailability {
     wallets: TicketWalletOption[];
 }
 
-type PaymentMethod = 'onsite' | 'ticket';
+type PaymentMethod = 'onsite' | 'ticket' | 'card';
 
 const props = defineProps<{
     services: ServiceOption[];
@@ -352,12 +352,23 @@ function submit(): void {
                     class="mb-2"
                 >
                     <v-radio label="店頭でお支払い" value="onsite" />
+                    <v-radio label="クレジットカードで事前に支払う" value="card" />
                     <v-radio
                         :label="`回数券を使う（残り ${ticket.available_total} 回）`"
                         value="ticket"
                         :disabled="ticket.available_total < 1"
                     />
                 </v-radio-group>
+                <v-alert
+                    v-if="form.payment_method === 'card'"
+                    type="info"
+                    variant="tonal"
+                    density="comfortable"
+                    class="mt-2"
+                >
+                    次の画面でカード情報を入力します。お支払いが完了すると予約が確定します。
+                    お支払いが完了するまで、枠は一時的に確保された状態です。
+                </v-alert>
                 <v-alert
                     v-if="ticket.available_total < 1"
                     type="info"
