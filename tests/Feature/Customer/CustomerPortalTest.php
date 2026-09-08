@@ -8,12 +8,13 @@ use App\Domain\Membership\MembershipLedgerService;
 use App\Models\Customer;
 use App\Models\Membership;
 use App\Models\MembershipPlan;
+use App\Models\MembershipUsageTransaction;
 use App\Models\Payment;
 use App\Models\Reservation;
-use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -74,6 +75,19 @@ final class CustomerPortalTest extends TestCase
                 ->where('membership.status', 'active')
                 ->has('tickets')
                 ->has('attention'));
+    }
+
+    public function test_unverified_customer_is_redirected_away_from_the_dashboard(): void
+    {
+        // F-12: Phase 7 で `/` を顧客ダッシュボード化した際、/mypage/* の `verified` 境界を
+        // 迂回して未認証でも顧客データ集約が見えていた。
+        $customer = Customer::factory()->create();
+        $customer->user->forceFill(['email_verified_at' => null])->save();
+        $customer->user->assignRole('customer');
+
+        $this->actingAs($customer->user)
+            ->get('/')
+            ->assertRedirect(route('verification.notice'));
     }
 
     public function test_dashboard_does_not_leak_stripe_internal_or_secret(): void
@@ -234,10 +248,10 @@ final class CustomerPortalTest extends TestCase
             ->post("/admin/memberships/{$membership->id}/adjust", [
                 'delta' => 5,
                 'reason' => 'self service',
-                'operation_key' => (string) \Illuminate\Support\Str::uuid(),
+                'operation_key' => (string) Str::uuid(),
             ])
             ->assertForbidden();
 
-        $this->assertSame(0, \App\Models\MembershipUsageTransaction::query()->where('type', 'ADJUST')->count());
+        $this->assertSame(0, MembershipUsageTransaction::query()->where('type', 'ADJUST')->count());
     }
 }

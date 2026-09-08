@@ -7,6 +7,7 @@ namespace App\Domain\Membership;
 use App\Models\Membership;
 use App\Models\Payment;
 use App\Support\Audit\AuditLogger;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -85,7 +86,12 @@ final class MembershipBillingService
 
         $existing = Payment::query()->where('payment_operation_id', $operationId)->first();
 
-        $amount = (int) ($invoice['amount_paid'] ?? $invoice['amount_due'] ?? 0);
+        // amount_paid は未払い invoice でも 0 が「入っている」ため ?? では amount_due に落ちない。
+        // 実際に支払われた額を優先し、0 なら請求額（amount_due）を金額として記録する。
+        $amount = (int) ($invoice['amount_paid'] ?? 0);
+        if ($amount <= 0) {
+            $amount = (int) ($invoice['amount_due'] ?? 0);
+        }
         $chargeId = is_string($invoice['charge'] ?? null) ? $invoice['charge'] : null;
         $paymentIntentId = is_string($invoice['payment_intent'] ?? null) ? $invoice['payment_intent'] : null;
 
@@ -107,23 +113,48 @@ final class MembershipBillingService
             return;
         }
 
-        DB::transaction(function () use ($membership, $operationId, $amount, $status, $chargeId, $paymentIntentId): void {
-            (new Payment)->forceFill([
-                'customer_id' => $membership->customer_id,
-                'reservation_id' => null,
-                'kind' => 'membership_invoice',
-                'provider' => 'stripe',
-                'payment_operation_id' => $operationId,
-                'amount' => $amount,
-                'currency' => 'jpy',
-                'status' => $status,
-                'capture_method' => 'automatic',
-                'stripe_payment_intent_id' => $paymentIntentId,
-                'stripe_charge_id' => $chargeId,
-                'paid_at' => $status === 'succeeded' ? now() : null,
-                'last_synced_at' => now(),
-            ])->save();
-        });
+        try {
+            DB::transaction(function () use ($membership, $operationId, $amount, $status, $chargeId, $paymentIntentId): void {
+                (new Payment)->forceFill([
+                    'customer_id' => $membership->customer_id,
+                    'reservation_id' => null,
+                    'kind' => 'membership_invoice',
+                    'provider' => 'stripe',
+                    'payment_operation_id' => $operationId,
+                    'amount' => $amount,
+                    'currency' => 'jpy',
+                    'status' => $status,
+                    'capture_method' => 'automatic',
+                    'stripe_payment_intent_id' => $paymentIntentId,
+                    'stripe_charge_id' => $chargeId,
+                    'paid_at' => $status === 'succeeded' ? now() : null,
+                    'last_synced_at' => now(),
+                ])->save();
+            });
+        } catch (QueryException $exception) {
+            if ((string) $exception->getCode() !== '23000') {
+                throw $exception;
+            }
+
+            // 同一 invoice の並行 webhook が僅差で INSERT 競合した（payment_operation_id UNIQUE）。
+            // 既存行へ収束させ、succeeded なら前進のみ反映する（F-08）。
+            $raced = Payment::query()->where('payment_operation_id', $operationId)->first();
+
+            if ($raced !== null && $status === 'succeeded' && $raced->status !== 'succeeded') {
+                DB::transaction(function () use ($raced, $amount, $chargeId): void {
+                    $locked = Payment::query()->whereKey($raced->getKey())->lockForUpdate()->firstOrFail();
+                    $locked->forceFill([
+                        'status' => 'succeeded',
+                        'amount' => $amount > 0 ? $amount : $locked->amount,
+                        'stripe_charge_id' => $chargeId ?? $locked->stripe_charge_id,
+                        'paid_at' => now(),
+                        'last_synced_at' => now(),
+                    ])->save();
+                });
+            }
+
+            return;
+        }
 
         $this->auditLogger->log(
             $status === 'succeeded' ? 'payment.captured' : 'payment.failed',

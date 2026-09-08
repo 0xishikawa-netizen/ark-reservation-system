@@ -6,6 +6,7 @@ namespace App\Domain\Membership;
 
 use App\Enums\Membership\MembershipNoShowPolicy;
 use App\Enums\Membership\MembershipReservationUsageStatus;
+use App\Enums\Membership\MembershipStatus;
 use App\Enums\Membership\MembershipUsageType;
 use App\Exceptions\Membership\InsufficientMembershipBalanceException;
 use App\Models\Membership;
@@ -48,6 +49,14 @@ final class MembershipReservationService
 
             if ($membership === null) {
                 throw new InsufficientMembershipBalanceException('利用可能な利用権がありません');
+            }
+
+            // canceling（当期末で終了予定）は current_period_end までしか使えない。
+            // subscription.deleted webhook の遅延・欠落で canceling のまま期末を越えても予約させない。
+            if ($membership->status === MembershipStatus::Canceling
+                && $membership->current_period_end !== null
+                && $membership->current_period_end->toDateString() < now()->toDateString()) {
+                throw new InsufficientMembershipBalanceException('利用権の有効期間が終了しています');
             }
 
             $period = $this->ledger->currentPeriod($membership);

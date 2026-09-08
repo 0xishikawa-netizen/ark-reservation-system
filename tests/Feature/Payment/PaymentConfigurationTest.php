@@ -19,11 +19,16 @@ class PaymentConfigurationTest extends TestCase
         $this->assertSame('pi-cancel:{payment_operation_id}', $templates['payment_intent_cancel']);
         $this->assertSame('refund:{refund_operation_id}', $templates['refund']);
 
-        // Phase 6 の subscription キーは membership_operation_id からのみ導出。
+        // Phase 6 の subscription キーは membership_operation_id が根。
+        // create / cancel_now は「1 度きり」なので固定。cancel / resume は toggle 操作のため
+        // {bucket}（UTC 時）を足して古い冪等応答の張り付きを防ぐ。
         $this->assertSame('sub-create:{membership_operation_id}', $templates['subscription_create']);
-        $this->assertSame('sub-cancel:{membership_operation_id}', $templates['subscription_cancel']);
-        $this->assertSame('sub-resume:{membership_operation_id}', $templates['subscription_resume']);
+        $this->assertSame('sub-cancel:{membership_operation_id}:{bucket}', $templates['subscription_cancel']);
+        $this->assertSame('sub-resume:{membership_operation_id}:{bucket}', $templates['subscription_resume']);
         $this->assertSame('sub-cancel-now:{membership_operation_id}', $templates['subscription_cancel_now']);
+        // create / cancel_now は時刻要素を含まない（retry で新 subscription を作らせない）。
+        $this->assertStringNotContainsString('{bucket}', $templates['subscription_create']);
+        $this->assertStringNotContainsString('{bucket}', $templates['subscription_cancel_now']);
     }
 
     public function test_phase_five_webhook_events_are_listed(): void

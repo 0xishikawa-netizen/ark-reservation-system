@@ -206,3 +206,80 @@ Phase 3 Reservation / Phase 4 Ticket / Phase 5 Payment / Phase 5.5 MFA / Phase 6
 - 追加（10）：`Customer/DashboardController` / `Customer/PaymentHistoryController` / `CustomerDashboardQuery` / `CustomerPaymentHistoryQuery` /
   `Customer/Payments/Index.vue` / `CustomerPortalTest` / `CustomerPortalCsrfTest` / `CustomerPortalCancelTest` / `CustomerPortalE2ETest` / `docs/tasks/phase-07.md`。
 - commit：`Phase 7 customer portal baseline`（remote 追加なし・push なし）。
+
+---
+
+## 2026-09-09 — Phase 6+7 独立 Final QA / Red Team（Sonnet 5 + Codex gpt-5.6-sol 独立監査）
+
+baseline `4b094c5`。Codex は **READ-ONLY 独立監査役**（実装・commit なし）。Sonnet が全 Finding を実コードで検証し
+TRUE POSITIVE のみ最小修正 + 回帰テスト。Codex 18 Finding（CRITICAL 2 / HIGH 5 / MEDIUM 6 / LOW 5）+ 設計疑問 3。
+
+### 修正した TRUE POSITIVE（11 件）
+- **F-01 CRITICAL**：`stripe/stripe-php ^21.3` = API `2026-08-26.dahlia`。`Subscription.current_period_start/end` は
+  subscription item へ、`Invoice.subscription` は `parent.subscription_details.subscription` へ移動済み。
+  `StripeApiMembershipGateway::toResult()` が期間 null を返し **期首 GRANT が全く走らない**（＝課金済みでも予約不可）。
+  → `periodTimestamp()` を item 側＋旧トップレベルの両対応に。`MembershipWebhookHandler::subscriptionIdFrom()` の
+  invoice 経路も `parent.subscription_details.subscription` ＋旧形フォールバックに。Fake は `SubscriptionResult` を
+  直接組むためテストで露見しなかった。`StripeApiMembershipGatewayShapeTest`（unit）で dahlia/旧の両形を検証。
+- **F-04 HIGH**：曖昧な create 失敗（Stripe timeout・実際は Stripe 側に subscription あり）で
+  `stripe_subscription_id=null` のまま pending に張り付いた membership を、`stripe_subscription_id` だけで引く
+  webhook が救済できず、顧客は再申込も不能（TX1 が `status != canceled` で弾く）。
+  → `customer.subscription.*` で 1 次引きが外れたら `data.object.metadata.membership_id`（create 時に自付与）で
+  引き当て、`stripe_subscription_id` 未設定なら採用して以降の同期に載せる（`adoptFromMetadata`・他人の sub は採用しない）。
+- **F-05 HIGH**：`subscription_cancel` / `subscription_resume` の Idempotency-Key が membership 生成時固定。
+  cancel→resume→cancel を 24h 内に行うと 2 回目 cancel が 1 回目の応答を再生するだけで Stripe に適用されず、
+  local `canceling` / Stripe 継続更新の不一致。→ toggle 系のみ `:{bucket}`（UTC 時）を付与。同一時内の二重送信は
+  従来どおり 1 回。create / cancel_now は固定のまま（二重 subscription 防止不変）。
+- **F-03 HIGH**：初回処理が一時例外・プロセス停止で未完了のまま `webhook_events` に残ると、Stripe の retry が
+  `duplicate`(200) で握り潰され永久に未反映。→ `recordArrival` の UNIQUE 競合時に既存行の状態を見て、
+  `processed`/`ignored` は従来どおり `duplicate`、`received`/`failed` は `attempts++` して `received` に戻し再処理。
+  反映処理（`syncAndAdvance` / membership handle / invoice 記録 / GRANT）は全て冪等。
+- **F-08 MEDIUM**：同一 invoice の並行 webhook（`payment_failed` と `paid`）が両方「既存なし」判定 → 一方の INSERT が
+  23000 で落ちる。→ `recordInvoicePayment` の INSERT を `catch 23000 → 既存行へ収束（succeeded は前進のみ）`（台帳と同手法）。
+- **F-10 MEDIUM**：cancel / resume / cancel-now が gateway 例外時に `needs_attention` を立てず、`startSubscription` と違い
+  「要対応」として識別できない。→ 3 経路とも `PaymentGatewayException` を捕えて `flagAmbiguous` + rethrow。
+- **F-11 MEDIUM**：会員プランの価格・付与回数・Stripe price ID・有効状態変更に `password.confirm` が無い
+  （`docs/tasks/phase-06.md §15` は plan critical update に再認証を要求）。→ store / update / set-active に `password.confirm` 追加。
+- **F-12 MEDIUM**：Phase 7 で `/` を顧客ダッシュボード化した際、`/mypage/*` の `verified` 境界を迂回し、
+  メール未認証でも予約・利用権・回数券・支払いの集約が見えた。→ `HomeController` の顧客分岐で未認証は
+  `verification.notice` へリダイレクト。
+- **F-07 MEDIUM**：`canceling` は `current_period_end` を過ぎても `bookable()` のまま（`subscription.deleted` webhook の
+  遅延・欠落時）。→ `MembershipReservationService::reserve()` で `canceling` かつ `current_period_end < 今日` を拒否（多層防御）。
+- **F-09 LOW**：未払い invoice で `amount_paid ?? amount_due` が 0 を採用し「¥0 失敗」表示。
+  → `amount_paid` が 0 なら `amount_due` を金額に。
+- **F-18 LOW**：`MembershipLedgerService::adjust()` が空 operation key を弾かず、`adjust:` 単一 dedupe に潰れる恐れ
+  （HTTP は FormRequest が uuid 強制）。→ service 側でも空を弾く多層防御。
+
+### FALSE POSITIVE / accepted
+- Codex Q-01（並行二重 subscription）：`MembershipConcurrencyTest` に 2 コネクション実測を追加。既定 REPEATABLE READ の
+  空集合 `FOR UPDATE` gap lock で後発が待たされることを確認（保護は有効）。
+- F-16（PaymentIntent `client_secret` を Inertia props へ）：Payment Element の標準・不可避で安全（PI 単位・失効・
+  publishable key 前提）。secret key ではない。
+
+### 未修正（本番前ブロッカー / RISK・スコープ拡大回避のため文書化のみ）
+- **F-02（本番前ブロッカー）**：新規申込は `payment_behavior=default_incomplete` だが、初回 invoice の 3DS/SCA を
+  完了させる導線（`confirmation_secret` の expand・client 確認・membership 用 sync エンドポイント）が無い。
+  3DS 必須カードは申込を完了できない。未 attach PaymentMethod を `default_payment_method` に直接渡す点も
+  実 Stripe で要検証。→ Stripe Test Mode 結合と SCA 完了フロー実装が必要（別作業）。
+- **F-06**（並行 retrieve の古い snapshot で `active→grace/canceling` 巻き戻り。`grace` は予約可のため予約阻害なし、
+  `expire-grace` / reconcile で自己回復）。恒久策は snapshot 世代の保持。
+- **F-13**（表示上の決済期限後・`payments:expire` 実行前に直接 sync で capture 可）：Phase 5 `ReservationCheckoutSaga`。
+  今回スコープ外。窓 ≤1 分（scheduler 停止時は無限）。
+- **F-14**（`info` flash が `CustomerLayout` で表示されない）/ **F-15**（Passkey challenge のサーバー TTL は vendor 挙動）/
+  **F-17**（rollover の期間同期と `period_available` cache が別 TX。予約判定は `SUM(delta)` なので過剰消費なし・reconcile で回復）。
+- Codex Q-02（`config('stripe.handled_events')` が実ハンドラ集合とずれ・未参照）/ Q-03（plan mutable・GRANT 時点値使用の
+  遡及是非）：運用・設計判断。
+
+### 検証（修正後・最初から）
+- `migrate:fresh --seed` 40 DONE / `npm run build` 型エラー 0 / `artisan test` **612 passed / 3476 assertions / 0 failed**
+  （595 → 回帰テスト +17）/ `composer audit` 0 / `npm audit` 0。
+- scan：secrets / Stripe Live / 本番 DB 名 / 追記台帳 UPDATE-DELETE / Phase 8 先行 → いずれも検出なし。
+  新 gateway 呼び出し・`adoptFromMetadata` の TX は Stripe HTTP を包まない（Fake の `transactionLevel()===0` 検査で実証）。
+- commit：`Harden Phase 6 and 7 final QA`（remote 追加なし・push なし）。
+
+### 本番投入前に残るリスク
+1. **F-02 / F-01**：利用権課金は Stripe Test Mode との実結合が未実施。F-01 の dahlia 対応は防御的（新旧両対応）だが
+   実 API での検証が必要。3DS 完了フロー（F-02）は未実装。→ **利用権機能は Test Mode 結合 QA 前に本番投入しない。**
+2. Stripe webhook endpoint の購読イベントと API version（dahlia）は Stripe ダッシュボード設定。`invoice.paid` /
+   `invoice.payment_failed` / `invoice.payment_action_required` / `customer.subscription.created|updated|deleted` の購読必須。
+3. 本番 DB の transaction isolation を REPEATABLE READ に固定（Q-01・二重 subscription 防止の前提）。

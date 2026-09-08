@@ -115,11 +115,17 @@ final class MembershipSubscriptionService
     {
         $this->requireSubscription($membership);
 
-        $result = $this->gateway->setCancelAtPeriodEnd(
-            (string) $membership->stripe_subscription_id,
-            true,
-            $this->keys->subscriptionCancel($membership),
-        );
+        try {
+            $result = $this->gateway->setCancelAtPeriodEnd(
+                (string) $membership->stripe_subscription_id,
+                true,
+                $this->keys->subscriptionCancel($membership),
+            );
+        } catch (PaymentGatewayException $exception) {
+            // 適用後に応答が失われた可能性。状態を確定させず要対応にする。
+            $this->flagAmbiguous($membership, 'cancel');
+            throw $exception;
+        }
 
         DB::transaction(function () use ($membership, $result, $actor): void {
             $locked = Membership::query()->whereKey($membership->getKey())->lockForUpdate()->firstOrFail();
@@ -144,11 +150,16 @@ final class MembershipSubscriptionService
     {
         $this->requireSubscription($membership);
 
-        $result = $this->gateway->setCancelAtPeriodEnd(
-            (string) $membership->stripe_subscription_id,
-            false,
-            $this->keys->subscriptionResume($membership),
-        );
+        try {
+            $result = $this->gateway->setCancelAtPeriodEnd(
+                (string) $membership->stripe_subscription_id,
+                false,
+                $this->keys->subscriptionResume($membership),
+            );
+        } catch (PaymentGatewayException $exception) {
+            $this->flagAmbiguous($membership, 'resume');
+            throw $exception;
+        }
 
         DB::transaction(function () use ($membership, $result, $actor): void {
             $locked = Membership::query()->whereKey($membership->getKey())->lockForUpdate()->firstOrFail();
@@ -177,10 +188,15 @@ final class MembershipSubscriptionService
             throw ValidationException::withMessages(['reason' => '理由は必須です。']);
         }
 
-        $result = $this->gateway->cancelNow(
-            (string) $membership->stripe_subscription_id,
-            $this->keys->subscriptionCancelNow($membership),
-        );
+        try {
+            $result = $this->gateway->cancelNow(
+                (string) $membership->stripe_subscription_id,
+                $this->keys->subscriptionCancelNow($membership),
+            );
+        } catch (PaymentGatewayException $exception) {
+            $this->flagAmbiguous($membership, 'cancel_now');
+            throw $exception;
+        }
 
         DB::transaction(function () use ($membership, $result, $reason, $actor): void {
             $locked = Membership::query()->whereKey($membership->getKey())->lockForUpdate()->firstOrFail();

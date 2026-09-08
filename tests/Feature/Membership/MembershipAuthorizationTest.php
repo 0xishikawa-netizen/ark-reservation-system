@@ -177,7 +177,13 @@ final class MembershipAuthorizationTest extends TestCase
             $this->actingAs($actor)
                 ->get('/admin/membership-plans')
                 ->assertOk();
+            // プラン作成は機微操作。password.confirm 未確認では作成させず再認証へ誘導する。
             $this->actingAs($actor)
+                ->withSession(['auth.password_confirmed_at' => null])
+                ->post('/admin/membership-plans', $this->planPayload("{$role} 未確認"))
+                ->assertRedirect(route('password.confirm'));
+            $this->actingAs($actor)
+                ->withSession($this->passwordConfirmedSession())
                 ->post('/admin/membership-plans', $this->planPayload("{$role} プラン"))
                 ->assertRedirect();
         }
@@ -189,6 +195,7 @@ final class MembershipAuthorizationTest extends TestCase
                 ->get('/admin/membership-plans')
                 ->assertForbidden();
             $this->actingAs($actor)
+                ->withSession($this->passwordConfirmedSession())
                 ->post('/admin/membership-plans', $this->planPayload("{$role} プラン"))
                 ->assertForbidden();
         }

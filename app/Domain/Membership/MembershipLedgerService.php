@@ -225,6 +225,13 @@ final class MembershipLedgerService
             throw ValidationException::withMessages(['reason' => '理由は必須です。']);
         }
 
+        // 空の operation key は dedupe_key を "adjust:" に潰し、以後の調整が全 membership 横断で
+        // 既存行扱いになり黙って無視される。HTTP 経路は FormRequest が uuid を強制するが、
+        // console / job / 将来の呼び出し元に対する多層防御としてここでも弾く。
+        if (trim($operationKey) === '') {
+            throw ValidationException::withMessages(['operation_key' => '操作キーは必須です。']);
+        }
+
         $period = $this->currentPeriod($membership);
         $dedupeKey = "adjust:{$operationKey}";
 

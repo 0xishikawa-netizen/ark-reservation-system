@@ -31,6 +31,7 @@ use App\Http\Controllers\StripeWebhookController;
 use App\Http\Middleware\AdminAccess;
 use App\Http\Middleware\AdminIdleTimeout;
 use App\Http\Middleware\EnsureStaffMfa;
+use App\Http\Middleware\ThrottleFortifyRequests;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
@@ -38,7 +39,7 @@ Route::get('/', HomeController::class)->name('home');
 // Stripe webhook。署名検証で認証するため auth を掛けない。
 // CSRF は bootstrap/app.php で除外。Stripe の retry を阻害する rate limit は付けない。
 Route::post('stripe/webhook', StripeWebhookController::class)
-    ->withoutMiddleware([\App\Http\Middleware\ThrottleFortifyRequests::class])
+    ->withoutMiddleware([ThrottleFortifyRequests::class])
     ->name('stripe.webhook');
 
 Route::middleware(['web', 'auth', 'verified'])->group(function (): void {
@@ -210,14 +211,18 @@ Route::middleware([
             ->name('membership-plans.index');
         Route::get('membership-plans/create', [MembershipPlanController::class, 'create'])
             ->name('membership-plans.create');
-        Route::post('membership-plans', [MembershipPlanController::class, 'store'])
-            ->name('membership-plans.store');
         Route::get('membership-plans/{membershipPlan}/edit', [MembershipPlanController::class, 'edit'])
             ->name('membership-plans.edit');
-        Route::put('membership-plans/{membershipPlan}', [MembershipPlanController::class, 'update'])
-            ->name('membership-plans.update');
-        Route::patch('membership-plans/{membershipPlan}/active', [MembershipPlanController::class, 'setActive'])
-            ->name('membership-plans.set-active');
+        // 価格・付与回数・Stripe price ID・有効状態は以後の課金契約と GRANT の条件に直結する。
+        // 機微操作としてパスワード再確認を必須にする（docs/tasks/phase-06.md §15）。
+        Route::middleware('password.confirm')->group(function (): void {
+            Route::post('membership-plans', [MembershipPlanController::class, 'store'])
+                ->name('membership-plans.store');
+            Route::put('membership-plans/{membershipPlan}', [MembershipPlanController::class, 'update'])
+                ->name('membership-plans.update');
+            Route::patch('membership-plans/{membershipPlan}/active', [MembershipPlanController::class, 'setActive'])
+                ->name('membership-plans.set-active');
+        });
     });
     Route::middleware(['can:membership.manage', 'password.confirm'])->group(function (): void {
         Route::post('memberships/{membership}/adjust', [AdminCustomerMembershipController::class, 'adjust'])

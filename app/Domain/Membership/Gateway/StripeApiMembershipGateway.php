@@ -111,15 +111,20 @@ final class StripeApiMembershipGateway implements MembershipStripeGateway
         $invoiceStatus = is_object($invoice) ? ($invoice->status ?? null) : null;
         $invoiceId = is_string($invoice) ? $invoice : (is_object($invoice) ? ($invoice->id ?? null) : null);
 
+        // Stripe API 2026-08-26.dahlia 以降、subscription の請求期間は
+        // subscription item へ移動した。旧 API（トップレベル）にもフォールバックする。
+        $periodStart = $this->periodTimestamp($subscription, 'current_period_start');
+        $periodEnd = $this->periodTimestamp($subscription, 'current_period_end');
+
         return new SubscriptionResult(
             stripeSubscriptionId: $subscription->id,
             stripeStatus: (string) $subscription->status,
             cancelAtPeriodEnd: (bool) $subscription->cancel_at_period_end,
-            currentPeriodStart: $subscription->current_period_start
-                ? Carbon::createFromTimestamp($subscription->current_period_start)->toDateString()
+            currentPeriodStart: $periodStart !== null
+                ? Carbon::createFromTimestamp($periodStart)->toDateString()
                 : null,
-            currentPeriodEnd: $subscription->current_period_end
-                ? Carbon::createFromTimestamp($subscription->current_period_end)->toDateString()
+            currentPeriodEnd: $periodEnd !== null
+                ? Carbon::createFromTimestamp($periodEnd)->toDateString()
                 : null,
             latestInvoiceStatus: is_string($invoiceStatus) ? $invoiceStatus : null,
             latestInvoiceId: is_string($invoiceId) ? $invoiceId : null,
@@ -127,6 +132,23 @@ final class StripeApiMembershipGateway implements MembershipStripeGateway
                 ? Carbon::createFromTimestamp($invoice->next_payment_attempt)->toDateTimeString()
                 : null,
         );
+    }
+
+    /**
+     * dahlia（item 側）と旧 API（subscription トップレベル）の両方から請求期間の unix time を取り出す。
+     */
+    private function periodTimestamp(StripeSubscription $subscription, string $field): ?int
+    {
+        $topLevel = $subscription->{$field} ?? null;
+
+        if (is_int($topLevel) && $topLevel > 0) {
+            return $topLevel;
+        }
+
+        $items = $subscription->items->data ?? [];
+        $itemValue = isset($items[0]) ? ($items[0]->{$field} ?? null) : null;
+
+        return is_int($itemValue) && $itemValue > 0 ? $itemValue : null;
     }
 
     private function mirrorToCashier(int $customerUserId, StripeSubscription $subscription): void

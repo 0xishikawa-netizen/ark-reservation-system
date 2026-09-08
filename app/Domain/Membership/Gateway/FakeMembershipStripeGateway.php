@@ -35,6 +35,12 @@ final class FakeMembershipStripeGateway implements MembershipStripeGateway
     /** 次の createSubscription をこの例外で失敗させる（1 回だけ）。 */
     private ?Throwable $failCreateOnce = null;
 
+    /** 次の setCancelAtPeriodEnd をこの例外で失敗させる（1 回だけ）。 */
+    private ?Throwable $failToggleOnce = null;
+
+    /** 次の cancelNow をこの例外で失敗させる（1 回だけ）。 */
+    private ?Throwable $failCancelNowOnce = null;
+
     private string $nextCreateStripeStatus = 'active';
 
     private ?string $nextCreateInvoiceStatus = 'paid';
@@ -42,6 +48,16 @@ final class FakeMembershipStripeGateway implements MembershipStripeGateway
     public function failNextCreateWith(Throwable $exception): void
     {
         $this->failCreateOnce = $exception;
+    }
+
+    public function failNextToggleWith(Throwable $exception): void
+    {
+        $this->failToggleOnce = $exception;
+    }
+
+    public function failNextCancelNowWith(Throwable $exception): void
+    {
+        $this->failCancelNowOnce = $exception;
     }
 
     public function nextCreateReturnsStatus(string $stripeStatus, ?string $invoiceStatus = null): void
@@ -131,6 +147,12 @@ final class FakeMembershipStripeGateway implements MembershipStripeGateway
     {
         $this->guard('set_cancel_at_period_end', $idempotencyKey, $subscriptionId);
 
+        if ($this->failToggleOnce !== null) {
+            $exception = $this->failToggleOnce;
+            $this->failToggleOnce = null;
+            throw $exception;
+        }
+
         $current = $this->retrieveInternal($subscriptionId);
         $result = new SubscriptionResult(
             stripeSubscriptionId: $subscriptionId,
@@ -149,6 +171,12 @@ final class FakeMembershipStripeGateway implements MembershipStripeGateway
     public function cancelNow(string $subscriptionId, string $idempotencyKey): SubscriptionResult
     {
         $this->guard('cancel_now', $idempotencyKey, $subscriptionId);
+
+        if ($this->failCancelNowOnce !== null) {
+            $exception = $this->failCancelNowOnce;
+            $this->failCancelNowOnce = null;
+            throw $exception;
+        }
 
         $current = $this->retrieveInternal($subscriptionId);
         $result = new SubscriptionResult(

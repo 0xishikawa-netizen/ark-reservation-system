@@ -57,7 +57,7 @@ final class StripeWebhookProcessor
         $record = $this->recordArrival($event, $eventId, $type);
 
         if ($record === null) {
-            // UNIQUE 制約に弾かれた＝再送。二重処理しない。
+            // 既に終了状態（processed / ignored）で記録済み＝真の再送。二重処理しない。
             return 'duplicate';
         }
 
@@ -158,7 +158,13 @@ final class StripeWebhookProcessor
     }
 
     /**
-     * 到着を記録する。既に同じ event.id があれば null を返す（再送）。
+     * 到着を記録する。
+     *
+     * - 初回: 新しい WebhookEvent 行を返す。
+     * - 再送で既存行が終了状態（processed / ignored）: null（真の重複・再処理しない）。
+     * - 再送で既存行が未終了（received / failed）: attempts++ して行を received に戻して返す。
+     *   初回処理が一時例外やプロセス停止で未完了のまま Stripe が retry したケースを取りこぼさない。
+     *   実際の反映処理（syncAndAdvance / membership handle / invoice 記録 / GRANT）はすべて冪等。
      *
      * @param  array<string, mixed>  $event
      */
@@ -185,15 +191,28 @@ final class StripeWebhookProcessor
                 return $record;
             });
         } catch (QueryException $exception) {
-            if ((string) $exception->getCode() === '23000') {
-                WebhookEvent::query()
-                    ->where('stripe_event_id', $eventId)
-                    ->increment('attempts');
+            if ((string) $exception->getCode() !== '23000') {
+                throw $exception;
+            }
+
+            $existing = WebhookEvent::query()->where('stripe_event_id', $eventId)->first();
+
+            if ($existing === null) {
+                return null;
+            }
+
+            $existing->forceFill(['attempts' => $existing->attempts + 1]);
+
+            if (in_array($existing->status, [WebhookEventStatus::Processed, WebhookEventStatus::Ignored], true)) {
+                $existing->save();
 
                 return null;
             }
 
-            throw $exception;
+            // 未完了のまま届いた再送。再処理させる。
+            $existing->forceFill(['status' => WebhookEventStatus::Received, 'error' => null])->save();
+
+            return $existing;
         }
     }
 
@@ -219,8 +238,7 @@ final class StripeWebhookProcessor
 
         // payment_intent.* は object 自身、charge.* は payment_intent フィールド。
         $candidate = match (true) {
-            is_string($object['object'] ?? null) && $object['object'] === 'payment_intent'
-                => $object['id'] ?? null,
+            is_string($object['object'] ?? null) && $object['object'] === 'payment_intent' => $object['id'] ?? null,
             default => $object['payment_intent'] ?? null,
         };
 

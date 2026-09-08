@@ -23,6 +23,11 @@ class HomeController extends Controller
         }
 
         if ($user->hasRole('customer')) {
+            // ダッシュボードは顧客データの集約。/mypage/* と同じく、メール未認証では見せない。
+            if (! $user->hasVerifiedEmail()) {
+                return redirect()->route('verification.notice');
+            }
+
             // メソッド依存（Request / CustomerDashboardQuery）をコンテナに解決させる。
             return app()->call([app(DashboardController::class), '__invoke']);
         }

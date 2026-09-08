@@ -48,11 +48,15 @@ return [
         'payment_intent_capture' => 'pi-capture:{payment_operation_id}',
         'payment_intent_cancel' => 'pi-cancel:{payment_operation_id}',
         'refund' => 'refund:{refund_operation_id}',
-        // Phase 6 Membership。すべて memberships.membership_operation_id（DB 永続値）だけから導出。
-        // retry / reload / job 再実行で新しい operation ID を発行しない。
+        // Phase 6 Membership。根は memberships.membership_operation_id（DB 永続値）。
+        // create / cancel_now は「1 度きり」の操作なので固定キー（retry / reload / job 再実行で
+        // 新しい subscription を作らない）。cancel / resume は toggle 操作で
+        // cancel→resume→cancel のように同じ状態へ戻り得るため {bucket}（UTC の時）を足す。
+        // これで Stripe の 24h 冪等キャッシュに古い応答が張り付くのを防ぎつつ、
+        // 同一時内の二重送信（ダブルクリック等）は従来どおり 1 回に収束する。
         'subscription_create' => 'sub-create:{membership_operation_id}',
-        'subscription_cancel' => 'sub-cancel:{membership_operation_id}',
-        'subscription_resume' => 'sub-resume:{membership_operation_id}',
+        'subscription_cancel' => 'sub-cancel:{membership_operation_id}:{bucket}',
+        'subscription_resume' => 'sub-resume:{membership_operation_id}:{bucket}',
         'subscription_cancel_now' => 'sub-cancel-now:{membership_operation_id}',
     ],
 

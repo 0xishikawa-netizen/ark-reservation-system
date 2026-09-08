@@ -7,6 +7,7 @@ namespace App\Domain\Membership\Webhook;
 use App\Domain\Membership\MembershipBillingService;
 use App\Domain\Membership\MembershipSubscriptionService;
 use App\Models\Membership;
+use Illuminate\Support\Facades\DB;
 
 /**
  * invoice.* / customer.subscription.* を Membership へ反映する。
@@ -59,6 +60,12 @@ final class MembershipWebhookHandler
         $membership = Membership::query()->where('stripe_subscription_id', $subscriptionId)->first();
 
         if ($membership === null) {
+            // 曖昧な create 失敗（Stripe timeout 等）で stripe_subscription_id を保存できず
+            // pending に張り付いた membership を、Stripe が付けた metadata.membership_id で再関連付けする。
+            $membership = $this->adoptFromMetadata($type, $object, $subscriptionId);
+        }
+
+        if ($membership === null) {
             return ['result' => 'ignored', 'membership_id' => null, 'note' => '対象の利用権が見つかりません。'];
         }
 
@@ -76,10 +83,55 @@ final class MembershipWebhookHandler
      */
     private function subscriptionIdFrom(string $type, array $object): ?string
     {
-        $candidate = str_starts_with($type, 'invoice.')
-            ? ($object['subscription'] ?? null)
-            : ($object['id'] ?? null);
+        if (str_starts_with($type, 'invoice.')) {
+            // Stripe API 2026-08-26.dahlia で invoice.subscription は
+            // parent.subscription_details.subscription へ移動。旧形にもフォールバック。
+            $nested = $object['parent']['subscription_details']['subscription'] ?? null;
+
+            if (is_array($nested)) {
+                $nested = $nested['id'] ?? null;
+            }
+
+            $candidate = $object['subscription'] ?? $nested;
+        } else {
+            $candidate = $object['id'] ?? null;
+        }
 
         return is_string($candidate) && $candidate !== '' ? $candidate : null;
+    }
+
+    /**
+     * customer.subscription.* イベントの metadata.membership_id から stuck-pending の membership を
+     * 引き当て、まだ stripe_subscription_id が無ければ採用して以降の同期に載せる。
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function adoptFromMetadata(string $type, array $object, string $subscriptionId): ?Membership
+    {
+        if (str_starts_with($type, 'invoice.')) {
+            return null; // invoice の metadata は subscription の metadata と別物。採用しない。
+        }
+
+        $membershipId = $object['metadata']['membership_id'] ?? null;
+
+        if (! is_string($membershipId) && ! is_int($membershipId)) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($membershipId, $subscriptionId): ?Membership {
+            $membership = Membership::query()->whereKey($membershipId)->lockForUpdate()->first();
+
+            if ($membership === null) {
+                return null;
+            }
+
+            if ($membership->stripe_subscription_id === null
+                && ! Membership::query()->where('stripe_subscription_id', $subscriptionId)->exists()) {
+                $membership->forceFill(['stripe_subscription_id' => $subscriptionId])->save();
+            }
+
+            // 別の subscription をすでに持つ membership には対応イベントではない。
+            return $membership->stripe_subscription_id === $subscriptionId ? $membership : null;
+        });
     }
 }

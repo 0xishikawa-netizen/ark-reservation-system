@@ -15,6 +15,7 @@ use App\Enums\Reservation\ReservationSource;
 use App\Exceptions\Membership\InsufficientMembershipBalanceException;
 use App\Models\Customer;
 use App\Models\Membership;
+use App\Models\MembershipPlan;
 use App\Models\MembershipReservationUsage;
 use App\Models\MembershipUsageTransaction;
 use App\Models\Reservation;
@@ -29,6 +30,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 final class MembershipConcurrencyTest extends TestCase
@@ -254,6 +256,62 @@ final class MembershipConcurrencyTest extends TestCase
             ->count());
         $this->assertSame(4, $this->ledger()->available($membership));
         $this->assertSame(4, (int) $membership->fresh()->period_available);
+    }
+
+    /**
+     * Q-01: 「1 顧客 1 有効 membership」を守る唯一の砦は startSubscription TX1 の
+     * `where(status != canceled)->lockForUpdate()->exists()`。並行で 2 本入ると別々の
+     * membership_operation_id ＝別 Idempotency-Key で Stripe subscription が二重に作られる。
+     * 既定の REPEATABLE READ では空集合への FOR UPDATE でも gap lock が効き、後発が待たされることを確認する。
+     */
+    public function test_concurrent_duplicate_subscription_check_is_serialised_by_gap_lock(): void
+    {
+        $customer = Customer::factory()->create();
+        $plan = MembershipPlan::factory()->create();
+        $primary = $this->primaryConnection;
+        $this->assertNotNull($primary);
+
+        $primary->beginTransaction();
+
+        try {
+            $exists = $primary->table('memberships')
+                ->where('customer_id', $customer->user_id)
+                ->where('status', '!=', 'canceled')
+                ->lockForUpdate()
+                ->exists();
+            $this->assertFalse($exists);
+
+            $primary->table('memberships')->insert([
+                'customer_id' => $customer->user_id,
+                'membership_plan_id' => $plan->id,
+                'stripe_subscription_id' => null,
+                'membership_operation_id' => (string) Str::uuid(),
+                'pending_operation' => 'create',
+                'status' => 'pending',
+                'period_available' => 0,
+                'cancel_at_period_end' => false,
+                'needs_attention' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            try {
+                $this->onSecondConnection(fn (): bool => DB::table('memberships')
+                    ->where('customer_id', $customer->user_id)
+                    ->where('status', '!=', 'canceled')
+                    ->lockForUpdate()
+                    ->exists());
+                $this->fail('後発コネクションの重複検査が待たされませんでした（二重 subscription の余地）。');
+            } catch (QueryException|DeadlockException $exception) {
+                $this->assertLockWaitTimeout($exception);
+            }
+
+            $primary->commit();
+        } finally {
+            $this->rollBackOpenTransactions($primary);
+        }
+
+        $this->assertSame(1, Membership::query()->where('customer_id', $customer->user_id)->count());
     }
 
     /** @return array{Customer, Membership, Reservation, ReservationInput} */
