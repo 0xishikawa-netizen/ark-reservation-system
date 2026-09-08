@@ -50,6 +50,13 @@ const logout = (): void => {
                     <v-btn
                         variant="text"
                         color="primary"
+                        @click="router.visit('/mypage/tickets')"
+                    >
+                        回数券
+                    </v-btn>
+                    <v-btn
+                        variant="text"
+                        color="primary"
                         @click="router.visit('/mypage/profile')"
                     >
                         プロフィール

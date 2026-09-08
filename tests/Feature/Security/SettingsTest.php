@@ -20,7 +20,12 @@ class SettingsTest extends TestCase
         $this->seed(SettingsSeeder::class);
 
         $this->assertSame(15, app(Settings::class)->get('reservation.slot_minutes'));
-        $this->assertSame(5, Setting::query()->count());
+        $this->assertSame('restore', app(Settings::class)->get('ticket.no_show_policy'));
+        $this->assertSame(
+            'preserve_hold',
+            app(Settings::class)->get('ticket.expiration_hold_policy'),
+        );
+        $this->assertSame(7, Setting::query()->count());
     }
 
     public function test_missing_setting_returns_the_given_default(): void

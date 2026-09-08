@@ -60,6 +60,7 @@ class ReservationController extends Controller
                 'starts_at' => $reservation->starts_at->format('Y-m-d H:i:s'),
                 'ends_at' => $reservation->ends_at->format('Y-m-d H:i:s'),
                 'status' => $reservation->status->value,
+                'payment_method' => $reservation->payment_method->value,
                 'version' => $reservation->version,
                 'cancel_reason' => $reservation->cancel_reason,
                 'can_cancel' => $canModify,

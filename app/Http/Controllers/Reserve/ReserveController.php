@@ -7,11 +7,14 @@ namespace App\Http\Controllers\Reserve;
 use App\Domain\Reservation\AvailabilityService;
 use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
+use App\Domain\Ticket\TicketLedgerService;
+use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\ReservationSource;
 use App\Exceptions\Reservation\SlotUnavailableException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\StoreReservationRequest;
 use App\Models\Customer;
+use App\Models\TicketWallet;
 use App\Models\User;
 use App\Queries\OnlineBookableServiceQuery;
 use Carbon\CarbonImmutable;
@@ -29,10 +32,30 @@ class ReserveController extends Controller
         Request $request,
         OnlineBookableServiceQuery $query,
     ): Response {
-        $this->customerFor($request);
+        $customer = $this->customerFor($request);
+        $ledger = app(TicketLedgerService::class);
+        $wallets = TicketWallet::query()
+            ->where('customer_id', $customer->user_id)
+            ->active()
+            ->with('product:id,name')
+            ->orderBy('expires_at')
+            ->orderBy('id')
+            ->get();
+        $ticketWallets = $wallets
+            ->map(fn (TicketWallet $wallet): array => [
+                'id' => (int) $wallet->id,
+                'product_name' => $wallet->product->name,
+                'available' => $ledger->available($wallet),
+                'expires_at' => $wallet->expires_at->toDateString(),
+            ])
+            ->values();
 
         return Inertia::render('Customer/Reserve/Index', [
             'services' => $query->get(),
+            'ticket' => [
+                'available_total' => $ticketWallets->sum('available'),
+                'wallets' => $ticketWallets->all(),
+            ],
         ]);
     }
 
@@ -78,6 +101,9 @@ class ReserveController extends Controller
         $staffId = isset($validated['staff_id'])
             ? (int) $validated['staff_id']
             : null;
+        $paymentMethod = $request->string('payment_method')->toString() === 'ticket'
+            ? PaymentMethod::Ticket
+            : PaymentMethod::Onsite;
 
         if ($staffId === null) {
             $candidate = collect($availabilityService->openStartTimes(
@@ -108,6 +134,7 @@ class ReserveController extends Controller
             actorUserId: (int) $user->id,
             notes: null,
             adminContext: false,
+            paymentMethod: $paymentMethod,
         ));
 
         return redirect()

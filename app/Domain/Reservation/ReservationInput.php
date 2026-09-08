@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reservation;
 
+use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\ReservationSource;
 use Carbon\CarbonImmutable;
 
@@ -19,5 +20,6 @@ final readonly class ReservationInput
         public ?int $actorUserId,
         public ?string $notes,
         public bool $adminContext,
+        public PaymentMethod $paymentMethod = PaymentMethod::Onsite,
     ) {}
 }

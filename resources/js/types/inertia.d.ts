@@ -20,6 +20,9 @@ interface AuthPermissions {
     reservationsManage: boolean;
     failedJobsView: boolean;
     auditLogsView: boolean;
+    ticketPolicyManage: boolean;
+    ticketProductsManage: boolean;
+    ticketGrant: boolean;
 }
 
 interface SharedPageProps {

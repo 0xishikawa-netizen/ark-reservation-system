@@ -13,3 +13,7 @@ Artisan::command('inspire', function () {
 Schedule::command('reservations:prune-slots')
     ->dailyAt('03:30')
     ->withoutOverlapping();
+
+Schedule::command('tickets:expire')->dailyAt('03:00')->withoutOverlapping();
+
+Schedule::command('tickets:reconcile')->dailyAt('03:15')->withoutOverlapping();

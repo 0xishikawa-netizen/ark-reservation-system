@@ -16,6 +16,8 @@ class SettingsSeeder extends Seeder
         'reservation.slot_minutes' => ['value' => '15', 'type' => 'int'],
         'reservation.hold_minutes' => ['value' => '10', 'type' => 'int'],
         'admin.idle_timeout' => ['value' => '1800', 'type' => 'int'],
+        'ticket.no_show_policy' => ['value' => 'restore', 'type' => 'string'],
+        'ticket.expiration_hold_policy' => ['value' => 'preserve_hold', 'type' => 'string'],
     ];
 
     public function run(): void

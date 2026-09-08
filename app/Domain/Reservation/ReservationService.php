@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reservation;
 
+use App\Domain\Ticket\TicketReservationService;
 use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\PaymentStatus;
 use App\Enums\Reservation\ReservationStatus;
@@ -30,7 +31,10 @@ use Illuminate\Validation\ValidationException;
 
 final class ReservationService
 {
-    public function __construct(private readonly AuditLogger $auditLogger) {}
+    public function __construct(
+        private readonly AuditLogger $auditLogger,
+        private readonly TicketReservationService $tickets,
+    ) {}
 
     /** @throws ValidationException|SlotUnavailableException */
     public function create(ReservationInput $in): Reservation
@@ -59,7 +63,7 @@ final class ReservationService
                     'starts_at' => $in->startsAt,
                     'ends_at' => $endsAt,
                     'source' => $in->source,
-                    'payment_method' => PaymentMethod::Onsite,
+                    'payment_method' => $in->paymentMethod,
                     'payment_status' => PaymentStatus::Unpaid,
                     'status' => ReservationStatus::Confirmed,
                     'sync_status' => SyncStatus::NotRequired,
@@ -74,6 +78,10 @@ final class ReservationService
                     boothId: $in->boothId,
                     slots: $slots,
                 ));
+
+                if ($in->paymentMethod === PaymentMethod::Ticket) {
+                    $this->tickets->hold($reservation, $this->actor($in->actorUserId));
+                }
 
                 return $reservation;
             });
@@ -176,7 +184,7 @@ final class ReservationService
     ): Reservation {
         $customerContext = $actor instanceof User && $actor->customer !== null;
 
-        $reservation = DB::transaction(function () use ($reservation, $reason, $customerContext): Reservation {
+        $reservation = DB::transaction(function () use ($reservation, $reason, $customerContext, $actor): Reservation {
             $reservation = $this->lockReservation($reservation);
 
             if ($customerContext && ! $reservation->starts_at->isFuture()) {
@@ -193,6 +201,8 @@ final class ReservationService
             ReservationResourceSlot::query()
                 ->where('reservation_id', $reservation->id)
                 ->delete();
+
+            $this->tickets->release($reservation, $actor);
 
             return $reservation;
         });
@@ -212,10 +222,11 @@ final class ReservationService
         Reservation $reservation,
         ?Authenticatable $actor,
     ): Reservation {
-        $reservation = DB::transaction(function () use ($reservation): Reservation {
+        $reservation = DB::transaction(function () use ($reservation, $actor): Reservation {
             $reservation = $this->lockReservation($reservation);
             $this->applyStatus($reservation, ReservationStatus::Completed);
             $reservation->forceFill(['attended_at' => now()])->save();
+            $this->tickets->consume($reservation, $actor);
 
             return $reservation;
         });
@@ -235,9 +246,10 @@ final class ReservationService
         Reservation $reservation,
         ?Authenticatable $actor,
     ): Reservation {
-        $reservation = DB::transaction(function () use ($reservation): Reservation {
+        $reservation = DB::transaction(function () use ($reservation, $actor): Reservation {
             $reservation = $this->lockReservation($reservation);
             $this->applyStatus($reservation, ReservationStatus::NoShow);
+            $this->tickets->handleNoShow($reservation, $actor);
 
             return $reservation;
         });

@@ -4,17 +4,25 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Customer;
 
+use App\Domain\Reservation\ReservationInput;
+use App\Domain\Reservation\ReservationService;
+use App\Domain\Ticket\TicketLedgerService;
+use App\Enums\Reservation\PaymentMethod;
+use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
 use App\Models\Customer;
 use App\Models\Reservation;
 use App\Models\Service;
 use App\Models\Staff;
 use App\Models\StaffShift;
+use App\Models\TicketProduct;
+use App\Models\TicketWallet;
 use App\Models\User;
 use App\Support\Settings\Settings;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -46,6 +54,7 @@ class ReservationBookingTest extends TestCase
         [$onlineService, $staff] = $this->bookableServiceAndStaff();
         $offlineService = Service::factory()->create(['is_online_bookable' => false]);
         $staffOptionalService = Service::factory()->create(['requires_staff' => false]);
+        $wallet = $this->grantTickets($customer, 5);
 
         $this->actingAs($customer->user)
             ->get('/reserve')
@@ -55,7 +64,11 @@ class ReservationBookingTest extends TestCase
                 ->has('services', 1)
                 ->where('services.0.id', $onlineService->id)
                 ->where('services.0.staff.0.id', $staff->user_id)
-                ->missing('services.1'));
+                ->missing('services.1')
+                ->where('ticket.available_total', 5)
+                ->has('ticket.wallets', 1)
+                ->where('ticket.wallets.0.product_name', $wallet->product->name)
+                ->where('ticket.wallets.0.available', 5));
 
         $this->assertNotSame($onlineService->id, $offlineService->id);
         $this->assertNotSame($onlineService->id, $staffOptionalService->id);
@@ -98,7 +111,143 @@ class ReservationBookingTest extends TestCase
         $this->assertSame(ReservationStatus::Confirmed, $reservation->status);
         $this->assertSame($customer->user_id, $reservation->customer_id);
         $this->assertSame($staff->user_id, $reservation->staff_id);
+        $this->assertSame(PaymentMethod::Onsite, $reservation->payment_method);
         $this->assertSame(4, $reservation->resourceSlots()->count());
+        $this->assertDatabaseCount('ticket_reservation_usages', 0);
+    }
+
+    public function test_customer_can_book_with_a_ticket_and_hold_one_available_use(): void
+    {
+        $customer = Customer::factory()->create();
+        [$service, $staff] = $this->bookableServiceAndStaff();
+        $this->shift($staff);
+        $wallet = $this->grantTickets($customer, 3);
+
+        $response = $this->actingAs($customer->user)->post('/reserve', [
+            'service_id' => $service->id,
+            'staff_id' => $staff->user_id,
+            'starts_at' => '2026-10-01 10:00:00',
+            'payment_method' => 'ticket',
+        ]);
+
+        $reservation = Reservation::query()->firstOrFail();
+
+        $response
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('mypage.reservations.show', $reservation));
+        $this->assertSame(ReservationStatus::Confirmed, $reservation->status);
+        $this->assertSame(PaymentMethod::Ticket, $reservation->payment_method);
+        $this->assertDatabaseHas('ticket_reservation_usages', [
+            'reservation_id' => $reservation->id,
+            'ticket_wallet_id' => $wallet->id,
+            'status' => 'held',
+        ]);
+        $this->assertSame(2, app(TicketLedgerService::class)->available($wallet));
+        $this->actingAs($customer->user)
+            ->get(route('mypage.reservations.show', $reservation))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('reservation.payment_method', 'ticket'));
+    }
+
+    public function test_ticket_booking_without_available_balance_is_rejected_with_422(): void
+    {
+        $customer = Customer::factory()->create();
+        [$service, $staff] = $this->bookableServiceAndStaff();
+        $this->shift($staff);
+
+        $this->actingAs($customer->user)
+            ->postJson('/reserve', [
+                'service_id' => $service->id,
+                'staff_id' => $staff->user_id,
+                'starts_at' => '2026-10-01 10:00:00',
+                'payment_method' => 'ticket',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('payment_method')
+            ->assertJsonPath(
+                'errors.payment_method.0',
+                '利用可能な回数券がありません。',
+            );
+
+        $this->assertDatabaseCount('reservations', 0);
+        $this->assertDatabaseCount('ticket_reservation_usages', 0);
+    }
+
+    public function test_onsite_booking_does_not_create_a_ticket_usage(): void
+    {
+        $customer = Customer::factory()->create();
+        [$service, $staff] = $this->bookableServiceAndStaff();
+        $this->shift($staff);
+        $wallet = $this->grantTickets($customer, 3);
+
+        $this->actingAs($customer->user)
+            ->post('/reserve', [
+                'service_id' => $service->id,
+                'staff_id' => $staff->user_id,
+                'starts_at' => '2026-10-01 10:00:00',
+                'payment_method' => 'onsite',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $reservation = Reservation::query()->firstOrFail();
+
+        $this->assertSame(PaymentMethod::Onsite, $reservation->payment_method);
+        $this->assertDatabaseCount('ticket_reservation_usages', 0);
+        $this->assertSame(3, app(TicketLedgerService::class)->available($wallet));
+    }
+
+    public function test_ticket_hold_final_defense_returns_409_if_balance_was_just_used(): void
+    {
+        $customer = Customer::factory()->create();
+        [$service, $staff] = $this->bookableServiceAndStaff();
+        $this->shift($staff);
+        $this->grantTickets($customer, 1);
+
+        $this->actingAs($customer->user)
+            ->get('/reserve')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('ticket.available_total', 1));
+
+        app(ReservationService::class)->create(new ReservationInput(
+            customerId: (int) $customer->user_id,
+            serviceId: (int) $service->id,
+            staffId: (int) $staff->user_id,
+            boothId: null,
+            startsAt: CarbonImmutable::parse('2026-10-01 10:00:00'),
+            source: ReservationSource::ArkWeb,
+            actorUserId: (int) $customer->user_id,
+            notes: null,
+            adminContext: false,
+            paymentMethod: PaymentMethod::Ticket,
+        ));
+
+        $attempt = new ReservationInput(
+            customerId: (int) $customer->user_id,
+            serviceId: (int) $service->id,
+            staffId: (int) $staff->user_id,
+            boothId: null,
+            startsAt: CarbonImmutable::parse('2026-10-01 12:00:00'),
+            source: ReservationSource::ArkWeb,
+            actorUserId: (int) $customer->user_id,
+            notes: null,
+            adminContext: false,
+            paymentMethod: PaymentMethod::Ticket,
+        );
+
+        Route::post('/_test/customer/ticket-final-defense', static function () use ($attempt) {
+            return app(ReservationService::class)->create($attempt);
+        });
+
+        $this->postJson('/_test/customer/ticket-final-defense')
+            ->assertConflict()
+            ->assertJsonPath('message', '利用可能な回数券がありません')
+            ->assertJsonPath(
+                'errors.reservation.0',
+                '利用可能な回数券がありません',
+            );
+
+        $this->assertDatabaseCount('reservations', 1);
+        $this->assertDatabaseCount('ticket_reservation_usages', 1);
     }
 
     public function test_booking_without_staff_assigns_the_first_available_staff_id(): void
@@ -237,5 +386,21 @@ class ReservationBookingTest extends TestCase
             'start_at' => '10:00:00',
             'end_at' => '18:00:00',
         ]);
+    }
+
+    private function grantTickets(Customer $customer, int $count): TicketWallet
+    {
+        $product = TicketProduct::factory()->create([
+            'name' => "予約用{$count}回券",
+            'total_count' => $count,
+        ]);
+
+        return app(TicketLedgerService::class)->grant(
+            $customer,
+            $product,
+            $count,
+            "booking-ticket-{$customer->user_id}",
+            '予約テスト用',
+        );
     }
 }

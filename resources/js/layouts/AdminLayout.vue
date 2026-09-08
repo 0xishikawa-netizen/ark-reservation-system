@@ -31,6 +31,15 @@ const navigationItems = computed<NavigationItem[]>(() => {
         ...(can.boothsManage
             ? [{ title: 'ブース', href: '/admin/booths', disabled: false }]
             : []),
+        ...(can.ticketProductsManage
+            ? [
+                  {
+                      title: '回数券商品',
+                      href: '/admin/ticket-products',
+                      disabled: false,
+                  },
+              ]
+            : []),
         ...(can.customersView
             ? [{ title: '顧客', href: '/admin/customers', disabled: false }]
             : []),
@@ -55,6 +64,15 @@ const navigationItems = computed<NavigationItem[]>(() => {
                       title: '監査ログ',
                       href: '/admin/system/audit-logs',
                       disabled: true,
+                  },
+              ]
+            : []),
+        ...(can.ticketPolicyManage
+            ? [
+                  {
+                      title: '回数券運用設定',
+                      href: '/admin/settings/tickets',
+                      disabled: false,
                   },
               ]
             : []),

@@ -50,13 +50,21 @@ const createdViaLabel = (value: string): string => {
 
     <div class="d-flex align-center justify-space-between mb-6">
         <h1 class="text-h4">顧客詳細</h1>
-        <v-btn
-            v-if="page.props.auth.can.customersManage"
-            color="primary"
-            :href="`/admin/customers/${customer.user_id}/edit`"
-        >
-            編集
-        </v-btn>
+        <div class="d-flex ga-3">
+            <v-btn
+                variant="tonal"
+                :href="`/admin/customers/${customer.user_id}/tickets`"
+            >
+                回数券
+            </v-btn>
+            <v-btn
+                v-if="page.props.auth.can.customersManage"
+                color="primary"
+                :href="`/admin/customers/${customer.user_id}/edit`"
+            >
+                編集
+            </v-btn>
+        </div>
     </div>
 
     <v-card max-width="840" title="基本情報">

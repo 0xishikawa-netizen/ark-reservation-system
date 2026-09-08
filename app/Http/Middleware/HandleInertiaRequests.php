@@ -48,6 +48,9 @@ class HandleInertiaRequests extends Middleware
                     'reservationsManage' => $user?->can('reservations.manage') ?? false,
                     'failedJobsView' => $user?->can('failed_jobs.view') ?? false,
                     'auditLogsView' => $user?->can('audit_logs.view') ?? false,
+                    'ticketPolicyManage' => $user?->can('ticket_policy.manage') ?? false,
+                    'ticketProductsManage' => $user?->can('ticket_products.manage') ?? false,
+                    'ticketGrant' => $user?->can('ticket.grant') ?? false,
                 ],
             ],
             'flash' => [

@@ -28,6 +28,8 @@ class RolePermissionSeeder extends Seeder
         'refund.execute',
         'ticket.grant',
         'membership.manage',
+        'ticket_policy.manage',
+        'ticket_products.manage',
     ];
 
     public function run(): void

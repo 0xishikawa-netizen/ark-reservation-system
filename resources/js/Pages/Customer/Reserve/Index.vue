@@ -25,7 +25,24 @@ interface AvailabilitySlot {
     available_staff_ids: number[];
 }
 
-const props = defineProps<{ services: ServiceOption[] }>();
+interface TicketWalletOption {
+    id: number;
+    product_name: string;
+    available: number;
+    expires_at: string;
+}
+
+interface TicketAvailability {
+    available_total: number;
+    wallets: TicketWalletOption[];
+}
+
+type PaymentMethod = 'onsite' | 'ticket';
+
+const props = defineProps<{
+    services: ServiceOption[];
+    ticket: TicketAvailability;
+}>();
 
 const step = ref(1);
 const serviceId = ref<number | null>(null);
@@ -68,6 +85,7 @@ const form = useForm({
     service_id: null as number | null,
     staff_id: null as number | null,
     starts_at: null as string | null,
+    payment_method: 'onsite' as PaymentMethod,
     reservation: null as string | null,
 });
 
@@ -105,6 +123,14 @@ function formatDateTime(value: string): string {
 
 function timeLabel(value: string): string {
     return value.slice(11, 16);
+}
+
+function formatDate(value: string): string {
+    return new Intl.DateTimeFormat('ja-JP', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    }).format(new Date(`${value}T00:00:00`));
 }
 
 function today(): string {
@@ -319,6 +345,43 @@ function submit(): void {
                         :subtitle="selectedStartsAt ? formatDateTime(selectedStartsAt) : ''"
                     />
                 </v-list>
+                <div class="text-subtitle-1 font-weight-bold mb-2">お支払い方法</div>
+                <v-radio-group
+                    v-model="form.payment_method"
+                    :error-messages="form.errors.payment_method"
+                    class="mb-2"
+                >
+                    <v-radio label="店頭でお支払い" value="onsite" />
+                    <v-radio
+                        :label="`回数券を使う（残り ${ticket.available_total} 回）`"
+                        value="ticket"
+                        :disabled="ticket.available_total < 1"
+                    />
+                </v-radio-group>
+                <v-alert
+                    v-if="ticket.available_total < 1"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-4"
+                >
+                    利用可能な回数券がないため、回数券は選択できません。
+                </v-alert>
+                <v-alert
+                    v-else-if="form.payment_method === 'ticket'"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-4"
+                >
+                    <div
+                        v-for="wallet in ticket.wallets"
+                        :key="wallet.id"
+                    >
+                        {{ wallet.product_name }}：{{ wallet.available }}回
+                        （有効期限 {{ formatDate(wallet.expires_at) }}）
+                    </div>
+                </v-alert>
                 <v-alert
                     v-if="form.errors.reservation"
                     type="error"

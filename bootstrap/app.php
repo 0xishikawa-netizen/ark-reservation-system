@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Exceptions\Reservation\SlotUnavailableException;
 use App\Exceptions\Reservation\StaleReservationException;
+use App\Exceptions\Ticket\InsufficientTicketBalanceException;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\ThrottleFortifyRequests;
@@ -51,6 +52,9 @@ return Application::configure(basePath: dirname(__DIR__))
         );
         $exceptions->render(
             fn (StaleReservationException $exception, Request $request) => $renderConflict($exception, $request),
+        );
+        $exceptions->render(
+            fn (InsufficientTicketBalanceException $exception, Request $request) => $renderConflict($exception, $request),
         );
 
         $exceptions->shouldRenderJsonWhen(

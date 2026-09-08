@@ -5,15 +5,19 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\BoothController;
 use App\Http\Controllers\Admin\CustomerController;
+use App\Http\Controllers\Admin\CustomerTicketController;
 use App\Http\Controllers\Admin\FailedJobsController;
 use App\Http\Controllers\Admin\ReservationController as AdminReservationController;
 use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\StaffController;
 use App\Http\Controllers\Admin\StaffShiftController;
+use App\Http\Controllers\Admin\TicketPolicySettingsController;
+use App\Http\Controllers\Admin\TicketProductController;
 use App\Http\Controllers\Admin\TwoFactorSetupController;
 use App\Http\Controllers\Customer\ProfileController;
 use App\Http\Controllers\Customer\ReservationController as CustomerReservationController;
+use App\Http\Controllers\Customer\TicketController as CustomerTicketPageController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Reserve\ReserveController;
 use App\Http\Middleware\AdminAccess;
@@ -44,6 +48,8 @@ Route::middleware(['web', 'auth', 'verified'])
             ->name('reservations.update');
         Route::delete('reservations/{reservation}', [CustomerReservationController::class, 'destroy'])
             ->name('reservations.destroy');
+        Route::get('tickets', [CustomerTicketPageController::class, 'index'])
+            ->name('tickets.index');
         Route::get('profile', [ProfileController::class, 'show'])
             ->name('profile.show');
         Route::get('profile/edit', [ProfileController::class, 'edit'])
@@ -98,6 +104,9 @@ Route::middleware([
         ->name('reservations.no-show');
     Route::get('customers', [CustomerController::class, 'index'])
         ->name('customers.index');
+    Route::get('customers/{customer}/tickets', [CustomerTicketController::class, 'show'])
+        ->middleware('can:customers.view')
+        ->name('customers.tickets');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])
         ->name('customers.show');
     Route::get('customers/{customer}/edit', [CustomerController::class, 'edit'])
@@ -138,6 +147,28 @@ Route::middleware([
         Route::patch('services/{service}/active', [ServiceController::class, 'setActive'])
             ->name('services.set-active');
     });
+    Route::middleware('can:ticket_products.manage')->group(function (): void {
+        Route::get('ticket-products', [TicketProductController::class, 'index'])
+            ->name('ticket-products.index');
+        Route::get('ticket-products/create', [TicketProductController::class, 'create'])
+            ->name('ticket-products.create');
+        Route::post('ticket-products', [TicketProductController::class, 'store'])
+            ->name('ticket-products.store');
+        Route::get('ticket-products/{ticketProduct}/edit', [TicketProductController::class, 'edit'])
+            ->name('ticket-products.edit');
+        Route::put('ticket-products/{ticketProduct}', [TicketProductController::class, 'update'])
+            ->name('ticket-products.update');
+        Route::patch('ticket-products/{ticketProduct}/active', [TicketProductController::class, 'setActive'])
+            ->name('ticket-products.set-active');
+    });
+    Route::middleware(['can:ticket.grant', 'password.confirm'])->group(function (): void {
+        Route::post('customers/{customer}/tickets/grant', [CustomerTicketController::class, 'grant'])
+            ->name('customers.tickets.grant');
+        Route::post('ticket-wallets/{ticketWallet}/revoke', [CustomerTicketController::class, 'revoke'])
+            ->name('ticket-wallets.revoke');
+        Route::post('ticket-wallets/{ticketWallet}/adjust', [CustomerTicketController::class, 'adjust'])
+            ->name('ticket-wallets.adjust');
+    });
     Route::middleware('can:booths.manage')->group(function (): void {
         Route::resource('booths', BoothController::class)
             ->only(['index', 'create', 'store', 'edit', 'update']);
@@ -147,4 +178,10 @@ Route::middleware([
     Route::get('system/failed-jobs', FailedJobsController::class)
         ->middleware('can:failed_jobs.view')
         ->name('system.failed-jobs');
+    Route::get('settings/tickets', [TicketPolicySettingsController::class, 'show'])
+        ->middleware('can:ticket_policy.manage')
+        ->name('settings.tickets.show');
+    Route::patch('settings/tickets', [TicketPolicySettingsController::class, 'update'])
+        ->middleware(['can:ticket_policy.manage', 'password.confirm'])
+        ->name('settings.tickets.update');
 });

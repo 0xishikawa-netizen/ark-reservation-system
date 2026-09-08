@@ -31,6 +31,8 @@ class RolePermissionTest extends TestCase
         'refund.execute',
         'ticket.grant',
         'membership.manage',
+        'ticket_policy.manage',
+        'ticket_products.manage',
     ];
 
     public function test_each_role_has_only_its_explicit_permissions(): void

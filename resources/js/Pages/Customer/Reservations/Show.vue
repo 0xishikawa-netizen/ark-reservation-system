@@ -17,6 +17,7 @@ interface ReservationDetail {
     starts_at: string;
     ends_at: string;
     status: string;
+    payment_method: string;
     version: number;
     cancel_reason: string | null;
     can_cancel: boolean;
@@ -179,6 +180,13 @@ function cancelReservation(): void {
         <v-card-text>
             <v-chip color="primary" class="mb-4">
                 {{ statusLabels[reservation.status] ?? reservation.status }}
+            </v-chip>
+            <v-chip
+                v-if="reservation.payment_method === 'ticket'"
+                color="secondary"
+                class="mb-4 ml-2"
+            >
+                お支払い：回数券
             </v-chip>
             <v-list lines="two">
                 <v-list-item title="日時" :subtitle="formatDateTime(reservation.starts_at)" />

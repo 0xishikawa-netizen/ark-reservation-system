@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Customer;
 
+use App\Domain\Ticket\TicketLedgerService;
 use App\Models\Service;
 use App\Models\Staff;
+use App\Models\TicketWallet;
 use App\Support\SlotKey;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 use Throwable;
 
@@ -27,6 +30,7 @@ class StoreReservationRequest extends FormRequest
             'service_id' => ['required', 'integer', 'exists:services,id'],
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
             'starts_at' => ['required', 'date', 'after:now'],
+            'payment_method' => ['nullable', 'string', Rule::in(['onsite', 'ticket'])],
         ];
     }
 
@@ -46,6 +50,7 @@ class StoreReservationRequest extends FormRequest
 
             $this->validateStaff($validator, $service);
             $this->validateBoundary($validator);
+            $this->validateTicketBalance($validator);
         });
     }
 
@@ -95,6 +100,34 @@ class StoreReservationRequest extends FormRequest
             $validator->errors()->add(
                 'starts_at',
                 '開始時刻を予約枠の境界に合わせてください。',
+            );
+        }
+    }
+
+    private function validateTicketBalance(Validator $validator): void
+    {
+        if ($this->input('payment_method') !== 'ticket'
+            || $validator->errors()->has('payment_method')) {
+            return;
+        }
+
+        $customer = $this->user()?->customer;
+
+        if ($customer === null) {
+            return;
+        }
+
+        $ledger = app(TicketLedgerService::class);
+        $available = TicketWallet::query()
+            ->where('customer_id', $customer->user_id)
+            ->active()
+            ->get()
+            ->sum(fn (TicketWallet $wallet): int => $ledger->available($wallet));
+
+        if ($available < 1) {
+            $validator->errors()->add(
+                'payment_method',
+                '利用可能な回数券がありません。',
             );
         }
     }
