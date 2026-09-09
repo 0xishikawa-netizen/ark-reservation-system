@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
+import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -25,9 +26,8 @@ defineProps<{
 <template>
     <Head title="スタッフ" />
 
-    <div class="d-flex align-center justify-space-between mb-6">
-        <h1 class="text-h4">スタッフ</h1>
-        <div class="d-flex ga-3">
+    <PageHeader title="スタッフ" subtitle="スタッフ情報と予約受付状態を管理します。">
+        <template #actions>
             <v-btn
                 v-if="page.props.auth.can.shiftsManage"
                 variant="tonal"
@@ -38,10 +38,10 @@ defineProps<{
             <v-btn color="primary" href="/admin/staff/create">
                 スタッフを追加
             </v-btn>
-        </div>
-    </div>
+        </template>
+    </PageHeader>
 
-    <v-card>
+    <SectionCard title="スタッフ一覧" class="ark-table-section">
         <v-table>
             <thead>
                 <tr>
@@ -72,7 +72,12 @@ defineProps<{
                         />
                         {{ member.color }}
                     </td>
-                    <td>{{ member.is_bookable ? '可' : '不可' }}</td>
+                    <td>
+                        <StatusChip
+                            :status="member.is_bookable ? 'active' : 'canceled'"
+                            :label="member.is_bookable ? '可' : '不可'"
+                        />
+                    </td>
                     <td>{{ member.sort_order }}</td>
                     <td class="text-no-wrap">
                         <v-btn
@@ -93,11 +98,21 @@ defineProps<{
                     </td>
                 </tr>
                 <tr v-if="staff.length === 0">
-                    <td colspan="8" class="text-center text-medium-emphasis py-8">
-                        スタッフはまだ登録されていません。
+                    <td colspan="8">
+                        <EmptyState
+                            icon="mdi-account-group-outline"
+                            title="スタッフはまだ登録されていません"
+                            description="スタッフを追加すると、こちらで予約受付や勤務枠を管理できます。"
+                        />
                     </td>
                 </tr>
             </tbody>
         </v-table>
-    </v-card>
+    </SectionCard>
 </template>
+
+<style scoped>
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+</style>

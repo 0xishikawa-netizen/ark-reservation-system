@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -50,15 +51,16 @@ const toggleActive = (booth: BoothListItem): void => {
 <template>
     <Head title="ブース" />
 
-    <div class="d-flex align-center justify-space-between mb-6">
-        <h1 class="text-h4">ブース</h1>
-        <v-btn color="primary" href="/admin/booths/create">
-            ブースを追加
-        </v-btn>
-    </div>
+    <PageHeader title="ブース" subtitle="予約で使用するブースと表示順を管理します。">
+        <template #actions>
+            <v-btn color="primary" href="/admin/booths/create">
+                ブースを追加
+            </v-btn>
+        </template>
+    </PageHeader>
 
-    <v-card>
-        <v-card-text>
+    <SectionCard title="ブース一覧" class="ark-table-section">
+        <div class="ark-table-section__filters">
             <v-form class="d-flex align-center ga-4" @submit.prevent="applyFilters">
                 <v-text-field
                     v-model="search"
@@ -69,7 +71,7 @@ const toggleActive = (booth: BoothListItem): void => {
                 />
                 <v-btn type="submit" variant="tonal">検索</v-btn>
             </v-form>
-        </v-card-text>
+        </div>
 
         <v-divider />
 
@@ -79,6 +81,13 @@ const toggleActive = (booth: BoothListItem): void => {
             item-value="id"
             no-data-text="該当するブースはありません。"
         >
+            <template #no-data>
+                <EmptyState
+                    icon="mdi-door-open"
+                    title="該当するブースはありません"
+                    description="検索条件を変更するか、新しいブースを追加してください。"
+                />
+            </template>
             <template #item.is_active="{ item }">
                 <v-switch
                     :model-value="item.is_active"
@@ -98,5 +107,15 @@ const toggleActive = (booth: BoothListItem): void => {
                 </v-btn>
             </template>
         </v-data-table>
-    </v-card>
+    </SectionCard>
 </template>
+
+<style scoped>
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+
+.ark-table-section__filters {
+    padding: var(--ark-space-4);
+}
+</style>

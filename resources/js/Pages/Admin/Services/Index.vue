@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -76,15 +77,16 @@ const formatPrice = (price: number): string =>
 <template>
     <Head title="サービス" />
 
-    <div class="d-flex align-center justify-space-between mb-6">
-        <h1 class="text-h4">サービス</h1>
-        <v-btn color="primary" href="/admin/services/create">
-            サービスを追加
-        </v-btn>
-    </div>
+    <PageHeader title="サービス" subtitle="予約メニューの公開状態と担当スタッフを管理します。">
+        <template #actions>
+            <v-btn color="primary" href="/admin/services/create">
+                サービスを追加
+            </v-btn>
+        </template>
+    </PageHeader>
 
-    <v-card>
-        <v-card-text>
+    <SectionCard title="サービス一覧" class="ark-table-section">
+        <div class="ark-table-section__filters">
             <v-form
                 class="d-flex align-center ga-4 flex-wrap"
                 @submit.prevent="applyFilters"
@@ -105,7 +107,7 @@ const formatPrice = (price: number): string =>
                 />
                 <v-btn type="submit" variant="tonal">検索</v-btn>
             </v-form>
-        </v-card-text>
+        </div>
 
         <v-divider />
 
@@ -115,6 +117,13 @@ const formatPrice = (price: number): string =>
             item-value="id"
             no-data-text="該当するサービスはありません。"
         >
+            <template #no-data>
+                <EmptyState
+                    icon="mdi-magnify"
+                    title="該当するサービスはありません"
+                    description="検索条件を変更するか、新しいサービスを追加してください。"
+                />
+            </template>
             <template #item.name="{ item }">
                 <div class="d-flex align-center ga-2">
                     <span
@@ -138,7 +147,10 @@ const formatPrice = (price: number): string =>
                 {{ formatPrice(item.price) }}
             </template>
             <template #item.is_online_bookable="{ item }">
-                {{ item.is_online_bookable ? '可' : '不可' }}
+                <StatusChip
+                    :status="item.is_online_bookable ? 'active' : 'canceled'"
+                    :label="item.is_online_bookable ? '可' : '不可'"
+                />
             </template>
             <template #item.is_active="{ item }">
                 <v-switch
@@ -164,5 +176,15 @@ const formatPrice = (price: number): string =>
                 </v-btn>
             </template>
         </v-data-table>
-    </v-card>
+    </SectionCard>
 </template>
+
+<style scoped>
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+
+.ark-table-section__filters {
+    padding: var(--ark-space-4);
+}
+</style>

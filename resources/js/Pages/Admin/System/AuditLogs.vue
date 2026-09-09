@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -87,13 +88,9 @@ const entityLabel = (item: AuditLogRow): string =>
 <template>
     <Head title="監査ログ" />
 
-    <div class="d-flex align-center justify-space-between mb-6 flex-wrap ga-3">
-        <h1 class="text-h4">監査ログ</h1>
-        <span class="text-body-2 text-medium-emphasis">全 {{ logs.total }} 件</span>
-    </div>
+    <PageHeader title="監査ログ" :subtitle="`全 ${logs.total} 件`" />
 
-    <v-card>
-        <v-card-text>
+    <SectionCard class="ark-audit-section">
             <v-form class="filter-grid" @submit.prevent="visitIndex()">
                 <v-select
                     v-model="action"
@@ -125,7 +122,6 @@ const entityLabel = (item: AuditLogRow): string =>
                     <v-btn variant="text" @click="clearFilters">クリア</v-btn>
                 </div>
             </v-form>
-        </v-card-text>
 
         <v-divider />
 
@@ -150,8 +146,12 @@ const entityLabel = (item: AuditLogRow): string =>
                     <td>{{ log.ip ?? '—' }}</td>
                 </tr>
                 <tr v-if="logs.data.length === 0">
-                    <td colspan="6" class="text-center text-medium-emphasis py-8">
-                        該当する監査ログはありません。
+                    <td colspan="6">
+                        <EmptyState
+                            icon="mdi-text-box-search-outline"
+                            title="該当する監査ログはありません"
+                            description="検索条件を変更すると、ほかの操作記録を確認できます。"
+                        />
                     </td>
                 </tr>
             </tbody>
@@ -167,14 +167,25 @@ const entityLabel = (item: AuditLogRow): string =>
                 @update:model-value="visitIndex"
             />
         </v-card-actions>
-    </v-card>
+    </SectionCard>
 </template>
 
 <style scoped>
+.ark-audit-section :deep(.v-card-text) {
+    display: grid;
+    gap: var(--ark-space-4);
+    padding: var(--ark-space-4) 0 0;
+}
+
+.filter-grid,
+.ark-audit-section :deep(.v-card-actions) {
+    margin-inline: var(--ark-space-4);
+}
+
 .filter-grid {
     display: grid;
     grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) repeat(2, minmax(150px, 1fr)) auto;
-    gap: 1rem;
+    gap: var(--ark-space-4);
 }
 
 @media (max-width: 1100px) {

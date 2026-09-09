@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -75,15 +76,13 @@ const updatePolicy = (): void => {
 <template>
     <Head title="回数券運用設定" />
 
-    <div class="mb-6">
-        <h1 class="text-h4">回数券運用設定</h1>
-        <p class="text-body-2 text-medium-emphasis mt-2">
-            回数券予約の無断キャンセルと有効期限到来時の扱いを設定します。
-        </p>
-    </div>
+    <PageHeader
+        title="回数券運用設定"
+        subtitle="回数券予約の無断キャンセルと有効期限到来時の扱いを設定します。"
+    />
 
-    <v-card max-width="880">
-        <v-card-text class="pa-6">
+    <SectionCard title="運用ポリシー" max-width="880">
+        <div class="ark-policy-form">
             <section aria-labelledby="no-show-policy-heading">
                 <h2 id="no-show-policy-heading" class="text-h6 mb-2">
                     無断キャンセル時の扱い
@@ -157,8 +156,8 @@ const updatePolicy = (): void => {
                     保存
                 </v-btn>
             </div>
-        </v-card-text>
-    </v-card>
+        </div>
+    </SectionCard>
 
     <v-dialog v-model="confirmationOpen" max-width="600">
         <v-card title="回数券運用設定を変更しますか？">
@@ -176,3 +175,9 @@ const updatePolicy = (): void => {
         </v-card>
     </v-dialog>
 </template>
+
+<style scoped>
+.ark-policy-form {
+    padding: var(--ark-space-2);
+}
+</style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -45,20 +46,28 @@ const formatPrice = (price: number): string =>
 <template>
     <Head title="回数券商品" />
 
-    <div class="d-flex align-center justify-space-between mb-6">
-        <h1 class="text-h4">回数券商品</h1>
-        <v-btn color="primary" href="/admin/ticket-products/create">
-            回数券商品を追加
-        </v-btn>
-    </div>
+    <PageHeader title="回数券商品" subtitle="販売する回数券の内容と公開状態を管理します。">
+        <template #actions>
+            <v-btn color="primary" href="/admin/ticket-products/create">
+                回数券商品を追加
+            </v-btn>
+        </template>
+    </PageHeader>
 
-    <v-card>
+    <SectionCard title="回数券商品一覧" class="ark-table-section">
         <v-data-table
             :headers="headers"
             :items="ticketProducts"
             item-value="id"
             no-data-text="回数券商品はありません。"
         >
+            <template #no-data>
+                <EmptyState
+                    icon="mdi-ticket-outline"
+                    title="回数券商品はありません"
+                    description="回数券商品を追加すると、こちらで価格や有効期間を管理できます。"
+                />
+            </template>
             <template #item.total_count="{ item }">
                 {{ item.total_count }}回
             </template>
@@ -87,5 +96,11 @@ const formatPrice = (price: number): string =>
                 </v-btn>
             </template>
         </v-data-table>
-    </v-card>
+    </SectionCard>
 </template>
+
+<style scoped>
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+</style>

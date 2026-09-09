@@ -310,48 +310,68 @@ function dayLabel(value: string): string {
     </div>
 
     <v-card class="mb-4">
-        <v-card-text class="toolbar-grid">
-            <div class="d-flex ga-2 align-center">
-                <v-btn variant="outlined" :aria-label="viewMode === 'week' ? '前週' : '前日'" @click="movePeriod(-1)">
+        <v-card-text class="schedule-toolbar">
+            <div class="toolbar-period" role="group" aria-label="表示期間を移動">
+                <v-btn size="small" variant="outlined" :aria-label="viewMode === 'week' ? '前週' : '前日'" @click="movePeriod(-1)">
                     {{ viewMode === 'week' ? '前週' : '前日' }}
                 </v-btn>
-                <v-btn variant="outlined" :aria-label="viewMode === 'week' ? '翌週' : '翌日'" @click="movePeriod(1)">
+                <v-btn size="small" variant="outlined" :aria-label="viewMode === 'week' ? '翌週' : '翌日'" @click="movePeriod(1)">
                     {{ viewMode === 'week' ? '翌週' : '翌日' }}
                 </v-btn>
             </div>
-            <v-text-field v-model="date" type="date" label="表示日" hide-details @change="navigate" />
+            <v-text-field
+                v-model="date"
+                class="toolbar-field toolbar-date"
+                type="date"
+                label="表示日"
+                density="compact"
+                hide-details
+                @change="navigate"
+            />
             <v-select
                 v-model="staffId"
+                class="toolbar-field toolbar-staff"
                 :items="staff_options"
                 item-title="display_name"
                 item-value="user_id"
                 label="スタッフ絞り込み"
+                density="compact"
                 clearable
                 hide-details
                 @update:model-value="navigate"
             />
-            <v-btn-toggle
-                v-model="viewMode"
-                mandatory
-                color="primary"
-                variant="outlined"
-                aria-label="表示期間"
-                @update:model-value="navigate"
-            >
-                <v-btn value="day">日</v-btn>
-                <v-btn value="week">週</v-btn>
-            </v-btn-toggle>
-            <v-btn-toggle
-                v-model="axisMode"
-                mandatory
-                color="primary"
-                variant="outlined"
-                aria-label="表示軸"
-                @update:model-value="navigate"
-            >
-                <v-btn value="staff">スタッフ</v-btn>
-                <v-btn value="booth">ブース</v-btn>
-            </v-btn-toggle>
+            <div class="toolbar-mode">
+                <span class="toolbar-label">表示</span>
+                <v-btn-toggle
+                    v-model="viewMode"
+                    class="toolbar-toggle"
+                    mandatory
+                    color="primary"
+                    variant="outlined"
+                    density="compact"
+                    aria-label="表示期間"
+                    @update:model-value="navigate"
+                >
+                    <v-btn value="day">日</v-btn>
+                    <v-btn value="week">週</v-btn>
+                </v-btn-toggle>
+            </div>
+            <div class="toolbar-mode">
+                <span class="toolbar-label">軸</span>
+                <v-btn-toggle
+                    v-model="axisMode"
+                    class="toolbar-toggle"
+                    mandatory
+                    color="primary"
+                    variant="outlined"
+                    density="compact"
+                    aria-label="表示軸"
+                    @update:model-value="navigate"
+                >
+                    <v-btn value="staff">スタッフ</v-btn>
+                    <v-btn value="booth">ブース</v-btn>
+                </v-btn-toggle>
+            </div>
         </v-card-text>
     </v-card>
 
@@ -365,8 +385,8 @@ function dayLabel(value: string): string {
             :key="displayDay"
             :class="{ 'week-day-section': viewMode === 'week' }"
         >
-            <h2 v-if="viewMode === 'week'" class="date-header text-subtitle-1">
-                {{ dayLabel(displayDay) }}
+            <h2 v-if="viewMode === 'week'" class="date-header">
+                <span class="date-chip">{{ dayLabel(displayDay) }}</span>
             </h2>
             <div class="schedule-scroll" :class="{ 'schedule-scroll--day': viewMode === 'day' }">
                 <div class="schedule-grid schedule-header" :style="gridStyle">
@@ -375,9 +395,11 @@ function dayLabel(value: string): string {
                         v-for="lane in lanes"
                         :key="lane.id ?? 'unassigned'"
                         class="staff-header"
+                        :class="{ 'staff-header--unassigned': lane.id === null }"
                         :style="{ borderTopColor: lane.color }"
+                        :title="lane.display_name"
                     >
-                        {{ lane.display_name }}
+                        <span>{{ lane.display_name }}</span>
                     </div>
                 </div>
 
@@ -423,10 +445,19 @@ function dayLabel(value: string): string {
                             :style="reservationStyle(reservation)"
                             @click="router.visit(`/admin/reservations/${reservation.id}/edit`)"
                         >
-                            <span class="reservation-time">{{ reservation.starts_at.slice(11, 16) }}</span>
-                            <strong>{{ reservation.customer_name }}</strong>
-                            <span>{{ reservation.service_name }}</span>
-                            <small>{{ statusLabel(reservation.status) }}・{{ reservation.source }}</small>
+                            <span class="reservation-topline">
+                                <span class="reservation-time">{{ reservation.starts_at.slice(11, 16) }}</span>
+                                <span class="reservation-status">{{ statusLabel(reservation.status) }}</span>
+                            </span>
+                            <strong class="reservation-customer" :title="reservation.customer_name">
+                                {{ reservation.customer_name }}
+                            </strong>
+                            <span class="reservation-service" :title="reservation.service_name">
+                                {{ reservation.service_name }}
+                            </span>
+                            <small class="reservation-source" :title="reservation.source">
+                                {{ reservation.source }}
+                            </small>
                         </button>
                     </div>
                 </div>
@@ -436,11 +467,50 @@ function dayLabel(value: string): string {
 </template>
 
 <style scoped>
-.toolbar-grid {
-    display: grid;
-    grid-template-columns: auto minmax(180px, 240px) minmax(220px, 320px) auto auto;
+.schedule-toolbar {
+    display: flex;
     align-items: center;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.toolbar-period {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.5rem;
+}
+
+.toolbar-field {
+    flex: 0 1 auto;
+}
+
+.toolbar-date {
+    width: 180px;
+}
+
+.toolbar-staff {
+    flex: 1 1 230px;
+    min-width: 220px;
+}
+
+.toolbar-mode {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.toolbar-label {
+    color: #546e7a;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.toolbar-toggle :deep(.v-btn) {
+    min-width: 48px;
+    padding-inline: 12px;
 }
 
 .schedule-card {
@@ -463,8 +533,21 @@ function dayLabel(value: string): string {
 
 .date-header {
     margin: 0;
-    padding: 10px 16px;
-    background: #f5f5f5;
+    padding: 10px 16px 8px;
+    background: #f7f9fa;
+}
+
+.date-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 3px 12px;
+    border: 1px solid #c5d5df;
+    border-radius: 999px;
+    background: white;
+    color: #37474f;
+    font-size: 0.875rem;
+    font-weight: 700;
 }
 
 .schedule-grid {
@@ -489,8 +572,24 @@ function dayLabel(value: string): string {
 }
 
 .staff-header {
+    min-width: 0;
+    padding: 8px 12px;
     border-left: 1px solid #e0e0e0;
     border-top: 5px solid;
+    background: #fff;
+    color: #263238;
+}
+
+.staff-header span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.staff-header--unassigned {
+    background: #f5f7f8;
+    color: #78909c;
+    font-weight: 500;
 }
 
 .time-axis,
@@ -546,15 +645,19 @@ function dayLabel(value: string): string {
     flex-direction: column;
     align-items: flex-start;
     overflow: hidden;
-    padding: 5px 8px;
+    gap: 2px;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 5px 8px 6px;
     border: 1px solid rgba(0, 0, 0, 0.18);
     border-left-width: 5px;
     border-radius: 6px;
-    background: #ede7f6;
+    background: #fff;
     color: #263238;
     cursor: pointer;
     text-align: left;
     line-height: 1.25;
+    box-shadow: 0 1px 3px rgba(38, 50, 56, 0.12);
 }
 
 .reservation-card:hover {
@@ -571,43 +674,123 @@ function dayLabel(value: string): string {
     box-shadow: none;
 }
 
+.reservation-card:focus-visible {
+    outline: 2px solid #1565c0;
+    outline-offset: -2px;
+}
+
+.reservation-topline {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
 .reservation-time {
-    font-size: 0.72rem;
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+}
+
+.reservation-status {
+    overflow: hidden;
+    min-width: 0;
+    padding: 1px 6px;
+    border: 1px solid #b0bec5;
+    border-radius: 999px;
+    background: #f5f7f8;
+    color: #37474f;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.reservation-customer,
+.reservation-service,
+.reservation-source {
+    display: block;
+    overflow: hidden;
+    width: 100%;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.reservation-customer {
+    font-size: 0.8125rem;
     font-weight: 700;
 }
 
-.reservation-card small {
-    opacity: 0.78;
+.reservation-service {
+    color: #607d8b;
+    font-size: 0.72rem;
+}
+
+.reservation-source {
+    color: #78909c;
+    font-size: 0.625rem;
 }
 
 .source-admin {
     border-left-color: #673ab7;
-    background: #ede7f6;
 }
 
 .source-ark-web {
     border-left-color: #00897b;
-    background: #e0f2f1;
 }
 
 .source-hotpepper {
     border-left-color: #d81b60;
-    background: #fce4ec;
 }
 
 .source-epark {
     border-left-color: #1e88e5;
-    background: #e3f2fd;
 }
 
 .source-peak-manager {
     border-left-color: #3949ab;
-    background: #e8eaf6;
 }
 
 @media (max-width: 800px) {
-    .toolbar-grid {
-        grid-template-columns: 1fr;
+    .schedule-toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
+    }
+
+    .toolbar-period,
+    .toolbar-field,
+    .toolbar-mode {
+        width: 100%;
+    }
+
+    .toolbar-period :deep(.v-btn) {
+        flex: 1 1 50%;
+    }
+
+    .toolbar-date,
+    .toolbar-staff {
+        min-width: 0;
+    }
+
+    .toolbar-mode {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.375rem;
+    }
+
+    .toolbar-toggle {
+        display: flex;
+        width: 100%;
+    }
+
+    .toolbar-toggle :deep(.v-btn) {
+        flex: 1 1 50%;
     }
 }
 </style>

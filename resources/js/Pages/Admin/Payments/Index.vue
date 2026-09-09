@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -45,16 +46,6 @@ const statusLabels: Record<string, string> = {
     refunded: '返金済み',
 };
 
-const statusColors: Record<string, string> = {
-    pending: 'grey',
-    authorized: 'orange',
-    succeeded: 'green',
-    voided: 'blue-grey',
-    failed: 'red',
-    partially_refunded: 'amber',
-    refunded: 'purple',
-};
-
 const applyFilters = (): void => {
     router.get(
         '/admin/payments',
@@ -82,22 +73,20 @@ const goToPage = (page: number): void => {
 <template>
     <Head title="決済管理" />
 
-    <v-container fluid class="py-4">
-        <div class="d-flex align-center mb-4">
-            <h1 class="text-h6">決済管理</h1>
-            <v-chip
+    <v-container fluid class="ark-page py-4">
+        <PageHeader title="決済管理" subtitle="決済状況と要対応項目を確認します。">
+            <template #actions>
+                <StatusChip
                 v-if="attention_count > 0"
-                color="red"
-                variant="flat"
-                size="small"
-                class="ml-3"
-            >
-                要対応 {{ attention_count }} 件
-            </v-chip>
-        </div>
+                    status="failed"
+                    :label="`要対応 ${attention_count} 件`"
+                />
+            </template>
+        </PageHeader>
 
-        <v-card variant="outlined" class="mb-4">
-            <v-card-text class="d-flex flex-wrap ga-4 align-center">
+        <div class="ark-page__sections">
+            <SectionCard title="絞り込み" variant="outlined">
+                <div class="d-flex flex-wrap ga-4 align-center">
                 <v-select
                     v-model="status"
                     :items="[{ title: 'すべて', value: '' }, ...statuses.map((s) => ({ title: statusLabels[s] ?? s, value: s }))]"
@@ -114,11 +103,11 @@ const goToPage = (page: number): void => {
                     hide-details
                     @update:model-value="applyFilters"
                 />
-            </v-card-text>
-        </v-card>
+                </div>
+            </SectionCard>
 
-        <v-card variant="outlined">
-            <v-table density="comfortable">
+            <SectionCard title="決済一覧" variant="outlined" class="ark-table-section">
+                <v-table density="comfortable">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -149,22 +138,16 @@ const goToPage = (page: number): void => {
                             {{ payment.refunded_amount > 0 ? payment.refunded_amount.toLocaleString() : '—' }}
                         </td>
                         <td>
-                            <v-chip
-                                :color="statusColors[payment.status] ?? 'grey'"
-                                size="small"
-                                variant="flat"
-                            >
-                                {{ statusLabels[payment.status] ?? payment.status }}
-                            </v-chip>
-                            <v-chip
+                            <StatusChip
+                                :status="payment.status"
+                                :label="statusLabels[payment.status] ?? payment.status"
+                            />
+                            <StatusChip
                                 v-if="payment.needs_attention"
-                                color="red"
-                                size="small"
-                                variant="outlined"
+                                status="failed"
+                                label="要対応"
                                 class="ml-1"
-                            >
-                                要対応
-                            </v-chip>
+                            />
                         </td>
                         <td class="text-caption">{{ payment.created_at }}</td>
                         <td class="text-right">
@@ -179,20 +162,40 @@ const goToPage = (page: number): void => {
                         </td>
                     </tr>
                     <tr v-if="payments.data.length === 0">
-                        <td colspan="8" class="text-center text-medium-emphasis py-6">
-                            該当する決済はありません。
+                        <td colspan="8">
+                            <EmptyState
+                                icon="mdi-credit-card-search-outline"
+                                title="該当する決済はありません"
+                                description="条件を変更すると、ほかの決済を確認できます。"
+                            />
                         </td>
                     </tr>
                 </tbody>
-            </v-table>
-        </v-card>
+                </v-table>
+            </SectionCard>
 
-        <v-pagination
-            v-if="payments.last_page > 1"
-            :model-value="payments.current_page"
-            :length="payments.last_page"
-            class="mt-4"
-            @update:model-value="goToPage"
-        />
+            <v-pagination
+                v-if="payments.last_page > 1"
+                :model-value="payments.current_page"
+                :length="payments.last_page"
+                class="mt-4"
+                @update:model-value="goToPage"
+            />
+        </div>
     </v-container>
 </template>
+
+<style scoped>
+.ark-page__sections {
+    display: grid;
+    gap: var(--ark-space-4);
+}
+
+.ark-page__sections > * {
+    margin-block: 0 !important;
+}
+
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+</style>

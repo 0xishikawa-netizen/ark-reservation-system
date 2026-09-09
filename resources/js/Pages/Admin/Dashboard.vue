@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -115,10 +116,7 @@ const formatArrival = (startsAt: string): string =>
 <template>
     <Head title="管理ダッシュボード" />
 
-    <div class="d-flex flex-wrap align-center justify-space-between ga-2 mb-6">
-        <h1 class="text-h4">管理ダッシュボード</h1>
-        <span class="text-medium-emphasis">{{ today }}</span>
-    </div>
+    <PageHeader title="管理ダッシュボード" :subtitle="today" />
 
     <v-row v-if="metrics.length > 0" class="mb-2">
         <v-col
@@ -129,31 +127,26 @@ const formatArrival = (startsAt: string): string =>
             lg="4"
             xl="2"
         >
-            <v-card
+            <SectionCard
                 variant="outlined"
                 height="100%"
                 :href="metric.value > 0 && metric.href ? metric.href : undefined"
                 :class="{ 'metric-card-link': metric.value > 0 && metric.href }"
             >
-                <v-card-text>
-                    <div class="text-body-2 text-medium-emphasis mb-2">
-                        {{ metric.title }}
-                    </div>
-                    <div class="d-flex align-end ga-2">
-                        <span class="text-h4 font-weight-bold" :class="`text-${metric.color}`">
-                            {{ metric.value }}
-                        </span>
-                        <span class="text-body-2 text-medium-emphasis mb-1">件</span>
-                    </div>
-                </v-card-text>
-            </v-card>
+                <div class="text-body-2 text-medium-emphasis mb-2">
+                    {{ metric.title }}
+                </div>
+                <div class="d-flex align-end ga-2">
+                    <span class="text-h4 font-weight-bold" :class="`text-${metric.color}`">
+                        {{ metric.value }}
+                    </span>
+                    <span class="text-body-2 text-medium-emphasis mb-1">件</span>
+                </div>
+            </SectionCard>
         </v-col>
     </v-row>
 
-    <v-card v-if="next_arrivals !== null" variant="outlined">
-        <v-card-title class="text-h6">次の来店</v-card-title>
-        <v-divider />
-
+    <SectionCard v-if="next_arrivals !== null" title="次の来店" variant="outlined">
         <v-list v-if="next_arrivals.length > 0" lines="two">
             <template v-for="(arrival, index) in next_arrivals" :key="arrival.id">
                 <v-list-item>
@@ -175,13 +168,20 @@ const formatArrival = (startsAt: string): string =>
             </template>
         </v-list>
 
-        <v-card-text v-else class="text-medium-emphasis py-8 text-center">
-            今後の来店予定はありません。
-        </v-card-text>
-    </v-card>
+        <EmptyState
+            v-else
+            icon="mdi-calendar-clock-outline"
+            title="今後の来店予定はありません"
+            description="新しい来店予定が入ると、こちらに次の予約が表示されます。"
+        />
+    </SectionCard>
 </template>
 
 <style scoped>
+.v-row {
+    row-gap: var(--ark-space-2);
+}
+
 .metric-card-link {
     transition:
         transform 0.15s ease,

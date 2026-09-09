@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -207,38 +208,42 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
 <template>
     <Head :title="`${customer.name}の回数券`" />
 
-    <div class="d-flex align-center justify-space-between mb-6">
-        <div>
-            <h1 class="text-h4">顧客回数券</h1>
-            <p class="text-body-1 text-medium-emphasis mb-0">{{ customer.name }}</p>
-        </div>
-        <v-btn
-            v-if="can.grant"
-            color="primary"
-            :disabled="ticketProducts.length === 0"
-            @click="openGrant"
-        >
-            付与
-        </v-btn>
-    </div>
+    <PageHeader title="顧客回数券" :subtitle="customer.name">
+        <template #actions>
+            <v-btn
+                v-if="can.grant"
+                color="primary"
+                :disabled="ticketProducts.length === 0"
+                @click="openGrant"
+            >
+                付与
+            </v-btn>
+        </template>
+    </PageHeader>
 
-    <v-alert v-if="can.grant && ticketProducts.length === 0" type="info" class="mb-4">
-        付与できる有効な回数券商品がありません。
-    </v-alert>
+    <div class="ark-page__sections">
+        <v-alert v-if="can.grant && ticketProducts.length === 0" type="info" class="mb-4">
+            付与できる有効な回数券商品がありません。
+        </v-alert>
 
-    <v-card class="mb-6" title="保有回数券">
+        <SectionCard class="ark-table-section mb-6" title="保有回数券">
         <v-data-table
             :headers="walletHeaders"
             :items="wallets"
             item-value="id"
             no-data-text="保有している回数券はありません。"
         >
+            <template #no-data>
+                <EmptyState
+                    icon="mdi-ticket-confirmation-outline"
+                    title="保有している回数券はありません"
+                    description="回数券を付与すると、こちらに残数と有効期限が表示されます。"
+                />
+            </template>
             <template #item.purchased_count="{ item }">{{ item.purchased_count }}回</template>
             <template #item.expires_at="{ item }">{{ formatDate(item.expires_at) }}</template>
             <template #item.status="{ item }">
-                <v-chip size="small" :color="item.status === 'active' ? 'success' : 'default'">
-                    {{ statusLabel(item.status) }}
-                </v-chip>
+                <StatusChip :status="item.status" :label="statusLabel(item.status)" />
             </template>
             <template #item.actions="{ item }">
                 <div v-if="can.grant" class="d-flex ga-1 justify-end">
@@ -247,15 +252,22 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
                 </div>
             </template>
         </v-data-table>
-    </v-card>
+        </SectionCard>
 
-    <v-card title="履歴">
+        <SectionCard class="ark-table-section" title="履歴">
         <v-data-table
             :headers="historyHeaders"
             :items="history"
             item-value="id"
             no-data-text="回数券履歴はありません。"
         >
+            <template #no-data>
+                <EmptyState
+                    icon="mdi-history"
+                    title="回数券履歴はありません"
+                    description="付与や利用、調整を行うと、こちらに履歴が記録されます。"
+                />
+            </template>
             <template #item.created_at="{ item }">{{ formatDateTime(item.created_at) }}</template>
             <template #item.wallet_id="{ item }">#{{ item.wallet_id }}</template>
             <template #item.type="{ item }">{{ transactionLabel(item.type) }}</template>
@@ -270,7 +282,8 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
                 顧客詳細へ戻る
             </v-btn>
         </v-card-actions>
-    </v-card>
+        </SectionCard>
+    </div>
 
     <v-dialog v-model="grantDialog" max-width="560">
         <v-card title="回数券を付与">
@@ -376,3 +389,18 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
         </v-card>
     </v-dialog>
 </template>
+
+<style scoped>
+.ark-page__sections {
+    display: grid;
+    gap: var(--ark-space-4);
+}
+
+.ark-page__sections > * {
+    margin-block: 0 !important;
+}
+
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+</style>

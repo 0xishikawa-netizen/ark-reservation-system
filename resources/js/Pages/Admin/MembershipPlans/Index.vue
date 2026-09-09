@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -50,18 +51,26 @@ function formatPrice(price: number): string {
 <template>
     <Head title="会員プラン" />
 
-    <div class="d-flex align-center justify-space-between mb-6">
-        <h1 class="text-h4">会員プラン</h1>
-        <v-btn color="primary" href="/admin/membership-plans/create">会員プランを追加</v-btn>
-    </div>
+    <PageHeader title="会員プラン" subtitle="月額利用権の料金と利用回数を管理します。">
+        <template #actions>
+            <v-btn color="primary" href="/admin/membership-plans/create">会員プランを追加</v-btn>
+        </template>
+    </PageHeader>
 
-    <v-card>
+    <SectionCard title="会員プラン一覧" class="ark-table-section">
         <v-data-table
             :headers="headers"
             :items="membershipPlans"
             item-value="id"
             no-data-text="会員プランはありません。"
         >
+            <template #no-data>
+                <EmptyState
+                    icon="mdi-card-account-details-outline"
+                    title="会員プランはありません"
+                    description="会員プランを追加すると、こちらで料金と利用回数を管理できます。"
+                />
+            </template>
             <template #item.price="{ item }">{{ formatPrice(item.price) }}</template>
             <template #item.usage_count_per_period="{ item }">{{ item.usage_count_per_period }}回</template>
             <template #item.billing_interval="{ item }">{{ item.billing_interval === 'month' ? '月ごと' : item.billing_interval }}</template>
@@ -81,5 +90,11 @@ function formatPrice(price: number): string {
                 </v-btn>
             </template>
         </v-data-table>
-    </v-card>
+    </SectionCard>
 </template>
+
+<style scoped>
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+</style>

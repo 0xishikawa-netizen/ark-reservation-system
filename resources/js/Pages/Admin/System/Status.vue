@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { statusColor } from '@/design/tokens';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -74,11 +76,14 @@ const membershipReadinessLabel = computed<string>(() =>
 <template>
     <Head title="システム状態" />
 
-    <h1 class="text-h4 mb-6">システム状態</h1>
+    <PageHeader
+        title="システム状態"
+        subtitle="運用に必要な接続・ジョブ・容量・バックアップの状態を確認します。"
+    />
 
     <v-alert
         type="warning"
-        color="red-darken-1"
+        :color="statusColor('failed')"
         variant="tonal"
         prominent
         class="mb-6"
@@ -89,23 +94,27 @@ const membershipReadinessLabel = computed<string>(() =>
 
     <v-row>
         <v-col cols="12" md="6">
-            <v-card variant="outlined" height="100%">
-                <v-card-title class="d-flex align-center justify-space-between ga-3">
-                    Stripe モード
-                    <v-chip :color="stripeChipColor" variant="tonal">
-                        {{ stripeLabel }}
-                    </v-chip>
-                </v-card-title>
-                <v-card-text v-if="stripe_mode === 'live'" class="text-error font-weight-bold">
+            <SectionCard title="Stripe モード" variant="outlined" height="100%">
+                <template #append>
+                    <StatusChip
+                        :status="stripe_mode === 'test' ? 'active' : stripe_mode === 'live' ? 'failed' : 'canceled'"
+                        :label="stripe_mode === 'test' ? 'OK' : stripe_mode === 'live' ? '注意' : '未計測'"
+                    />
+                </template>
+                <div class="text-body-1 font-weight-medium" :class="`text-${stripeChipColor}`">
+                    {{ stripeLabel }}
+                </div>
+                <div v-if="stripe_mode === 'live'" class="text-error font-weight-bold mt-2">
                     ローカル/検証で Live は使用禁止
-                </v-card-text>
-            </v-card>
+                </div>
+            </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <v-card variant="outlined" height="100%">
-                <v-card-title>予約・外部連携</v-card-title>
-                <v-card-text>
+            <SectionCard title="予約・外部連携" variant="outlined" height="100%">
+                <template #append>
+                    <StatusChip status="active" label="OK" />
+                </template>
                     <div class="mb-3">
                         <div class="text-caption text-medium-emphasis">予約権限 (authority)</div>
                         <div>{{ reservation_authority }}</div>
@@ -114,19 +123,17 @@ const membershipReadinessLabel = computed<string>(() =>
                         <div class="text-caption text-medium-emphasis">外部ゲートウェイ</div>
                         <div>{{ external_gateway }}</div>
                     </div>
-                </v-card-text>
-            </v-card>
+            </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <v-card variant="outlined" height="100%">
-                <v-card-title class="d-flex align-center justify-space-between ga-3">
-                    失敗ジョブ
-                    <v-chip :color="failed_jobs.count === 0 ? 'green' : 'red'" variant="tonal">
-                        {{ failed_jobs.count === 0 ? 'OK' : '要確認' }}
-                    </v-chip>
-                </v-card-title>
-                <v-card-text>
+            <SectionCard title="失敗ジョブ" variant="outlined" height="100%">
+                <template #append>
+                    <StatusChip
+                        :status="failed_jobs.count === 0 ? 'active' : 'failed'"
+                        :label="failed_jobs.count === 0 ? 'OK' : '注意'"
+                    />
+                </template>
                     <div class="text-h5 mb-2">{{ failed_jobs.count }} 件</div>
                     <div class="text-body-2 text-medium-emphasis">
                         最古の失敗日時: {{ failed_jobs.oldest_failed_at ?? 'なし' }}
@@ -139,39 +146,31 @@ const membershipReadinessLabel = computed<string>(() =>
                     >
                         失敗ジョブを確認
                     </v-btn>
-                </v-card-text>
-            </v-card>
+            </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <v-card variant="outlined" height="100%">
-                <v-card-title class="d-flex align-center justify-space-between ga-3">
-                    仮予約 滞留
-                    <v-chip
-                        :color="stale_pending_reservations === 0 ? 'green' : 'amber'"
-                        variant="tonal"
-                    >
-                        {{ stale_pending_reservations === 0 ? 'OK' : '注意' }}
-                    </v-chip>
-                </v-card-title>
-                <v-card-text class="text-h5">
+            <SectionCard title="仮予約 滞留" variant="outlined" height="100%">
+                <template #append>
+                    <StatusChip
+                        :status="stale_pending_reservations === 0 ? 'active' : 'grace'"
+                        :label="stale_pending_reservations === 0 ? 'OK' : '注意'"
+                    />
+                </template>
+                <div class="text-h5">
                     {{ stale_pending_reservations }} 件
-                </v-card-text>
-            </v-card>
+                </div>
+            </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <v-card variant="outlined" height="100%">
-                <v-card-title class="d-flex align-center justify-space-between ga-3">
-                    DB 使用量
-                    <v-chip
-                        :color="db_size.over_threshold ? 'red' : db_size.latest_mb === null ? 'grey' : 'green'"
-                        variant="tonal"
-                    >
-                        {{ db_size.over_threshold ? '閾値超過' : db_size.latest_mb === null ? '未計測' : 'OK' }}
-                    </v-chip>
-                </v-card-title>
-                <v-card-text>
+            <SectionCard title="DB 使用量" variant="outlined" height="100%">
+                <template #append>
+                    <StatusChip
+                        :status="db_size.over_threshold ? 'failed' : db_size.latest_mb === null ? 'canceled' : 'active'"
+                        :label="db_size.over_threshold ? '注意' : db_size.latest_mb === null ? '未計測' : 'OK'"
+                    />
+                </template>
                     <div class="text-h6">
                         <template v-if="db_size.latest_mb === null">未計測</template>
                         <template v-else>{{ db_size.latest_mb }} MB</template>
@@ -182,28 +181,31 @@ const membershipReadinessLabel = computed<string>(() =>
                     <div v-if="db_size.captured_on" class="text-body-2 text-medium-emphasis mt-2">
                         計測日: {{ db_size.captured_on }}
                     </div>
-                </v-card-text>
-            </v-card>
+            </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <v-card variant="outlined" height="100%">
-                <v-card-title class="d-flex align-center justify-space-between ga-3">
-                    同期突合
-                    <v-chip color="grey" variant="tonal">未計測</v-chip>
-                </v-card-title>
-                <v-card-text>{{ reconcile.note }}</v-card-text>
-            </v-card>
+            <SectionCard title="同期突合" variant="outlined" height="100%">
+                <template #append>
+                    <StatusChip status="canceled" label="未計測" />
+                </template>
+                {{ reconcile.note }}
+            </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <v-card variant="outlined" height="100%">
-                <v-card-title class="d-flex align-center justify-space-between ga-3">
-                    最終バックアップ
-                    <v-chip color="grey" variant="tonal">未計測</v-chip>
-                </v-card-title>
-                <v-card-text>{{ last_backup.note }}</v-card-text>
-            </v-card>
+            <SectionCard title="最終バックアップ" variant="outlined" height="100%">
+                <template #append>
+                    <StatusChip status="canceled" label="未計測" />
+                </template>
+                {{ last_backup.note }}
+            </SectionCard>
         </v-col>
     </v-row>
 </template>
+
+<style scoped>
+.v-row {
+    row-gap: var(--ark-space-2);
+}
+</style>

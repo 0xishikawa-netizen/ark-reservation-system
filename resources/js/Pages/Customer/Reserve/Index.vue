@@ -214,17 +214,92 @@ function submit(): void {
 <template>
     <Head title="予約する" />
 
-    <v-card class="mx-auto" max-width="640">
-        <v-card-title class="text-h5 pt-5">予約する</v-card-title>
-        <v-card-subtitle>サービスから順番に選択してください</v-card-subtitle>
-        <v-progress-linear
-            :model-value="step * 20"
-            color="primary"
-            height="6"
-            class="mt-4"
-        />
+    <v-card class="reserve-card mx-auto" max-width="640">
+        <div class="reserve-card__header">
+            <v-card-title class="text-h5 pa-0">予約する</v-card-title>
+            <v-card-subtitle class="pa-0 mt-1">
+                サービスから順番に選択してください
+            </v-card-subtitle>
+        </div>
 
-        <v-card-text class="pa-5">
+        <nav class="reserve-progress" aria-label="予約手順">
+            <ol class="reserve-stepper">
+                <li
+                    class="reserve-stepper__item"
+                    :class="{ 'is-current': step === 1, 'is-complete': step > 1 }"
+                    :aria-current="step === 1 ? 'step' : undefined"
+                >
+                    <span class="reserve-stepper__marker" aria-hidden="true">
+                        <span v-if="step > 1">✓</span>
+                        <span v-else>1</span>
+                    </span>
+                    <span class="reserve-stepper__label">サービス</span>
+                </li>
+                <li
+                    class="reserve-stepper__item"
+                    :class="{ 'is-current': step === 2, 'is-complete': step > 2 }"
+                    :aria-current="step === 2 ? 'step' : undefined"
+                >
+                    <span class="reserve-stepper__marker" aria-hidden="true">
+                        <span v-if="step > 2">✓</span>
+                        <span v-else>2</span>
+                    </span>
+                    <span class="reserve-stepper__label">スタッフ</span>
+                </li>
+                <li
+                    class="reserve-stepper__item"
+                    :class="{ 'is-current': step === 3, 'is-complete': step > 3 }"
+                    :aria-current="step === 3 ? 'step' : undefined"
+                >
+                    <span class="reserve-stepper__marker" aria-hidden="true">
+                        <span v-if="step > 3">✓</span>
+                        <span v-else>3</span>
+                    </span>
+                    <span class="reserve-stepper__label">日付</span>
+                </li>
+                <li
+                    class="reserve-stepper__item"
+                    :class="{ 'is-current': step === 4, 'is-complete': step > 4 }"
+                    :aria-current="step === 4 ? 'step' : undefined"
+                >
+                    <span class="reserve-stepper__marker" aria-hidden="true">
+                        <span v-if="step > 4">✓</span>
+                        <span v-else>4</span>
+                    </span>
+                    <span class="reserve-stepper__label">時間</span>
+                </li>
+                <li
+                    class="reserve-stepper__item"
+                    :class="{ 'is-current': step === 5, 'is-complete': step > 5 }"
+                    :aria-current="step === 5 ? 'step' : undefined"
+                >
+                    <span class="reserve-stepper__marker" aria-hidden="true">
+                        <span v-if="step > 5">✓</span>
+                        <span v-else>5</span>
+                    </span>
+                    <span class="reserve-stepper__label">確認</span>
+                </li>
+            </ol>
+
+            <div class="reserve-progress__mobile" aria-live="polite">
+                <div class="reserve-progress__mobile-label">
+                    <span>ステップ {{ step }} / 5</span>
+                    <strong v-if="step === 1">サービス</strong>
+                    <strong v-else-if="step === 2">スタッフ</strong>
+                    <strong v-else-if="step === 3">日付</strong>
+                    <strong v-else-if="step === 4">時間</strong>
+                    <strong v-else>確認</strong>
+                </div>
+                <v-progress-linear
+                    :model-value="step * 20"
+                    color="primary"
+                    height="4"
+                    rounded
+                />
+            </div>
+        </nav>
+
+        <v-card-text class="reserve-card__body">
             <v-alert
                 v-if="services.length === 0"
                 type="info"
@@ -233,15 +308,20 @@ function submit(): void {
                 現在オンライン予約できるサービスはありません。
             </v-alert>
 
-            <section v-else-if="step === 1" aria-labelledby="service-step">
-                <div id="service-step" class="text-subtitle-1 font-weight-bold mb-3">
-                    1. サービスを選択
-                </div>
+            <section
+                v-else-if="step === 1"
+                class="reserve-section"
+                aria-labelledby="service-step"
+            >
+                <h2 id="service-step" class="reserve-section__title text-subtitle-1">
+                    サービスを選択
+                </h2>
                 <v-select
                     v-model="serviceId"
                     :items="serviceItems"
                     label="サービス"
                     :error-messages="form.errors.service_id"
+                    class="reserve-field"
                 />
                 <v-btn
                     block
@@ -254,10 +334,14 @@ function submit(): void {
                 </v-btn>
             </section>
 
-            <section v-else-if="step === 2" aria-labelledby="staff-step">
-                <div id="staff-step" class="text-subtitle-1 font-weight-bold mb-3">
-                    2. 担当スタッフを選択
-                </div>
+            <section
+                v-else-if="step === 2"
+                class="reserve-section"
+                aria-labelledby="staff-step"
+            >
+                <h2 id="staff-step" class="reserve-section__title text-subtitle-1">
+                    担当スタッフを選択
+                </h2>
                 <v-select
                     v-model="staffId"
                     :items="staffItems"
@@ -265,25 +349,36 @@ function submit(): void {
                     persistent-hint
                     hint="指名なしの場合は、予約確定時に空いているスタッフを割り当てます。"
                     :error-messages="form.errors.staff_id"
+                    class="reserve-field"
                 />
-                <div class="d-flex ga-3 mt-4">
-                    <v-btn variant="text" @click="step = 1">戻る</v-btn>
-                    <v-btn color="primary" class="flex-grow-1" @click="step = 3">
+                <div class="reserve-actions">
+                    <v-btn class="reserve-back-action" variant="text" @click="step = 1">戻る</v-btn>
+                    <v-btn
+                        color="primary"
+                        size="large"
+                        class="reserve-primary-action"
+                        @click="step = 3"
+                    >
                         次へ
                     </v-btn>
                 </div>
             </section>
 
-            <section v-else-if="step === 3" aria-labelledby="date-step">
-                <div id="date-step" class="text-subtitle-1 font-weight-bold mb-3">
-                    3. 日付を選択
-                </div>
+            <section
+                v-else-if="step === 3"
+                class="reserve-section"
+                aria-labelledby="date-step"
+            >
+                <h2 id="date-step" class="reserve-section__title text-subtitle-1">
+                    日付を選択
+                </h2>
                 <v-text-field
                     v-model="date"
                     type="date"
                     label="予約日"
                     :min="today()"
                     :error-messages="form.errors.starts_at"
+                    class="reserve-field"
                 />
                 <v-alert
                     v-if="availabilityError"
@@ -293,11 +388,12 @@ function submit(): void {
                 >
                     {{ availabilityError }}
                 </v-alert>
-                <div class="d-flex ga-3">
-                    <v-btn variant="text" @click="step = 2">戻る</v-btn>
+                <div class="reserve-actions">
+                    <v-btn class="reserve-back-action" variant="text" @click="step = 2">戻る</v-btn>
                     <v-btn
                         color="primary"
-                        class="flex-grow-1"
+                        size="large"
+                        class="reserve-primary-action"
                         :disabled="date === ''"
                         :loading="loadingSlots"
                         @click="loadAvailability"
@@ -307,10 +403,14 @@ function submit(): void {
                 </div>
             </section>
 
-            <section v-else-if="step === 4" aria-labelledby="slot-step">
-                <div id="slot-step" class="text-subtitle-1 font-weight-bold mb-3">
-                    4. 空き時間を選択
-                </div>
+            <section
+                v-else-if="step === 4"
+                class="reserve-section"
+                aria-labelledby="slot-step"
+            >
+                <h2 id="slot-step" class="reserve-section__title text-subtitle-1">
+                    空き時間を選択
+                </h2>
                 <v-alert
                     v-if="slots.length === 0"
                     type="info"
@@ -319,7 +419,7 @@ function submit(): void {
                 >
                     選択日に予約できる時間はありません。
                 </v-alert>
-                <div v-else class="slot-grid mb-5">
+                <div v-else class="slot-grid">
                     <v-btn
                         v-for="slot in slots"
                         :key="slot.starts_at"
@@ -331,11 +431,12 @@ function submit(): void {
                         {{ timeLabel(slot.starts_at) }}
                     </v-btn>
                 </div>
-                <div class="d-flex ga-3">
-                    <v-btn variant="text" @click="step = 3">戻る</v-btn>
+                <div class="reserve-actions">
+                    <v-btn class="reserve-back-action" variant="text" @click="step = 3">戻る</v-btn>
                     <v-btn
                         color="primary"
-                        class="flex-grow-1"
+                        size="large"
+                        class="reserve-primary-action"
                         :disabled="selectedStartsAt === null"
                         @click="confirmSelection"
                     >
@@ -344,39 +445,49 @@ function submit(): void {
                 </div>
             </section>
 
-            <section v-else aria-labelledby="confirm-step">
-                <div id="confirm-step" class="text-subtitle-1 font-weight-bold mb-3">
-                    5. 予約内容を確認
+            <section v-else class="reserve-section" aria-labelledby="confirm-step">
+                <h2 id="confirm-step" class="reserve-section__title text-subtitle-1">
+                    予約内容を確認
+                </h2>
+                <v-card class="reservation-summary" variant="flat">
+                    <v-list lines="two" bg-color="transparent">
+                        <v-list-item title="サービス" :subtitle="selectedService?.name" />
+                        <v-list-item
+                            title="所要時間"
+                            :subtitle="`${selectedService?.duration_min}分`"
+                        />
+                        <v-list-item
+                            title="料金"
+                            :subtitle="formatPrice(selectedService?.price ?? 0)"
+                        />
+                        <v-list-item title="担当" :subtitle="selectedStaffName" />
+                        <v-list-item
+                            title="日時"
+                            :subtitle="selectedStartsAt ? formatDateTime(selectedStartsAt) : ''"
+                        />
+                    </v-list>
+                </v-card>
+                <div class="payment-section">
+                    <div class="text-subtitle-1 font-weight-bold mb-2">お支払い方法</div>
+                    <v-radio-group
+                        v-model="form.payment_method"
+                        :error-messages="form.errors.payment_method"
+                        class="mb-2"
+                    >
+                        <v-radio label="店頭でお支払い" value="onsite" />
+                        <v-radio label="クレジットカードで事前に支払う" value="card" />
+                        <v-radio
+                            :label="`回数券を使う（残り ${ticket.available_total} 回）`"
+                            value="ticket"
+                            :disabled="ticket.available_total < 1"
+                        />
+                        <v-radio
+                            :label="`利用権を使う（当期残り ${membership.available} 回）`"
+                            value="membership"
+                            :disabled="!canUseMembership"
+                        />
+                    </v-radio-group>
                 </div>
-                <v-list lines="two" class="mb-4">
-                    <v-list-item title="サービス" :subtitle="selectedService?.name" />
-                    <v-list-item title="所要時間" :subtitle="`${selectedService?.duration_min}分`" />
-                    <v-list-item title="料金" :subtitle="formatPrice(selectedService?.price ?? 0)" />
-                    <v-list-item title="担当" :subtitle="selectedStaffName" />
-                    <v-list-item
-                        title="日時"
-                        :subtitle="selectedStartsAt ? formatDateTime(selectedStartsAt) : ''"
-                    />
-                </v-list>
-                <div class="text-subtitle-1 font-weight-bold mb-2">お支払い方法</div>
-                <v-radio-group
-                    v-model="form.payment_method"
-                    :error-messages="form.errors.payment_method"
-                    class="mb-2"
-                >
-                    <v-radio label="店頭でお支払い" value="onsite" />
-                    <v-radio label="クレジットカードで事前に支払う" value="card" />
-                    <v-radio
-                        :label="`回数券を使う（残り ${ticket.available_total} 回）`"
-                        value="ticket"
-                        :disabled="ticket.available_total < 1"
-                    />
-                    <v-radio
-                        :label="`利用権を使う（当期残り ${membership.available} 回）`"
-                        value="membership"
-                        :disabled="!canUseMembership"
-                    />
-                </v-radio-group>
                 <v-alert
                     v-if="form.payment_method === 'card'"
                     type="info"
@@ -437,12 +548,12 @@ function submit(): void {
                 >
                     {{ form.errors.reservation }}
                 </v-alert>
-                <div class="d-flex ga-3">
-                    <v-btn variant="text" @click="step = 4">戻る</v-btn>
+                <div class="reserve-actions">
+                    <v-btn class="reserve-back-action" variant="text" @click="step = 4">戻る</v-btn>
                     <v-btn
                         color="primary"
                         size="large"
-                        class="flex-grow-1"
+                        class="reserve-primary-action"
                         :loading="form.processing"
                         @click="submit"
                     >
@@ -455,10 +566,202 @@ function submit(): void {
 </template>
 
 <style scoped>
+.reserve-card__header {
+    padding: var(--ark-space-5) var(--ark-space-5) var(--ark-space-4);
+}
+
+.reserve-progress {
+    padding: 0 var(--ark-space-5) var(--ark-space-5);
+    border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.reserve-stepper {
+    display: flex;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.reserve-stepper__item {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--ark-space-2);
+    min-width: 0;
+    color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+    font-size: 0.75rem;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.reserve-stepper__item:not(:last-child)::after {
+    position: absolute;
+    z-index: 0;
+    top: 15px;
+    left: calc(50% + 18px);
+    width: calc(100% - 36px);
+    height: 2px;
+    background: rgba(var(--v-border-color), var(--v-border-opacity));
+    content: '';
+}
+
+.reserve-stepper__item.is-complete:not(:last-child)::after {
+    background: rgb(var(--v-theme-primary));
+}
+
+.reserve-stepper__marker {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+    border-radius: 50%;
+    background: rgb(var(--v-theme-surface-light));
+    font-weight: 700;
+}
+
+.reserve-stepper__item.is-complete {
+    color: rgb(var(--v-theme-primary));
+}
+
+.reserve-stepper__item.is-complete .reserve-stepper__marker {
+    border-color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-primary), 0.12);
+}
+
+.reserve-stepper__item.is-current {
+    color: rgb(var(--v-theme-on-surface));
+    font-weight: 700;
+}
+
+.reserve-stepper__item.is-current .reserve-stepper__marker {
+    border-color: rgb(var(--v-theme-primary));
+    background: rgb(var(--v-theme-primary));
+    color: rgb(var(--v-theme-on-primary));
+    box-shadow: 0 0 0 var(--ark-space-1) rgba(var(--v-theme-primary), 0.12);
+}
+
+.reserve-stepper__label {
+    white-space: nowrap;
+}
+
+.reserve-progress__mobile {
+    display: none;
+}
+
+.reserve-card__body {
+    padding: var(--ark-space-5);
+}
+
+.reserve-section__title {
+    margin: 0 0 var(--ark-space-4);
+    font-weight: 700;
+}
+
+.reserve-field {
+    margin-bottom: var(--ark-space-2);
+}
+
+.reserve-actions {
+    display: flex;
+    align-items: stretch;
+    gap: var(--ark-space-3);
+    margin-top: var(--ark-space-5);
+}
+
+.reserve-back-action {
+    min-height: 44px;
+}
+
+.reserve-primary-action {
+    flex: 1 1 auto;
+    min-height: 44px;
+}
+
 .slot-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.75rem;
+    gap: var(--ark-space-3);
+    margin-bottom: var(--ark-space-5);
+}
+
+.slot-grid :deep(.v-btn) {
+    min-height: 44px;
+}
+
+.reservation-summary {
+    margin-bottom: var(--ark-space-5);
+    overflow: hidden;
+    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+    background: rgb(var(--v-theme-surface-light));
+    box-shadow: none;
+}
+
+.reservation-summary :deep(.v-list-item:not(:last-child)) {
+    border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.payment-section {
+    margin-bottom: var(--ark-space-4);
+}
+
+.payment-section :deep(.v-selection-control) {
+    min-height: 44px;
+}
+
+@media (max-width: 599px) {
+    .reserve-card__header {
+        padding: var(--ark-space-4) var(--ark-space-4) var(--ark-space-3);
+    }
+
+    .reserve-progress {
+        padding: 0 var(--ark-space-4) var(--ark-space-4);
+    }
+
+    .reserve-stepper {
+        display: none;
+    }
+
+    .reserve-progress__mobile {
+        display: block;
+    }
+
+    .reserve-progress__mobile-label {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--ark-space-3);
+        margin-bottom: var(--ark-space-2);
+        color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+        font-size: 0.8125rem;
+    }
+
+    .reserve-progress__mobile-label strong {
+        color: rgb(var(--v-theme-on-surface));
+        font-size: 0.875rem;
+    }
+
+    .reserve-card__body {
+        padding: var(--ark-space-4);
+    }
+
+    .reserve-actions {
+        flex-direction: column;
+        gap: var(--ark-space-2);
+    }
+
+    .reserve-actions :deep(.v-btn) {
+        width: 100%;
+        min-height: 48px;
+    }
+
+    .reservation-summary :deep(.v-list-item) {
+        padding-inline: var(--ark-space-4);
+    }
 }
 
 @media (max-width: 420px) {

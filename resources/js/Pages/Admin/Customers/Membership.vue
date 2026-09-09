@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -70,19 +71,6 @@ const syncForm = useForm({});
 const adjustBusinessError = computed(
     () => (adjustForm.errors as Record<string, string>).membership,
 );
-
-const statusColor = computed(() => {
-    const colors: Record<string, string> = {
-        active: 'success',
-        grace: 'warning',
-        canceling: 'warning',
-        paused: 'error',
-        pending: 'info',
-        canceled: 'default',
-    };
-
-    return props.membership ? (colors[props.membership.status] ?? 'default') : 'default';
-});
 
 const historyHeaders = [
     { title: '日時', key: 'created_at' },
@@ -158,29 +146,29 @@ function syncMembership(): void {
 <template>
     <Head :title="`${customer.name}の会員情報`" />
 
-    <div class="d-flex align-center justify-space-between flex-wrap ga-3 mb-6">
-        <div>
-            <h1 class="text-h4">顧客会員情報</h1>
-            <p class="text-body-1 text-medium-emphasis mb-0">{{ customer.name }}</p>
-        </div>
-        <v-btn variant="text" :href="`/admin/customers/${customer.user_id}`">顧客詳細へ戻る</v-btn>
-    </div>
+    <PageHeader title="顧客会員情報" :subtitle="customer.name">
+        <template #actions>
+            <v-btn variant="text" :href="`/admin/customers/${customer.user_id}`">顧客詳細へ戻る</v-btn>
+        </template>
+    </PageHeader>
 
-    <v-alert v-if="membership === null" type="info" variant="tonal">
-        この顧客には利用権がありません。
-    </v-alert>
+    <EmptyState
+        v-if="membership === null"
+        icon="mdi-account-credit-card-outline"
+        title="この顧客には利用権がありません"
+        description="利用権を契約すると、こちらに契約内容と利用状況が表示されます。"
+    />
 
     <template v-else>
         <v-alert v-if="membership.needs_attention" type="error" variant="tonal" class="mb-4">
             Stripe との状態確認が必要です。同期または運用手順に沿った確認を行ってください。
         </v-alert>
 
-        <v-card class="mb-6" variant="outlined">
-            <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-2">
-                <span>{{ membership.plan.name }}</span>
-                <v-chip :color="statusColor">{{ membership.status_label }}</v-chip>
-            </v-card-title>
-            <v-card-text>
+        <div class="ark-page__sections">
+            <SectionCard :title="membership.plan.name" class="mb-6" variant="outlined">
+                <template #append>
+                    <StatusChip :status="membership.status" :label="membership.status_label" />
+                </template>
                 <div class="d-flex ga-6 flex-wrap mb-5">
                     <div><div class="text-caption">利用可能</div><div class="text-h5 text-primary">{{ membership.available }}回</div></div>
                     <div><div class="text-caption">予約中</div><div class="text-h6">{{ membership.held }}回</div></div>
@@ -216,7 +204,6 @@ function syncMembership(): void {
                         </v-list>
                     </v-col>
                 </v-row>
-            </v-card-text>
             <v-card-actions v-if="can.adjust" class="pa-4 pt-0 flex-wrap ga-2">
                 <v-btn
                     color="primary"
@@ -239,15 +226,22 @@ function syncMembership(): void {
                     Stripe と同期
                 </v-btn>
             </v-card-actions>
-        </v-card>
+            </SectionCard>
 
-        <v-card title="利用台帳履歴">
+            <SectionCard class="ark-table-section" title="利用台帳履歴">
             <v-data-table
                 :headers="historyHeaders"
                 :items="history"
                 item-value="id"
                 no-data-text="利用履歴はありません。"
             >
+                <template #no-data>
+                    <EmptyState
+                        icon="mdi-history"
+                        title="利用履歴はありません"
+                        description="利用権の付与や予約、調整を行うと、こちらに履歴が記録されます。"
+                    />
+                </template>
                 <template #item.created_at="{ item }">{{ formatDateTime(item.created_at) }}</template>
                 <template #item.membership_id="{ item }">#{{ item.membership_id }}</template>
                 <template #item.delta="{ item }">{{ signed(item.delta) }}</template>
@@ -257,7 +251,8 @@ function syncMembership(): void {
                 </template>
                 <template #item.reason="{ item }">{{ item.reason || '—' }}</template>
             </v-data-table>
-        </v-card>
+            </SectionCard>
+        </div>
     </template>
 
     <v-dialog v-model="adjustDialog" max-width="560">
@@ -316,3 +311,18 @@ function syncMembership(): void {
         </v-card>
     </v-dialog>
 </template>
+
+<style scoped>
+.ark-page__sections {
+    display: grid;
+    gap: var(--ark-space-4);
+}
+
+.ark-page__sections > * {
+    margin-block: 0 !important;
+}
+
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+</style>

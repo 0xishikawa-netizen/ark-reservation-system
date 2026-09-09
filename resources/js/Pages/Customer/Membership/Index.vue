@@ -292,27 +292,46 @@ onBeforeUnmount(() => paymentElement?.unmount());
 <template>
     <Head title="会員" />
 
-    <div class="mb-5">
-        <h1 class="text-h5 mb-2">会員</h1>
-        <p class="text-body-2 text-medium-emphasis mb-0">
+    <header class="ark-page-header mb-6">
+        <h1 class="text-h5 text-sm-h4">会員</h1>
+        <p class="text-body-2 text-medium-emphasis mt-1 mb-0">
             月ごとの利用権とご利用状況を確認できます。
         </p>
-    </div>
+    </header>
 
     <template v-if="membership === null">
-        <v-alert v-if="plans.length === 0" type="info" variant="tonal">
+        <v-alert v-if="plans.length === 0" type="info" variant="tonal" class="membership-alert">
             現在申し込める会員プランはありません。
         </v-alert>
         <div v-else class="plan-grid">
-            <v-card v-for="plan in plans" :key="plan.id" variant="outlined">
-                <v-card-title>{{ plan.name }}</v-card-title>
-                <v-card-text>
-                    <div class="text-h5 text-primary mb-2">{{ formatPrice(plan.price) }} / 月</div>
-                    <div class="text-body-1">毎月 {{ plan.usage_count_per_period }} 回</div>
-                    <div class="text-body-2 text-medium-emphasis">{{ intervalLabel(plan.billing_interval) }}更新</div>
+            <v-card v-for="plan in plans" :key="plan.id" class="plan-card" variant="outlined">
+                <v-card-item class="plan-card__header">
+                    <div class="text-overline text-primary mb-1">MEMBERSHIP PLAN</div>
+                    <v-card-title class="pa-0 text-h6">{{ plan.name }}</v-card-title>
+                </v-card-item>
+                <v-card-text class="plan-card__body">
+                    <div class="plan-card__usage">
+                        <span class="text-body-1">毎月</span>
+                        <strong>{{ plan.usage_count_per_period }}</strong>
+                        <span class="text-body-1">回</span>
+                    </div>
+                    <div class="plan-card__price">
+                        <span>{{ formatPrice(plan.price) }}</span>
+                        <small>/ 月</small>
+                    </div>
+                    <div class="plan-card__per-visit text-body-2 text-medium-emphasis">
+                        1回あたり約
+                        {{ plan.usage_count_per_period > 0
+                            ? formatPrice(Math.round(plan.price / plan.usage_count_per_period))
+                            : '—' }}
+                    </div>
+                    <v-divider class="my-4" />
+                    <div class="text-body-2 text-medium-emphasis">
+                        {{ intervalLabel(plan.billing_interval) }}更新
+                    </div>
                 </v-card-text>
-                <v-card-actions class="pa-4 pt-0">
-                    <v-btn block color="primary" @click="openSubscribe(plan)">申し込む</v-btn>
+                <v-card-actions class="plan-card__actions">
+                    <v-btn block color="primary" size="large" @click="openSubscribe(plan)">申し込む</v-btn>
                 </v-card-actions>
             </v-card>
         </div>
@@ -327,40 +346,48 @@ onBeforeUnmount(() => paymentElement?.unmount());
     </template>
 
     <template v-else>
-        <v-alert v-if="membership.status === 'grace'" type="warning" variant="tonal" class="mb-4">
+        <v-alert v-if="membership.status === 'grace'" type="warning" variant="tonal" class="membership-alert mb-4">
             お支払いの確認中です。ご利用は継続できます（{{ formatDate(membership.grace_until) }} まで）。
         </v-alert>
-        <v-alert v-else-if="membership.status === 'paused'" type="error" variant="tonal" class="mb-4">
+        <v-alert v-else-if="membership.status === 'paused'" type="error" variant="tonal" class="membership-alert mb-4">
             お支払いが確認できず一時停止中です。
         </v-alert>
-        <v-alert v-else-if="membership.status === 'pending'" type="info" variant="tonal" class="mb-4">
+        <v-alert v-else-if="membership.status === 'pending'" type="info" variant="tonal" class="membership-alert mb-4">
             <div class="mb-2">お申し込みのお支払いが未完了です。</div>
             <v-btn size="small" color="primary" variant="flat" @click="router.visit('/mypage/membership/confirm')">
                 お支払いを完了する
             </v-btn>
         </v-alert>
 
-        <v-card variant="outlined" class="mb-6">
-            <v-card-title class="d-flex align-center justify-space-between ga-2 flex-wrap">
-                <span>{{ membership.plan.name }}</span>
-                <v-chip :color="statusColor" size="small">{{ membership.status_label }}</v-chip>
-            </v-card-title>
-            <v-card-text>
-                <div class="membership-counts mb-5">
+        <v-card class="membership-summary mb-6">
+            <v-card-item class="membership-summary__header">
+                <div class="d-flex align-center justify-space-between ga-3 flex-wrap">
                     <div>
+                        <div class="text-caption text-medium-emphasis mb-1">現在のプラン</div>
+                        <v-card-title class="pa-0 text-h6">{{ membership.plan.name }}</v-card-title>
+                    </div>
+                    <v-chip :color="statusColor" size="small" variant="tonal">
+                        {{ membership.status_label }}
+                    </v-chip>
+                </div>
+            </v-card-item>
+            <v-divider />
+            <v-card-text class="membership-summary__body">
+                <div class="membership-counts">
+                    <div class="membership-count membership-count--available">
                         <div class="text-caption text-medium-emphasis">利用可能</div>
-                        <div class="text-h5 text-primary">{{ membership.available }}回</div>
+                        <div class="membership-count__value text-primary">{{ membership.available }}<small>回</small></div>
                     </div>
-                    <div>
+                    <div class="membership-count">
                         <div class="text-caption text-medium-emphasis">予約中</div>
-                        <div class="text-h6">{{ membership.held }}回</div>
+                        <div class="membership-count__value">{{ membership.held }}<small>回</small></div>
                     </div>
-                    <div>
+                    <div class="membership-count">
                         <div class="text-caption text-medium-emphasis">合計</div>
-                        <div class="text-h6">{{ membership.total }}回</div>
+                        <div class="membership-count__value">{{ membership.total }}<small>回</small></div>
                     </div>
                 </div>
-                <v-list lines="two" density="comfortable">
+                <v-list lines="two" density="comfortable" class="membership-details">
                     <v-list-item
                         title="当期"
                         :subtitle="`${formatDate(membership.current_period_start)} 〜 ${formatDate(membership.current_period_end)}`"
@@ -374,12 +401,13 @@ onBeforeUnmount(() => paymentElement?.unmount());
                     v-if="membership.cancel_at_period_end"
                     type="warning"
                     variant="tonal"
-                    class="mt-4"
+                    class="membership-alert mt-4"
                 >
                     当期末（{{ formatDate(membership.next_renewal) }}）で終了予定です。期末までは利用できます。
                 </v-alert>
             </v-card-text>
-            <v-card-actions class="pa-4 pt-0 flex-wrap ga-2">
+            <v-divider />
+            <v-card-actions class="membership-actions flex-wrap ga-2">
                 <v-btn variant="outlined" color="primary" @click="openPaymentUpdate">
                     支払い方法を更新
                 </v-btn>
@@ -404,41 +432,54 @@ onBeforeUnmount(() => paymentElement?.unmount());
         </v-card>
 
         <section aria-labelledby="membership-history-heading">
-            <h2 id="membership-history-heading" class="text-h6 mb-3">利用履歴</h2>
-            <v-alert v-if="history.length === 0" type="info" variant="tonal">
-                利用履歴はありません。
-            </v-alert>
-            <v-card v-else variant="outlined">
-                <v-table class="d-none d-sm-block">
-                    <thead>
-                        <tr><th>日時</th><th>種別</th><th>増減</th><th>期</th><th>予約</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="item in history" :key="item.id">
-                            <td>{{ formatDateTime(item.created_at) }}</td>
-                            <td>{{ item.type }}</td>
-                            <td :class="item.delta > 0 ? 'text-success' : 'text-error'">{{ signed(item.delta) }}</td>
-                            <td>{{ formatDate(item.period_start) }}</td>
-                            <td>{{ item.reservation_id === null ? '—' : `#${item.reservation_id}` }}</td>
-                        </tr>
-                    </tbody>
-                </v-table>
-                <v-list class="d-sm-none" lines="three">
-                    <v-list-item v-for="item in history" :key="item.id">
-                        <template #title>{{ item.type }} <span :class="item.delta > 0 ? 'text-success' : 'text-error'">{{ signed(item.delta) }}</span></template>
-                        <template #subtitle>
-                            {{ formatDateTime(item.created_at) }}<br>
-                            期：{{ formatDate(item.period_start) }} / 予約：{{ item.reservation_id === null ? '—' : `#${item.reservation_id}` }}
-                        </template>
-                    </v-list-item>
-                </v-list>
+            <v-card class="history-card">
+                <v-card-item class="history-card__header">
+                    <v-card-title id="membership-history-heading" class="pa-0 text-h6">利用履歴</v-card-title>
+                </v-card-item>
+                <v-divider />
+                <v-card-text v-if="history.length === 0" class="pa-4 pa-sm-5">
+                    <v-alert type="info" variant="tonal" class="membership-alert">
+                        利用履歴はありません。
+                    </v-alert>
+                </v-card-text>
+                <template v-else>
+                    <v-table class="history-table d-none d-sm-block">
+                        <thead>
+                            <tr><th>日時</th><th>種別</th><th>増減</th><th>期</th><th>予約</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="item in history" :key="item.id">
+                                <td>{{ formatDateTime(item.created_at) }}</td>
+                                <td>{{ item.type }}</td>
+                                <td :class="item.delta > 0 ? 'text-success' : 'text-error'">{{ signed(item.delta) }}</td>
+                                <td>{{ formatDate(item.period_start) }}</td>
+                                <td>{{ item.reservation_id === null ? '—' : `#${item.reservation_id}` }}</td>
+                            </tr>
+                        </tbody>
+                    </v-table>
+                    <v-list class="history-list d-sm-none" lines="three">
+                        <v-list-item v-for="item in history" :key="item.id">
+                            <template #title>
+                                <span class="font-weight-medium">{{ item.type }}</span>
+                                <span :class="item.delta > 0 ? 'text-success' : 'text-error'">{{ signed(item.delta) }}</span>
+                            </template>
+                            <template #subtitle>
+                                {{ formatDateTime(item.created_at) }}<br>
+                                期：{{ formatDate(item.period_start) }} / 予約：{{ item.reservation_id === null ? '—' : `#${item.reservation_id}` }}
+                            </template>
+                        </v-list-item>
+                    </v-list>
+                </template>
             </v-card>
         </section>
     </template>
 
     <v-dialog v-model="paymentDialog" max-width="600" persistent>
-        <v-card :title="paymentPurpose === 'subscribe' ? `${selectedPlan?.name ?? ''}に申し込む` : '支払い方法を更新'">
-            <v-card-text>
+        <v-card
+            class="membership-dialog"
+            :title="paymentPurpose === 'subscribe' ? `${selectedPlan?.name ?? ''}に申し込む` : '支払い方法を更新'"
+        >
+            <v-card-text class="membership-dialog__body">
                 <v-alert v-if="paymentError" type="error" variant="tonal" class="mb-4">
                     {{ paymentError }}
                 </v-alert>
@@ -458,7 +499,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
                     カード情報は Stripe が直接処理し、当店のサーバーには保存されません。
                 </p>
             </v-card-text>
-            <v-card-actions class="pa-4">
+            <v-card-actions class="membership-dialog__actions">
                 <v-btn
                     variant="text"
                     :disabled="submittingPayment || subscribeForm.processing || paymentMethodForm.processing"
@@ -480,11 +521,11 @@ onBeforeUnmount(() => paymentElement?.unmount());
     </v-dialog>
 
     <v-dialog v-model="cancelDialog" max-width="500">
-        <v-card title="次回更新で解約しますか？">
-            <v-card-text>
+        <v-card class="membership-dialog" title="次回更新で解約しますか？">
+            <v-card-text class="membership-dialog__body">
                 当期末まではご利用いただけます。次回以降の更新を停止します。
             </v-card-text>
-            <v-card-actions class="pa-4">
+            <v-card-actions class="membership-dialog__actions">
                 <v-btn variant="text" @click="cancelDialog = false">戻る</v-btn>
                 <v-spacer />
                 <v-btn color="error" :loading="cancelForm.processing" @click="requestCancel">
@@ -496,21 +537,215 @@ onBeforeUnmount(() => paymentElement?.unmount());
 </template>
 
 <style scoped>
+.ark-page-header h1 {
+    margin: 0;
+}
+
+.membership-alert {
+    border-radius: var(--ark-radius);
+}
+
 .plan-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+    gap: var(--ark-space-4);
+}
+
+.plan-card {
+    display: flex;
+    overflow: hidden;
+    flex-direction: column;
+    border-color: rgba(var(--v-theme-primary), 0.2);
+    border-radius: var(--ark-radius-lg);
+    background:
+        linear-gradient(180deg, rgba(var(--v-theme-primary), 0.055), transparent 9rem),
+        rgb(var(--v-theme-surface));
+}
+
+.plan-card__header {
+    padding: var(--ark-space-5) var(--ark-space-5) var(--ark-space-3);
+}
+
+.plan-card__body {
+    padding: var(--ark-space-3) var(--ark-space-5) var(--ark-space-4);
+}
+
+.plan-card__usage {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ark-space-2);
+    color: rgb(var(--v-theme-on-surface));
+}
+
+.plan-card__usage strong {
+    color: rgb(var(--v-theme-primary));
+    font-size: clamp(2.5rem, 8vw, 3.25rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+}
+
+.plan-card__price {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ark-space-1);
+    margin-top: var(--ark-space-4);
+}
+
+.plan-card__price span {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.plan-card__price small {
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 0.875rem;
+}
+
+.plan-card__per-visit {
+    margin-top: var(--ark-space-1);
+}
+
+.plan-card__actions {
+    margin-top: auto;
+    padding: 0 var(--ark-space-5) var(--ark-space-5);
+}
+
+.membership-summary,
+.history-card {
+    overflow: hidden;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.09);
+    border-radius: var(--ark-radius-lg);
+}
+
+.membership-summary__header,
+.history-card__header {
+    padding: var(--ark-space-5);
+}
+
+.membership-summary__body {
+    padding: var(--ark-space-5);
 }
 
 .membership-counts {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1rem;
+    gap: var(--ark-space-3);
+    margin-bottom: var(--ark-space-5);
+}
+
+.membership-count {
+    min-width: 0;
+    padding: var(--ark-space-4);
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    border-radius: var(--ark-radius);
+    background: rgba(var(--v-theme-on-surface), 0.025);
+}
+
+.membership-count--available {
+    border-color: rgba(var(--v-theme-primary), 0.18);
+    background: rgba(var(--v-theme-primary), 0.065);
+}
+
+.membership-count__value {
+    margin-top: var(--ark-space-1);
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.membership-count__value small {
+    margin-left: 0.15em;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.membership-details {
+    overflow: hidden;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.07);
+    border-radius: var(--ark-radius);
+}
+
+.membership-details :deep(.v-list-item:not(:last-child)) {
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.membership-actions,
+.membership-dialog__actions {
+    padding: var(--ark-space-4) var(--ark-space-5);
+}
+
+.history-table :deep(th) {
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.history-table :deep(td) {
+    white-space: nowrap;
+}
+
+.history-list :deep(.v-list-item-title) {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--ark-space-3);
+}
+
+.history-list :deep(.v-list-item:not(:last-child)) {
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.07);
+}
+
+.membership-dialog {
+    border-radius: var(--ark-radius-lg);
+}
+
+.membership-dialog__body {
+    padding: var(--ark-space-4) var(--ark-space-5) var(--ark-space-5);
 }
 
 @media (max-width: 400px) {
     .membership-counts {
-        gap: 0.5rem;
+        gap: var(--ark-space-2);
+    }
+
+    .membership-count {
+        padding: var(--ark-space-3) var(--ark-space-2);
+    }
+
+    .membership-count__value {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 599px) {
+    .plan-card__header,
+    .membership-summary__header,
+    .history-card__header {
+        padding: var(--ark-space-4);
+    }
+
+    .plan-card__body,
+    .membership-summary__body {
+        padding-right: var(--ark-space-4);
+        padding-left: var(--ark-space-4);
+    }
+
+    .plan-card__actions {
+        padding: 0 var(--ark-space-4) var(--ark-space-4);
+    }
+
+    .membership-actions,
+    .membership-dialog__actions {
+        padding: var(--ark-space-4);
+    }
+
+    .membership-actions .v-btn:first-child {
+        width: 100%;
+    }
+
+    .membership-dialog__body {
+        padding: var(--ark-space-3) var(--ark-space-4) var(--ark-space-4);
     }
 }
 </style>

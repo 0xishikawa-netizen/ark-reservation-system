@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -76,12 +78,25 @@ interface CustomerOverview {
     membership: MembershipSummary | null;
 }
 
-defineProps<{
+const props = defineProps<{
     customer: CustomerProfile;
     overview: CustomerOverview;
 }>();
 
 const page = usePage();
+
+const nextReservation = computed<RecentReservation | null>(() => {
+    const now = Date.now();
+
+    return (
+        props.overview.recent_reservations
+            .filter(
+                (reservation) =>
+                    new Date(reservation.starts_at.replace(' ', 'T')).getTime() >= now,
+            )
+            .sort((left, right) => left.starts_at.localeCompare(right.starts_at))[0] ?? null
+    );
+});
 
 const display = (value: string | null): string => value || '—';
 
@@ -105,29 +120,6 @@ const createdViaLabel = (value: string): string => {
     return labels[value] ?? value;
 };
 
-const reservationStatusColors: Record<string, string> = {
-    pending_payment: 'orange',
-    pending_external_sync: 'info',
-    confirmed: 'primary',
-    completed: 'success',
-    no_show: 'warning',
-    canceled: 'grey',
-    expired: 'grey-darken-1',
-};
-
-const paymentStatusColors: Record<string, string> = {
-    pending: 'grey',
-    authorized: 'orange',
-    succeeded: 'green',
-    voided: 'blue-grey',
-    failed: 'red',
-    partially_refunded: 'amber',
-    refunded: 'purple',
-};
-
-const statusColor = (colors: Record<string, string>, status: string): string =>
-    colors[status] ?? 'grey';
-
 const formatAmount = (amount: number, currency: string): string =>
     `${amount.toLocaleString('ja-JP')} ${currency.toUpperCase()}`;
 </script>
@@ -135,9 +127,8 @@ const formatAmount = (amount: number, currency: string): string =>
 <template>
     <Head :title="`${customer.name}の顧客情報`" />
 
-    <div class="d-flex align-center justify-space-between mb-6 flex-wrap ga-3">
-        <h1 class="text-h4">顧客詳細</h1>
-        <div class="d-flex ga-3">
+    <PageHeader title="顧客詳細" :subtitle="customer.name">
+        <template #actions>
             <v-btn
                 variant="tonal"
                 :href="`/admin/customers/${customer.user_id}/tickets`"
@@ -157,184 +148,377 @@ const formatAmount = (amount: number, currency: string): string =>
             >
                 編集
             </v-btn>
+        </template>
+    </PageHeader>
+
+    <SectionCard title="基本情報" class="basic-information-card">
+        <template #append>
+            <v-btn variant="text" href="/admin/customers">一覧へ戻る</v-btn>
+        </template>
+
+        <dl class="customer-profile-grid">
+            <div class="customer-profile-item">
+                <dt>氏名</dt>
+                <dd>{{ customer.name }}</dd>
+            </div>
+            <div class="customer-profile-item">
+                <dt>カナ</dt>
+                <dd>{{ customer.kana }}</dd>
+            </div>
+            <div class="customer-profile-item">
+                <dt>電話番号</dt>
+                <dd>{{ display(customer.phone) }}</dd>
+            </div>
+            <div class="customer-profile-item">
+                <dt>生年月日</dt>
+                <dd>{{ display(customer.birthday) }}</dd>
+            </div>
+            <div class="customer-profile-item">
+                <dt>性別</dt>
+                <dd>{{ genderLabel(customer.gender) }}</dd>
+            </div>
+            <div class="customer-profile-item customer-profile-item--wide">
+                <dt>メールアドレス</dt>
+                <dd>{{ customer.email }}</dd>
+            </div>
+            <div class="customer-profile-item">
+                <dt>メール認証</dt>
+                <dd>{{ customer.email_verified ? '認証済み' : '未認証' }}</dd>
+            </div>
+            <div class="customer-profile-item">
+                <dt>登録経路</dt>
+                <dd>{{ createdViaLabel(customer.created_via) }}</dd>
+            </div>
+            <div class="customer-profile-item">
+                <dt>登録日</dt>
+                <dd>{{ display(customer.created_at) }}</dd>
+            </div>
+            <div class="customer-profile-item customer-profile-item--wide">
+                <dt>メモ</dt>
+                <dd class="customer-note">{{ display(customer.note) }}</dd>
+            </div>
+        </dl>
+    </SectionCard>
+
+    <div class="overview-grid">
+        <SectionCard
+            title="次回予約"
+            :subtitle="`予約 ${overview.reservation_totals.total} 件 / 今後 ${overview.reservation_totals.upcoming} 件`"
+            class="next-reservation-card"
+        >
+            <template v-if="nextReservation">
+                <div class="next-reservation-date text-h5 text-primary">
+                    {{ nextReservation.starts_at }}
+                </div>
+                <div class="text-h6 mt-2">{{ nextReservation.service_name }}</div>
+                <div class="text-body-2 text-medium-emphasis mt-1">
+                    担当: {{ nextReservation.staff_name ?? '未割当' }}
+                </div>
+                <StatusChip
+                    :status="nextReservation.status"
+                    :label="nextReservation.status_label"
+                    class="mt-4"
+                />
+            </template>
+            <EmptyState
+                v-else
+                icon="mdi-calendar-blank-outline"
+                title="今後の予約はありません。"
+                class="compact-empty-state"
+            />
+        </SectionCard>
+
+        <div class="overview-secondary">
+            <SectionCard title="会員" class="summary-card">
+                <template #append>
+                    <StatusChip
+                        v-if="overview.membership !== null"
+                        :status="overview.membership.status"
+                        :label="overview.membership.status_label"
+                    />
+                </template>
+
+                <template v-if="overview.membership !== null">
+                    <div class="d-flex align-center flex-wrap ga-2">
+                        <span class="text-h6">{{ overview.membership.plan.name }}</span>
+                        <v-chip
+                            v-if="overview.membership.cancel_at_period_end"
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                        >
+                            期間末で終了
+                        </v-chip>
+                    </div>
+                    <div class="summary-metrics mt-3">
+                        <div>
+                            <span class="summary-metrics__label">当期残</span>
+                            <strong>{{ overview.membership.available }}</strong>
+                        </div>
+                        <div>
+                            <span class="summary-metrics__label">当期終了</span>
+                            <strong>
+                                {{ display(overview.membership.current_period_end) }}
+                            </strong>
+                        </div>
+                    </div>
+                    <v-btn
+                        variant="text"
+                        class="summary-link"
+                        :href="`/admin/customers/${customer.user_id}/membership`"
+                    >
+                        会員情報を確認
+                    </v-btn>
+                </template>
+                <p v-else class="text-body-2 text-medium-emphasis mb-0">
+                    会員登録なし
+                </p>
+            </SectionCard>
+
+            <SectionCard title="回数券" class="summary-card">
+                <div class="ticket-summary">
+                    <div>
+                        <span class="ticket-summary__value">
+                            {{ overview.tickets.active_wallet_count }}
+                        </span>
+                        <span class="text-body-2 text-medium-emphasis">冊</span>
+                    </div>
+                    <v-divider vertical />
+                    <div>
+                        <span class="text-body-2 text-medium-emphasis">利用可能</span>
+                        <span class="ticket-summary__value ml-2">
+                            {{ overview.tickets.total_available }}
+                        </span>
+                    </div>
+                </div>
+                <v-btn
+                    variant="text"
+                    class="summary-link"
+                    :href="`/admin/customers/${customer.user_id}/tickets`"
+                >
+                    回数券を確認
+                </v-btn>
+            </SectionCard>
         </div>
     </div>
 
-    <v-card max-width="840" title="基本情報">
-        <v-list lines="two">
-            <v-list-item title="氏名" :subtitle="customer.name" />
-            <v-list-item title="カナ" :subtitle="customer.kana" />
-            <v-list-item title="電話番号" :subtitle="display(customer.phone)" />
-            <v-list-item title="生年月日" :subtitle="display(customer.birthday)" />
-            <v-list-item title="性別" :subtitle="genderLabel(customer.gender)" />
-            <v-list-item title="メールアドレス" :subtitle="customer.email" />
-            <v-list-item
-                title="メール認証"
-                :subtitle="customer.email_verified ? '認証済み' : '未認証'"
-            />
-            <v-list-item
-                title="登録経路"
-                :subtitle="createdViaLabel(customer.created_via)"
-            />
-            <v-list-item title="登録日" :subtitle="display(customer.created_at)" />
-            <v-list-item title="メモ" :subtitle="display(customer.note)" />
-        </v-list>
-        <v-card-actions>
-            <v-btn variant="text" href="/admin/customers">一覧へ戻る</v-btn>
-        </v-card-actions>
-    </v-card>
+    <SectionCard
+        title="予約履歴"
+        :subtitle="`予約 ${overview.reservation_totals.total} 件 / 今後 ${overview.reservation_totals.upcoming} 件`"
+        class="history-card"
+    >
+        <template #append>
+            <v-btn variant="text" href="/admin/reservations">予約一覧へ</v-btn>
+        </template>
 
-    <v-row class="mt-4">
-        <v-col cols="12" lg="6">
-            <v-card title="直近の予約" height="100%">
-                <v-card-subtitle>
-                    予約 {{ overview.reservation_totals.total }} 件 / 今後
-                    {{ overview.reservation_totals.upcoming }} 件
-                </v-card-subtitle>
-                <v-list v-if="overview.recent_reservations.length > 0" lines="two">
-                    <template
-                        v-for="(reservation, index) in overview.recent_reservations"
-                        :key="reservation.id"
-                    >
-                        <v-list-item>
-                            <template #title>
-                                {{ reservation.starts_at }} ・ {{ reservation.service_name }}
-                            </template>
-                            <template #subtitle>
-                                担当: {{ reservation.staff_name ?? '未割当' }}
-                            </template>
-                            <template #append>
-                                <v-chip
-                                    :color="statusColor(reservationStatusColors, reservation.status)"
-                                    size="small"
-                                    variant="tonal"
-                                >
-                                    {{ reservation.status_label }}
-                                </v-chip>
-                            </template>
-                        </v-list-item>
-                        <v-divider
-                            v-if="index < overview.recent_reservations.length - 1"
+        <v-list v-if="overview.recent_reservations.length > 0" lines="two" class="history-list">
+            <template
+                v-for="(reservation, index) in overview.recent_reservations"
+                :key="reservation.id"
+            >
+                <v-list-item>
+                    <template #title>
+                        {{ reservation.starts_at }} ・ {{ reservation.service_name }}
+                    </template>
+                    <template #subtitle>
+                        担当: {{ reservation.staff_name ?? '未割当' }}
+                    </template>
+                    <template #append>
+                        <StatusChip
+                            :status="reservation.status"
+                            :label="reservation.status_label"
                         />
                     </template>
-                </v-list>
-                <v-card-text v-else class="text-medium-emphasis">
-                    予約履歴はありません。
-                </v-card-text>
-                <v-card-actions>
-                    <v-btn variant="text" href="/admin/reservations">予約一覧へ</v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-col>
+                </v-list-item>
+                <v-divider v-if="index < overview.recent_reservations.length - 1" />
+            </template>
+        </v-list>
+        <EmptyState
+            v-else
+            icon="mdi-calendar-blank-outline"
+            title="予約履歴はありません。"
+        />
+    </SectionCard>
 
-        <v-col cols="12" lg="6">
-            <v-card title="支払い" height="100%">
-                <v-card-text v-if="overview.payments === null" class="text-medium-emphasis">
-                    支払い情報の閲覧権限がありません。
-                </v-card-text>
-                <template v-else>
-                <v-card-subtitle>
-                    {{ overview.payments.total_count }} 件 / 要対応
-                    {{ overview.payments.needs_attention_count }} 件
-                </v-card-subtitle>
-                <v-list v-if="overview.payments.recent.length > 0" lines="two">
-                    <template
-                        v-for="(payment, index) in overview.payments.recent"
-                        :key="payment.id"
-                    >
-                        <v-list-item>
-                            <template #title>
-                                {{ payment.created_at }} ・ {{ payment.kind_label }}
-                            </template>
-                            <template #subtitle>
-                                {{ formatAmount(payment.amount, payment.currency) }}
-                            </template>
-                            <template #append>
-                                <div class="d-flex flex-column align-end ga-1">
-                                    <v-chip
-                                        :color="statusColor(paymentStatusColors, payment.status)"
-                                        size="small"
-                                        variant="tonal"
-                                    >
-                                        {{ payment.status_label }}
-                                    </v-chip>
-                                    <v-chip
-                                        v-if="payment.needs_attention"
-                                        color="red"
-                                        size="x-small"
-                                        variant="outlined"
-                                    >
-                                        要対応
-                                    </v-chip>
-                                </div>
-                            </template>
-                        </v-list-item>
-                        <v-divider v-if="index < overview.payments.recent.length - 1" />
+    <SectionCard
+        title="支払い履歴"
+        :subtitle="overview.payments === null
+            ? undefined
+            : `${overview.payments.total_count} 件 / 要対応 ${overview.payments.needs_attention_count} 件`"
+        class="history-card"
+    >
+        <template v-if="overview.payments !== null" #append>
+            <v-btn variant="text" href="/admin/payments">支払い一覧へ</v-btn>
+        </template>
+
+        <p v-if="overview.payments === null" class="text-body-2 text-medium-emphasis mb-0">
+            支払い情報の閲覧権限がありません。
+        </p>
+        <v-list
+            v-else-if="overview.payments.recent.length > 0"
+            lines="two"
+            class="history-list"
+        >
+            <template
+                v-for="(payment, index) in overview.payments.recent"
+                :key="payment.id"
+            >
+                <v-list-item>
+                    <template #title>
+                        {{ payment.created_at }} ・ {{ payment.kind_label }}
                     </template>
-                </v-list>
-                <v-card-text v-else class="text-medium-emphasis">
-                    支払い履歴はありません。
-                </v-card-text>
-                <v-card-actions>
-                    <v-btn variant="text" href="/admin/payments">支払い一覧へ</v-btn>
-                </v-card-actions>
-                </template>
-            </v-card>
-        </v-col>
-
-        <v-col cols="12" md="6">
-            <v-card title="回数券" height="100%">
-                <v-card-text class="text-h6">
-                    {{ overview.tickets.active_wallet_count }} 冊 / 利用可能
-                    {{ overview.tickets.total_available }}
-                </v-card-text>
-                <v-card-actions>
-                    <v-btn
-                        variant="text"
-                        :href="`/admin/customers/${customer.user_id}/tickets`"
-                    >
-                        回数券を確認
-                    </v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-col>
-
-        <v-col cols="12" md="6">
-            <v-card title="会員" height="100%">
-                <template v-if="overview.membership !== null">
-                    <v-card-text>
-                        <div class="d-flex align-center ga-2 mb-3">
-                            <span class="text-h6">{{ overview.membership.plan.name }}</span>
-                            <v-chip size="small" color="primary" variant="tonal">
-                                {{ overview.membership.status_label }}
-                            </v-chip>
+                    <template #subtitle>
+                        {{ formatAmount(payment.amount, payment.currency) }}
+                    </template>
+                    <template #append>
+                        <div class="d-flex flex-column align-end ga-1">
+                            <StatusChip
+                                :status="payment.status"
+                                :label="payment.status_label"
+                            />
                             <v-chip
-                                v-if="overview.membership.cancel_at_period_end"
-                                size="small"
-                                color="warning"
+                                v-if="payment.needs_attention"
+                                color="red"
+                                size="x-small"
                                 variant="outlined"
                             >
-                                期間末で終了
+                                要対応
                             </v-chip>
                         </div>
-                        <div>当期残: {{ overview.membership.available }}</div>
-                        <div class="text-medium-emphasis mt-1">
-                            当期終了: {{ display(overview.membership.current_period_end) }}
-                        </div>
-                    </v-card-text>
-                    <v-card-actions>
-                        <v-btn
-                            variant="text"
-                            :href="`/admin/customers/${customer.user_id}/membership`"
-                        >
-                            会員情報を確認
-                        </v-btn>
-                    </v-card-actions>
-                </template>
-                <v-card-text v-else class="text-medium-emphasis">
-                    会員登録なし
-                </v-card-text>
-            </v-card>
-        </v-col>
-    </v-row>
+                    </template>
+                </v-list-item>
+                <v-divider v-if="index < overview.payments.recent.length - 1" />
+            </template>
+        </v-list>
+        <EmptyState
+            v-else
+            icon="mdi-credit-card-outline"
+            title="支払い履歴はありません。"
+        />
+    </SectionCard>
 </template>
+
+<style scoped>
+.basic-information-card,
+.overview-grid,
+.history-card {
+    margin-bottom: var(--ark-space-5);
+}
+
+.customer-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    gap: 0 var(--ark-space-5);
+}
+
+.customer-profile-item {
+    min-width: 0;
+    padding: var(--ark-space-3) 0;
+    border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.customer-profile-item dt {
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.customer-profile-item dd {
+    margin: var(--ark-space-1) 0 0;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.customer-note {
+    white-space: pre-wrap;
+}
+
+.overview-grid,
+.overview-secondary {
+    display: grid;
+    gap: var(--ark-space-4);
+}
+
+.next-reservation-card {
+    height: 100%;
+    border-top: 3px solid rgb(var(--v-theme-primary));
+}
+
+.next-reservation-date {
+    font-weight: 700;
+}
+
+.compact-empty-state {
+    padding-block: var(--ark-space-5) !important;
+}
+
+.summary-card {
+    height: 100%;
+}
+
+.summary-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ark-space-3);
+}
+
+.summary-metrics > div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.summary-metrics__label {
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 0.75rem;
+}
+
+.summary-link {
+    margin-top: var(--ark-space-3);
+}
+
+.ticket-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--ark-space-4);
+}
+
+.ticket-summary__value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.history-list {
+    margin: calc(var(--ark-space-2) * -1) calc(var(--ark-space-4) * -1);
+    background: transparent;
+}
+
+@media (min-width: 960px) {
+    .customer-profile-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .customer-profile-item--wide {
+        grid-column: span 2;
+    }
+
+    .overview-grid {
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+    }
+}
+
+@media (max-width: 599px) {
+    .customer-profile-grid,
+    .summary-metrics {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .history-list :deep(.v-list-item) {
+        align-items: flex-start;
+    }
+}
+</style>
