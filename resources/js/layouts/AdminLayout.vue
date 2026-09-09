@@ -171,6 +171,17 @@ const navigationItems = computed<NavigationItem[]>(() => {
                   },
               ]
             : []),
+        ...(can.integrationsView
+            ? [
+                  {
+                      title: '外部予約連携',
+                      href: '/admin/integrations/reservations',
+                      disabled: false,
+                      icon: 'mdi-sync',
+                      group: 'システム' as const,
+                  },
+              ]
+            : []),
         ...(can.ticketPolicyManage
             ? [
                   {

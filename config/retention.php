@@ -40,6 +40,13 @@ return [
         'reservation_resource_slots' => [
             'past_days' => (int) env('RETENTION_RESERVATION_SLOTS_PAST_DAYS', 14),
         ],
+
+        // 外部予約連携の技術ログ（Phase 9）。open/failed/needs_attention は残す。
+        'reservation_sync' => [
+            'events_days' => (int) env('RETENTION_RSV_SYNC_EVENTS_DAYS', 60),
+            'outbox_days' => (int) env('RETENTION_RSV_SYNC_OUTBOX_DAYS', 30),
+            'conflicts_days' => (int) env('RETENTION_RSV_SYNC_CONFLICTS_DAYS', 180),
+        ],
     ],
 
     // Stripe webhook raw payload をDB外へ暗号化短期保管する場合の設定（既定 off）

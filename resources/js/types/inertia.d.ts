@@ -24,6 +24,8 @@ interface AuthPermissions {
     ticketProductsManage: boolean;
     ticketGrant: boolean;
     membershipManage: boolean;
+    integrationsView: boolean;
+    integrationsManage: boolean;
 }
 
 interface SharedPageProps {

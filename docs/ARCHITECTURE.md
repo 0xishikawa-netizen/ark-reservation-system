@@ -70,6 +70,21 @@ interface ExternalReservationGateway
 - push は `PushReservationJob`（retry + backoff、冪等）。pull は `PullReservationsJob`（スケジュール、`external_reservation_id` UNIQUE で二重取込防止）。
 - 契約テスト：`Null` と「記録用フェイク」の両方が同一契約テストを通過。
 
+### 4.1 Phase 9 外部予約連携基盤（`app/Domain/Integration/*`）
+
+Phase 9 で Provider 非依存の連携基盤を実装。Domain（`ReservationService`）に `if provider == x` を持ち込まない。
+実 API（Peak Manager / SALON BOARD）は未確定のため **skeleton のみ**（capability 0・全操作 throw・推測実装なし）。
+
+- **Contract**：`ReservationProvider`（`key` / `capabilities` / `healthCheck` / `fetchReservations` / `createReservation` / `updateReservation` / `cancelReservation`）。`AbstractReservationProvider` が capability を先行検査。
+- **Resolver**：`config/reservation_integration.php` の `active_provider`（既定 `null` = fail-safe。`RESERVATION_INTEGRATION_PROVIDER` で切替）。`ProviderRegistry`（key→class・unknown は fail-closed）+ `ProviderResolver`。`IntegrationServiceProvider::boot()` が起動時に config を検証（unknown key / production で mock / `RESERVATION_AUTHORITY != local` は起動拒否。**Phase 9 は authority=local のみ**）。
+- **Inbound（External → ARK）**：`ProcessExternalReservationJob`（`ShouldBeUnique`）→ `InboundReservationSync`。`(provider, external_id)` の advisory lock（`GET_LOCK`）で直列化 → Normalize（`ExternalReservationData`）→ Validate → Mapping lookup → Dedupe（fingerprint / `external_updated_at` / `rawVersion`）→ NO_OP / CREATE / UPDATE / CANCEL / CONFLICT。反映は必ず `ReservationService` 経由（slot UNIQUE・version lock・台帳を迂回しない）。自動反映は confirmed の時刻/担当変更と canceled のみ。順序比較材料が無い Provider は 2 回目以降の異なる snapshot を自動反映しない。両側変更は conflict（silent overwrite しない）。
+- **Outbound（ARK → External）— Outbox パターン**：`ReservationService::create/reschedule/cancel` が**同一 DB transaction** で `reservation_sync_outbox` に 1 行 enqueue（`idempotency_key = rsv-out:{op}:{reservation_id}:{seq}`）。`DispatchReservationOutboxJob` → `OutboxDispatcher`：`claimNext`（`FOR UPDATE SKIP LOCKED` + lease 回収 + 同一予約の先行行を待つ sequence 直列化）→ `process`（**外部 HTTP は transaction 外**）。retryable/ambiguous は backoff で pending、permanent は needs_attention、非 active provider は terminal 化せず park。成功時に mapping.fingerprint（共通 baseline）を原子更新。
+- **因果ループ防止**：`IntegrationContext`（`applyingInbound` 中は outbox recording を抑止）+ `source=EXTERNAL` ガード（多層防御）。
+- **Reconcile**：`reservations:reconcile-providers`（read-mostly・`chunkById`・safe self-heal と needs_attention を分離・大量上書きしない・external-only 検出・差分で非 zero exit）。
+- **Conflict**：`reservation_sync_conflicts`（fingerprint のみ・PII snapshot なし・`external_ref_hash` で dedup・並行 open は 23000 catch で収束）。手動解決は Phase 10。
+- **Admin**：`GET /admin/integrations/reservations`（`can:integrations.view` = admin + manager）+ `POST .../outbox/{id}/retry`（`can:integrations.manage` = admin ＋ `password.confirm` ＋ audit）。raw payload / credential / PII 全文は返さない。外部 ID は表示上 mask。
+- **PII / secret**：credential は `.env` のみ（git / DB / Vue props / フロント JS / log / exception / audit / test fixture に置かない）。`ExternalReservationData` は氏名・連絡先を保持しない。log 禁止：email / 電話 / 住所 / notes / raw provider payload / credential / token。sync event / outbox payload に自由記述を載せない。
+
 ## 5. Stripe（課金のみ）
 
 - `laravel/cashier` は **課金契約の管理専用**。「月何回使えるか」は `Membership` が持つ（混同しない）。

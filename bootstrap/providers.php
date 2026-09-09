@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Integration\IntegrationServiceProvider;
 use App\Modules\ExternalIntegration\ExternalIntegrationServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\AuthServiceProvider;
@@ -12,4 +13,5 @@ return [
     AuthServiceProvider::class,
     FortifyServiceProvider::class,
     ExternalIntegrationServiceProvider::class,
+    IntegrationServiceProvider::class,
 ];

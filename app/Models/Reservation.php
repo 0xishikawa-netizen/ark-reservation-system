@@ -83,6 +83,12 @@ class Reservation extends Model
         return $this->hasMany(Payment::class);
     }
 
+    /** @return HasMany<ReservationProviderMapping, $this> */
+    public function providerMappings(): HasMany
+    {
+        return $this->hasMany(ReservationProviderMapping::class);
+    }
+
     /** @param  Builder<Reservation>  $query */
     public function scopeForDate(Builder $query, CarbonInterface $date): void
     {

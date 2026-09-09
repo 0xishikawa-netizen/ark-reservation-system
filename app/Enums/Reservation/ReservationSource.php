@@ -10,5 +10,7 @@ enum ReservationSource: string
     case Epark = 'EPARK';
     case ArkWeb = 'ARK_WEB';
     case PeakManager = 'PEAK_MANAGER';
+    case SalonBoard = 'SALON_BOARD';
+    case External = 'EXTERNAL';
     case Admin = 'ADMIN';
 }

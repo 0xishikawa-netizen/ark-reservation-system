@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\CustomerMembershipController as AdminCustomerMembershipController;
 use App\Http\Controllers\Admin\CustomerTicketController;
 use App\Http\Controllers\Admin\FailedJobsController;
+use App\Http\Controllers\Admin\Integrations\ReservationIntegrationController;
 use App\Http\Controllers\Admin\MembershipPlanController;
 use App\Http\Controllers\Admin\MfaController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
@@ -277,6 +278,14 @@ Route::middleware([
     Route::get('system/audit-logs', [AuditLogController::class, 'index'])
         ->middleware('can:audit_logs.view')
         ->name('system.audit-logs');
+
+    // Phase 9 外部予約連携ステータス（店舗スタッフ向け read-only）
+    Route::get('integrations/reservations', [ReservationIntegrationController::class, 'show'])
+        ->middleware('can:integrations.view')
+        ->name('integrations.reservations');
+    Route::post('integrations/reservations/outbox/{reservationSyncOutbox}/retry', [ReservationIntegrationController::class, 'retryOutbox'])
+        ->middleware(['can:integrations.manage', 'password.confirm'])
+        ->name('integrations.reservations.outbox.retry');
     Route::get('settings/tickets', [TicketPolicySettingsController::class, 'show'])
         ->middleware('can:ticket_policy.manage')
         ->name('settings.tickets.show');

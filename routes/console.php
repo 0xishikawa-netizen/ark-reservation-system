@@ -33,3 +33,13 @@ Schedule::command('memberships:reconcile')->dailyAt('04:30')->withoutOverlapping
 
 // DB 使用量の日次スナップショット（PLAN §14 / Phase 8）。閾値超過で非 zero exit。
 Schedule::command('db:snapshot-size')->dailyAt('02:45')->withoutOverlapping();
+
+// Phase 9 外部予約連携（Provider 実仕様が無いため間隔は config 化・推測しない）。
+Schedule::command('reservations:dispatch-outbox')->everyMinute()->withoutOverlapping();
+Schedule::command('reservations:poll-external')
+    ->cron((string) config('reservation_integration.inbound.poll_cron', '*/15 * * * *'))
+    ->withoutOverlapping();
+Schedule::command('reservations:reconcile-providers')
+    ->cron((string) config('reservation_integration.reconcile.cron', '0 5 * * *'))
+    ->withoutOverlapping();
+Schedule::command('reservations:prune-sync-logs')->dailyAt('02:50')->withoutOverlapping();

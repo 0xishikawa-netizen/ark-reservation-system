@@ -31,6 +31,9 @@ MySQL（実バージョンは Phase 0 実測 → PHASE0_REPORT.md）。InnoDB / 
 | `failed_jobs` | Laravel 標準 | 解決まで |
 | `reservation_resource_slots` | 下記 | 過去・無効分のみ prune |
 | `db_size_snapshots` | captured_on DATE, total_mb INT, note VARCHAR(255) | 日次 1 行（軽量・保持） |
+| `reservation_sync_events` (Phase 9) | 追記専用。provider, direction, operation, reservation_id, `external_reservation_id_masked`(32), correlation_id, idempotency_key(120), status, attempt, error_category(20), safe_error_code(80), started_at, completed_at, created_at（**raw payload / PII なし**） | succeeded/no_op/skipped 60 日 / failed 解決まで（`reservations:prune-sync-logs`） |
+| `reservation_sync_outbox` (Phase 9) | provider, reservation_id, operation, `idempotency_key`(120) UNIQUE, payload_json（starts/ends/status/service_id/staff_id のみ・**自由記述なし**）, status, attempts, available_at, locked_at, locked_by(64), last_error_category(20), last_error_code(80), correlation_id, completed_at | succeeded/skipped 完了 30 日 / needs_attention は保持 |
+| `reservation_sync_conflicts` (Phase 9) | provider, reservation_id, `external_reservation_id_masked`(32), `external_ref_hash`(64), conflict_type(32), ark_fingerprint(64), external_fingerprint(64), detected_at, status(open/resolved/ignored), resolution(32), resolved_at, resolved_by → users | resolved/ignored 180 日 / open は保持 |
 
 ## 3. テーブル定義
 
@@ -233,6 +236,14 @@ index: `(payment_id)`
 - `webhook_events` / `sync_logs` / `audit_logs` / `db_size_snapshots`：§2 の表のとおり。
 - `settings`：`key varchar(80) PK` / `value varchar(255)` / `type varchar(20)`（営業時間・スロット粒度・キャンセル規定・仮予約 HOLD 時間）。
 - Laravel 基盤：`password_reset_tokens` / `sessions` / `jobs` / `job_batches` / `failed_jobs` / `cache` / `cache_locks`。
+
+### 外部予約連携（Phase 9・`app/Domain/Integration`）
+
+- `reservation_provider_mappings`：`provider`(32) / `reservation_id` FK cascade / `external_reservation_id`(191) / `external_customer_id`(191) / `fingerprint`(64) / `external_updated_at` / `external_version`(64) / `last_synced_at` / `last_seen_at` / `sync_status`(16 default `in_sync`)。
+  **UNIQUE(provider, external_reservation_id)** ＋ **UNIQUE(provider, reservation_id)**（1 予約 = 1 provider 1 external）＋ index `(provider, sync_status)`。
+- `reservation_sync_outbox` / `reservation_sync_events` / `reservation_sync_conflicts`：§2 の表。events は **追記専用**（Model が `updating` / `deleting` で例外）。
+- `reservation_provider_sync_state`：`provider`(32) UNIQUE / `last_inbound_at` / `last_inbound_cursor`(191) / `last_outbound_at` / `last_reconcile_at`。
+- 保持設定は `config/retention.php` の `prune.reservation_sync`。`reservations:prune-sync-logs` が succeeded/no_op/skipped event・完了 outbox・resolved/ignored conflict を保持日数で削除（open / needs_attention は残す）。
 
 ## 4. 作らないもの（YAGNI）
 

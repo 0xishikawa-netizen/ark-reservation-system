@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Reservation;
 
+use App\Domain\Integration\Enum\SyncOperation;
+use App\Domain\Integration\Service\ReservationOutboxRecorder;
 use App\Domain\Membership\MembershipReservationService;
 use App\Domain\Ticket\TicketReservationService;
 use App\Enums\Reservation\PaymentMethod;
@@ -28,6 +30,7 @@ use App\Support\StateMachine\InvalidStateTransitionException;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -37,6 +40,7 @@ final class ReservationService
         private readonly AuditLogger $auditLogger,
         private readonly TicketReservationService $tickets,
         private readonly MembershipReservationService $memberships,
+        private readonly ReservationOutboxRecorder $outbox,
     ) {}
 
     /** @throws ValidationException|SlotUnavailableException */
@@ -98,6 +102,9 @@ final class ReservationService
                 } elseif ($in->paymentMethod === PaymentMethod::Membership) {
                     $this->memberships->reserve($reservation, $this->actor($in->actorUserId));
                 }
+
+                // 外部連携が有効なら同一 transaction で Outbox 行を作る（Phase 9）。無効時は no-op。
+                $this->outbox->record($reservation, SyncOperation::Create);
 
                 return $reservation;
             });
@@ -176,6 +183,8 @@ final class ReservationService
 
                 $reservation->update($changes);
 
+                $this->outbox->record($reservation, SyncOperation::Update);
+
                 return $reservation;
             });
         } catch (QueryException $exception) {
@@ -220,6 +229,8 @@ final class ReservationService
 
             $this->tickets->release($reservation, $actor);
             $this->memberships->release($reservation, $actor);
+
+            $this->outbox->record($reservation, SyncOperation::Cancel);
 
             return $reservation;
         });
@@ -368,7 +379,7 @@ final class ReservationService
 
     /**
      * @param  list<CarbonImmutable>  $slots
-     * @return list<array{resource_type: string, resource_id: int, slot_start: CarbonImmutable, reservation_id: int, created_at: \Illuminate\Support\Carbon}>
+     * @return list<array{resource_type: string, resource_id: int, slot_start: CarbonImmutable, reservation_id: int, created_at: Carbon}>
      */
     private function slotRows(
         Reservation $reservation,

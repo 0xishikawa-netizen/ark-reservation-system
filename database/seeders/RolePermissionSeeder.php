@@ -30,6 +30,8 @@ class RolePermissionSeeder extends Seeder
         'membership.manage',
         'ticket_policy.manage',
         'ticket_products.manage',
+        'integrations.view',
+        'integrations.manage',
     ];
 
     public function run(): void
@@ -66,6 +68,7 @@ class RolePermissionSeeder extends Seeder
             'ticket.grant',
             'membership.manage',
             'settings.manage',
+            'integrations.view',
         ])->values());
         $roles['staff']->syncPermissions([
             $permissions['admin.access'],

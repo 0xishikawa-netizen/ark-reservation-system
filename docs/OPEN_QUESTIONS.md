@@ -41,3 +41,45 @@
 - 2026-09-08: Phase 5 で Cashier を導入しない（subscription は Phase 6）。`stripe/stripe-php` のみ。
 - 2026-09-08: Phase 5.5 で MFA を Passkey 標準へ。判定は `MfaPolicy` に集約し、SMS 単独では要件を満たさない。
 - 2026-09-08: SMS provider 未契約のため `SmsSender` interface + log/fake のみ実装。実 provider へは接続しない。
+
+## Phase 9 追加の未確認事項（外部予約連携 — 推測で回答しない）
+
+外部予約サービスとの連携可否を SALON BOARD / HOT PEPPER Beauty へ問い合わせ中。Peak Manager は
+現在 SALON BOARD との連携実績はあるが、ARK 独自システムから利用可能な実 API 仕様・認証方式・利用条件は未確定。
+Phase 9 は Provider 非依存の Integration Foundation（Mock で完全検証）まで。Phase 10 で以下が確定してから実装する。
+
+### SALON BOARD
+
+| 事項 | 状態 |
+|---|---|
+| 外部連携 API の提供有無 | 未確認（問い合わせ中） |
+| 店舗が直接 API 利用申請できるか（ARK 独自システムからの利用可否） | 未確認 |
+| read capability（予約取得 / availability / customer） | 未確認 |
+| write capability（予約作成 / 変更 / キャンセル） | 未確認 |
+| 予約取得の方式（polling / webhook）と推奨間隔 / rate limit | 未確認（推測しない） |
+| 認証方式（API key / OAuth / その他） | 未確認 |
+| 予約 JSON の shape / status 語彙 / 更新時刻 or version の有無 | 未確認 |
+| 双方向同期時のコンフリクト解決の公式仕様（どちらが勝つか） | 未確認 |
+| external の service / staff / customer ID ↔ ARK 内部 ID の対応表を提供できるか（Q-01） | 未確認（無い場合 Phase 10 adapter で突合表を保持） |
+| 同一 idempotency / correlation key での再送を同一外部予約へ収束させるか・key で既存予約を検索できるか（Q-03） | 未確認（Phase 10 Provider 契約で必須化予定） |
+| 利用料 / サポートポリシー | 未確認 |
+
+### Peak Manager
+
+| 事項 | 状態 |
+|---|---|
+| ARK 独自システムから利用可能な API の有無 | 未確認 |
+| 利用申請の窓口 / 条件 | 未確認 |
+| 認証方式 | 未確認 |
+| reservation read/write / availability / customer の capability | 未確認 |
+| polling / webhook / rate limit / 推奨間隔 | 未確認（推測しない） |
+| ARK 側予約が Hot Pepper / EPARK の空き枠へ反映されるか | 未確認 |
+| external ID ↔ ARK 内部 ID の対応表を提供できるか（Q-01） | 未確認 |
+| idempotency / correlation key での収束・検索能力（Q-03） | 未確認（Phase 10 Provider 契約で必須化予定） |
+| 利用料 / サポートポリシー | 未確認 |
+
+### 実装済みの前提（Phase 9）
+
+- `PeakManagerReservationProvider` / `SalonBoardReservationProvider` は capability 0 の safe skeleton。
+  実 URL / endpoint / JSON / OAuth / header / rate limit を一切推測していない。呼ばれれば安全に停止する。
+- 上記が確定し、ユーザーが明示的に Phase 10 開始を指示するまで実装しない。

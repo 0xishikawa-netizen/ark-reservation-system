@@ -31,6 +31,7 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="PII_LOOKUP_KEY" value="base64:dGVzdC1waWktbG9va3VwLWtleS0zMi1ieXRlcy0hIQ=="/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="RESERVATION_INTEGRATION_PROVIDER" value="null"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="STRIPE_CAPTURE_METHOD" value="manual"/>
         <env name="STRIPE_HTTP_CONNECT_TIMEOUT" value="10"/>

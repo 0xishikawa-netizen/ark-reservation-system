@@ -23,8 +23,12 @@ class RolePermissionSeederTest extends TestCase
 
         $this->assertSame($firstCounts, $this->permissionTableCounts());
         $this->assertSame(4, $firstCounts['roles']);
-        $this->assertSame(17, $firstCounts['permissions']);
-        $this->assertSame(30, $firstCounts['role_has_permissions']);
+        $this->assertSame(19, $firstCounts['permissions']);
+        $this->assertSame(33, $firstCounts['role_has_permissions']);
+        $this->assertTrue($this->roleHasPermission('admin', 'integrations.manage'));
+        $this->assertTrue($this->roleHasPermission('manager', 'integrations.view'));
+        $this->assertFalse($this->roleHasPermission('manager', 'integrations.manage'));
+        $this->assertFalse($this->roleHasPermission('staff', 'integrations.view'));
         $this->assertTrue($this->roleHasPermission('admin', 'booths.manage'));
         $this->assertTrue($this->roleHasPermission('admin', 'shifts.manage'));
         $this->assertTrue($this->roleHasPermission('admin', 'customers.view'));

@@ -229,7 +229,7 @@ Production（`member...`、新規 DB、Stripe Live、VPS 推奨）。
 | 6 利用権 + Stripe 課金（Test） | membership_plans / memberships / membership_usage_transactions（`dedupe_key`）+ Cashier 課金 + 期首 GRANT + reconcile |
 | 7 顧客マイページ | 集約ダッシュボード + 支払い方法管理 + 予約変更/キャンセル（巻き戻し） |
 | 8 店舗管理 + システム状態 | ダッシュボード / 予約一覧 / 顧客 360 / 回数券管理 / 契約管理 / `Admin/SystemStatus` / DB 容量スナップショット + 通知 |
-| 9 Gateway 抽象化仕上げ | 実 DTO / `sync_logs` + 保持 / Push/Pull ジョブ / `external_reservation_id` UNIQUE / authority 別確定タイミング / 契約テスト |
+| 9 外部予約連携基盤（実装済み・AUTOMATED GREEN） | Provider 非依存基盤 `app/Domain/Integration/*`（Contract / Capability / Resolver / DTO）/ 5 テーブル（mapping UNIQUE 2 本・outbox・append-only events・conflicts・sync_state）/ Inbound（advisory lock + `ReservationService` 経由 + conflict 検出）/ Outbound（Outbox パターン・外部 HTTP は transaction 外・`SKIP LOCKED` + lease + sequence 直列化）/ Reconcile / Mock provider / Peak Manager・SALON BOARD は skeleton（推測実装なし）/ Admin ステータス + 手動 retry / 詳細は `docs/tasks/phase-09.md`。実 API 結合は Phase 10。 |
 | 10 Peak Manager / SALON BOARD 連携 | 具象 Gateway + sandbox + 補償 Saga。**両 API 不可時の fallback：予約は現行 Peak Manager をそのまま利用、自作は決済/回数券/Membership/顧客/会計のみ担当** |
 | 11 Reporting / Business Automation（Backlog） | Daily/Monthly 集計 + `ReportingService` + `NotificationChannel`（Mail のみ。LINE/Slack は API 仕様確定後） |
 
