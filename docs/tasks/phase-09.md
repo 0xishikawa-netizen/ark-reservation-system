@@ -399,3 +399,99 @@ Sonnet 再判定はすべて **TRUE POSITIVE**（誤検知 0）。baseline commi
 - **REAL STRIPE TEST MODE QA = INCOMPLETE**（`.env` は placeholder のまま。人手 QA 未実施）。
 - **Membership Production Readiness = NOT READY**。
 - **SALON BOARD & Peak Manager Real Integration = BLOCKED / OFFICIAL SPEC WAITING**（skeleton のみ。実 API 仕様・credential・契約待ち。推測実装しない）。
+
+---
+
+## 2026-09-10 — 追補: 開発用固定管理者 + 自社予約/決済フローのギャップ分析
+
+Phase 9 の provider 基盤（上記 `113f2d9`）とは独立した追補作業。目的は
+「ARK だけで 自社予約 → Stripe 事前決済 → 来店時の差額処理 → 返金 → 管理」を
+実店舗品質にすること。今回のコミットで完了したのは **item 10（開発管理者）** のみ。
+決済フローの残りは下記ギャップ分析どおり、Stripe Test Mode の実 QA 環境が整うまで
+実装を保留する（`main` 上で未検証の capture/refund 変更を出さない）。
+
+### 完了: 開発用「消えない」管理者アカウント（item 10）
+
+- `config/dev_admin.php` — `environments`（既定 `local` / `development` / `testing`。**production を含まない**）、
+  `name` / `email` / `password`（`env('DEV_ADMIN_*')` 上書き可・既定は開発補助専用）。
+- `Database\Seeders\DevelopmentAdminSeeder` —
+  - `app()->environment(config('dev_admin.environments'))` でガード。許可外環境では **no-op**。
+  - 冪等（`firstOrNew(email)` → `save` → `syncRoles(['admin'])`）。何度実行しても 1 アカウント。
+  - 正式な spatie `admin` ロールを付与（`RolePermissionSeeder` により全 19 permission）。
+    画面側だけ通す抜け道は作らない。
+  - `two_factor_confirmed_at` / `email_verified_at` を設定し `EnsureStaffMfa` を素通り。
+    `two_factor_secret` は持たせないため **ブラウザログインは email + password のみ**で `/admin` に入れる。
+  - `admin` ロールが未整備なら `RolePermissionSeeder` を先に呼ぶ（単体実行にも耐える）。
+- `Database\Seeders\DatabaseSeeder` — `RolePermissionSeeder` → `SettingsSeeder` の後、
+  `local` / `development` / `testing` のときだけ `DevelopmentAdminSeeder` を呼ぶ（多重ガード）。
+  → `migrate:fresh --seed` を何度実行しても開発管理者が必ず復元される。
+- `.env.example` に `DEV_ADMIN_NAME` / `DEV_ADMIN_EMAIL` / `DEV_ADMIN_PASSWORD` を追記。
+
+**生成方法**: `./vendor/bin/sail artisan migrate:fresh --seed`（local）。
+既定ログイン: `dev-admin@ark.test` / `password`（`.env` の `DEV_ADMIN_*` で変更可）。
+**production では作られない**: `config('dev_admin.environments')` に `production` が無く、
+Seeder 自身と `DatabaseSeeder` の両方で `app()->environment()` ガード。
+
+**権限アクセス保証（item 10-2 / 11）**:
+- 権限監査結果 — routes の `can:*` は全て `RolePermissionSeeder::PERMISSIONS` に定義済み（orphan gate なし）。
+  `admin.customers.*` は `can:` を持たず `CustomerPolicy`（`viewAny`/`view`→`customers.view`、
+  `update`→`customers.manage`）で認可。nav の `can.customersView` / `can.customersManage` と一致。
+  `admin` ロールは 19 permission 全て保持 → 「メニューに出るが 403」「URL 直打ちなら入れるがメニューに出ない」は無い。
+- `tests/Feature/Admin/AdminRouteAccessMatrixTest`:
+  - `test_seeded_development_admin_can_reach_every_parameterless_admin_get_route` —
+    seeder が用意した開発管理者で全 parameterless `admin.*` GET を叩き、**403 にならない**・
+    **MFA / 2FA setup / login へリダイレクトされない**（`password.confirm` へのリダイレクトのみ許容）・
+    200 または 422 で応答することを機械検証。
+  - `test_seeded_development_admin_menu_matches_reachable_routes` — 全 permission を保持。
+  - 既存 `test_customer_role_is_denied_every_parameterless_admin_get_route` は維持（一般ユーザーは不可）。
+- `tests/Feature/Seeders/DevelopmentAdminSeederTest` — admin ロール付与 / 冪等 / configured password でログイン可 /
+  許可外環境では作らない / 既定 config が production を除外。
+
+### ギャップ分析: 自社予約 → 事前決済 → 差額 → 返金（items 2〜9）
+
+現状（Phase 5「Stripe 単発決済(Test)」）で **既に存在**するもの:
+
+| 要件 | 現状 |
+|---|---|
+| 予約 → PaymentIntent → 成功で確定 / 失敗で不整合にしない | `ReservationCheckoutSaga`（authorize → 予約登録 → capture）。失敗時 `pending_payment` + `payment_expires_at`、`payments:expire` が毎分解放 |
+| 二重請求防止 | `payments.payment_operation_id` UNIQUE + 操作別 Idempotency-Key（`config/stripe.php`）+ `payments.stripe_payment_intent_id` UNIQUE。二重クリック / リロード / 戻る / API リトライは同じ operation へ収束 |
+| Webhook 冪等 / 署名検証 / 重複・順不同耐性 / 障害復旧 | `StripeWebhookController`（`Webhook::constructEvent` 署名検証）→ `StripeWebhookProcessor`（`webhook_events.stripe_event_id` UNIQUE、processed/ignored は terminal、received/failed は再処理 = F-03）。`stripe:replay {event_id}`。孤立決済は `needs_attention` |
+| 一部返金 / 全額返金 | `payment_refunds`（1 payment に複数 refund 行・`refund_operation_id` UNIQUE・`amount` 任意）+ `payments.refunded_amount` キャッシュ + `partially_refunded` / `refunded` status。Admin `POST /admin/payments/{payment}/refund`（`can:refund.execute` + `password.confirm` + 理由必須 + audit） |
+| 金額サーバ再計算 / IDOR / PaymentIntent 所有者確認 | Phase 5 で実装・テスト済み（顧客 POST の金額は信用しない。`payments.customer_id` scope） |
+| 保存カード / Stripe Customer / PaymentMethod | Phase 6 で `Customer::createAsStripeCustomer` / Cashier。カード番号は DB 非保存（ID のみ） |
+| 管理画面の決済状態確認 | `AdminPaymentController` index/show/sync/refund。PaymentIntent / Charge / Refund ID・status 表示 |
+
+**未実装（＝実店舗品質にするため今後必要。ただし Stripe Test Mode の実 QA 環境が要る）**:
+
+1. **当日メニュー変更に伴う差額決済（additional payment）** — 既決済済みの予約に対して
+   「差額分の 2 つ目の PaymentIntent」を作る `kind`（例 `single_additional`）とフロー、
+   および元 payment との関連付け（`payments.parent_payment_id` 等）が無い。
+2. **キャンセルポリシーの設定可能な構造** — `payment_refunds.amount` は任意額を扱えるが、
+   「無料期間 / 前日 / 当日 / 無断」に応じた返金額を算出する policy（`settings` 化・ハードコード率禁止）が無い。
+3. **事前決済をデフォルトにする / 長期 manual オーソリを持たない方針の明文化** —
+   現状 `capture_method=manual`（authorize→capture）。`gateway=null` では capture がほぼ即時のため
+   実害は無いが、方針として「予約時点で capture 確定」に寄せるか、来店時 capture を残すかは
+   業務判断 + Stripe 実挙動確認が必要。
+
+**保留理由**: 上記 1〜3 は capture / refund / PaymentIntent を新規に増やす金銭フロー変更。
+本リポジトリには Stripe Test Mode の実 credential が無く（`REAL STRIPE TEST MODE QA = INCOMPLETE`）、
+Fake gateway だけで検証したものを実決済で通ったものとして `main` に載せない方針。
+実 Test Mode QA 環境（`pk_test_` / `sk_test_` 設定 + Stripe CLI）が整い次第、
+別タスクで「差額決済」「キャンセルポリシー」を実装・実 QA する。
+
+### SALON BOARD / Peak Manager
+
+今回も **実連携は実装しない**。`113f2d9` の provider 抽象化（Contract / Capability / Resolver /
+Outbox / Inbound / skeleton provider）はそのまま維持。将来差し込むのは
+`app/Domain/Integration/Provider/` に具象 `SalonBoardReservationProvider` /
+`PeakManagerReservationProvider` を実装し、`config/reservation_integration.php` の
+`providers.*` に capability と設定を足すだけ（`docs/tasks/phase-09.md` §Phase 10 Extension Points）。
+
+### 判定（本追補コミット）
+
+- **item 10（開発管理者）: DONE**（seeder / config / 多重ガード / アクセス保証テスト）。
+- items 2〜9（差額決済・キャンセルポリシー等）: 上記ギャップ分析のとおり **Phase 5 で大半が実装済み**、
+  残る差額決済・ポリシー化は **Stripe Test Mode 実 QA 待ちで保留**。
+- **REAL STRIPE TEST MODE QA = INCOMPLETE**（不変）。
+- **Membership Production Readiness = NOT READY**（不変）。
+- **SALON BOARD & Peak Manager Real Integration = BLOCKED**（不変）。
