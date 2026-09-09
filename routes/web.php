@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BoothController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\CustomerMembershipController as AdminCustomerMembershipController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\StaffController;
 use App\Http\Controllers\Admin\StaffShiftController;
+use App\Http\Controllers\Admin\SystemStatusController;
 use App\Http\Controllers\Admin\TicketPolicySettingsController;
 use App\Http\Controllers\Admin\TicketProductController;
 use App\Http\Controllers\Admin\TwoFactorSetupController;
@@ -269,6 +271,12 @@ Route::middleware([
     Route::get('system/failed-jobs', FailedJobsController::class)
         ->middleware('can:failed_jobs.view')
         ->name('system.failed-jobs');
+    Route::get('system/status', [SystemStatusController::class, 'show'])
+        ->middleware('can:failed_jobs.view')
+        ->name('system.status');
+    Route::get('system/audit-logs', [AuditLogController::class, 'index'])
+        ->middleware('can:audit_logs.view')
+        ->name('system.audit-logs');
     Route::get('settings/tickets', [TicketPolicySettingsController::class, 'show'])
         ->middleware('can:ticket_policy.manage')
         ->name('settings.tickets.show');

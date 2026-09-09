@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateCustomerProfileRequest;
 use App\Models\Customer;
 use App\Queries\CustomerListQuery;
+use App\Queries\CustomerOverviewQuery;
 use App\Queries\CustomerProfileQuery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,12 +35,20 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function show(Customer $customer, CustomerProfileQuery $query): Response
-    {
+    public function show(
+        Request $request,
+        Customer $customer,
+        CustomerProfileQuery $query,
+        CustomerOverviewQuery $overviewQuery,
+    ): Response {
         $this->authorize('view', $customer);
 
         return Inertia::render('Admin/Customers/Show', [
             'customer' => $this->profileData($query->get($customer)),
+            'overview' => $overviewQuery->for(
+                $customer->user_id,
+                (bool) $request->user()?->can('reservations.view'),
+            ),
         ]);
     }
 

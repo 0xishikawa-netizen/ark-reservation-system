@@ -30,3 +30,6 @@ Schedule::command('memberships:expire-grace')->dailyAt('04:15')->withoutOverlapp
 
 // 利用権の突合（read-only）。差異があれば非 zero exit。
 Schedule::command('memberships:reconcile')->dailyAt('04:30')->withoutOverlapping();
+
+// DB 使用量の日次スナップショット（PLAN §14 / Phase 8）。閾値超過で非 zero exit。
+Schedule::command('db:snapshot-size')->dailyAt('02:45')->withoutOverlapping();

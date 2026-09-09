@@ -5,8 +5,18 @@ import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
 
-interface StaffLane {
-    user_id: number | null;
+type ScheduleView = 'day' | 'week';
+type ScheduleAxis = 'staff' | 'booth';
+
+interface ScheduleLane {
+    id: number | null;
+    display_name: string;
+    color: string;
+    sort_order: number;
+}
+
+interface Staff {
+    user_id: number;
     display_name: string;
     color: string;
     sort_order: number;
@@ -42,9 +52,22 @@ interface BusinessHours {
     slot_minutes: number;
 }
 
+interface Booth {
+    id: number;
+    name: string;
+    sort_order: number;
+}
+
+interface DateRange {
+    start: string;
+    end: string;
+}
+
 interface Filters {
     date: string;
     staff_id: number | null;
+    view: ScheduleView;
+    axis: ScheduleAxis;
 }
 
 interface ShadeSegment {
@@ -53,11 +76,16 @@ interface ShadeSegment {
 }
 
 const props = defineProps<{
-    staff: Array<Omit<StaffLane, 'user_id'> & { user_id: number }>;
+    staff: Staff[];
     staff_options: StaffOption[];
     shifts: Shift[];
     reservations: ScheduleReservation[];
     business_hours: BusinessHours;
+    view: ScheduleView;
+    axis: ScheduleAxis;
+    range: DateRange;
+    days: string[];
+    booths: Booth[];
     filters: Filters;
 }>();
 const page = usePage();
@@ -65,6 +93,8 @@ const canManage = computed(() => page.props.auth.can.reservationsManage);
 
 const date = ref(props.filters.date);
 const staffId = ref<number | null>(props.filters.staff_id);
+const viewMode = ref<ScheduleView>(props.filters.view);
+const axisMode = ref<ScheduleAxis>(props.filters.axis);
 const pixelsPerMinute = 1.25;
 
 const openMinute = computed(() => timeToMinute(props.business_hours.open));
@@ -76,12 +106,37 @@ const tickMinutes = computed(() => props.business_hours.slot_minutes > 30
     : 30,
 );
 
-const lanes = computed<StaffLane[]>(() => {
-    const result: StaffLane[] = props.staff.map((staff) => ({ ...staff }));
+const lanes = computed<ScheduleLane[]>(() => {
+    if (axisMode.value === 'booth') {
+        const result: ScheduleLane[] = props.booths.map((booth) => ({
+            id: booth.id,
+            display_name: booth.name,
+            color: '#00897b',
+            sort_order: booth.sort_order,
+        }));
+
+        if (props.reservations.some((reservation) => reservation.booth_id === null)) {
+            result.push({
+                id: null,
+                display_name: 'ブース未割当',
+                color: '#78909c',
+                sort_order: 32767,
+            });
+        }
+
+        return result;
+    }
+
+    const result: ScheduleLane[] = props.staff.map((staff) => ({
+        id: staff.user_id,
+        display_name: staff.display_name,
+        color: staff.color,
+        sort_order: staff.sort_order,
+    }));
 
     if (props.reservations.some((reservation) => reservation.staff_id === null)) {
         result.push({
-            user_id: null,
+            id: null,
             display_name: '担当なし',
             color: '#78909c',
             sort_order: 32767,
@@ -136,8 +191,14 @@ function reservationStyle(reservation: ScheduleReservation): Record<string, stri
     };
 }
 
-function reservationsFor(staffIdValue: number | null): ScheduleReservation[] {
-    return props.reservations.filter((reservation) => reservation.staff_id === staffIdValue);
+function reservationsFor(laneId: number | null, day: string): ScheduleReservation[] {
+    return props.reservations.filter((reservation) => {
+        const reservationLaneId = axisMode.value === 'staff'
+            ? reservation.staff_id
+            : reservation.booth_id;
+
+        return reservationLaneId === laneId && reservation.starts_at.slice(0, 10) === day;
+    });
 }
 
 function nonWorkingSegments(staffIdValue: number | null): ShadeSegment[] {
@@ -200,12 +261,14 @@ function navigate(): void {
     router.get('/admin/schedule', {
         date: date.value,
         staff_id: staffId.value ?? undefined,
+        view: viewMode.value,
+        axis: axisMode.value,
     }, { preserveState: true, replace: true });
 }
 
-function moveDay(days: number): void {
+function movePeriod(direction: number): void {
     const next = new Date(`${date.value}T12:00:00`);
-    next.setDate(next.getDate() + days);
+    next.setDate(next.getDate() + direction * (viewMode.value === 'week' ? 7 : 1));
     const year = next.getFullYear();
     const month = String(next.getMonth() + 1).padStart(2, '0');
     const day = String(next.getDate()).padStart(2, '0');
@@ -214,13 +277,22 @@ function moveDay(days: number): void {
 }
 
 function createHref(): string {
-    const params = new URLSearchParams({ date: date.value });
+    const targetDate = viewMode.value === 'week' ? props.range.start : date.value;
+    const params = new URLSearchParams({ date: targetDate });
 
     if (staffId.value !== null) {
         params.set('staff_id', String(staffId.value));
     }
 
     return `/admin/reservations/create?${params.toString()}`;
+}
+
+function dayLabel(value: string): string {
+    return new Intl.DateTimeFormat('ja-JP', {
+        month: 'numeric',
+        day: 'numeric',
+        weekday: 'short',
+    }).format(new Date(`${value}T12:00:00`));
 }
 </script>
 
@@ -240,8 +312,12 @@ function createHref(): string {
     <v-card class="mb-4">
         <v-card-text class="toolbar-grid">
             <div class="d-flex ga-2 align-center">
-                <v-btn variant="outlined" aria-label="前日" @click="moveDay(-1)">前日</v-btn>
-                <v-btn variant="outlined" aria-label="翌日" @click="moveDay(1)">翌日</v-btn>
+                <v-btn variant="outlined" :aria-label="viewMode === 'week' ? '前週' : '前日'" @click="movePeriod(-1)">
+                    {{ viewMode === 'week' ? '前週' : '前日' }}
+                </v-btn>
+                <v-btn variant="outlined" :aria-label="viewMode === 'week' ? '翌週' : '翌日'" @click="movePeriod(1)">
+                    {{ viewMode === 'week' ? '翌週' : '翌日' }}
+                </v-btn>
             </div>
             <v-text-field v-model="date" type="date" label="表示日" hide-details @change="navigate" />
             <v-select
@@ -254,82 +330,115 @@ function createHref(): string {
                 hide-details
                 @update:model-value="navigate"
             />
+            <v-btn-toggle
+                v-model="viewMode"
+                mandatory
+                color="primary"
+                variant="outlined"
+                aria-label="表示期間"
+                @update:model-value="navigate"
+            >
+                <v-btn value="day">日</v-btn>
+                <v-btn value="week">週</v-btn>
+            </v-btn-toggle>
+            <v-btn-toggle
+                v-model="axisMode"
+                mandatory
+                color="primary"
+                variant="outlined"
+                aria-label="表示軸"
+                @update:model-value="navigate"
+            >
+                <v-btn value="staff">スタッフ</v-btn>
+                <v-btn value="booth">ブース</v-btn>
+            </v-btn-toggle>
         </v-card-text>
     </v-card>
 
     <v-alert v-if="lanes.length === 0" type="info" variant="tonal">
-        表示対象の予約受付スタッフはいません。
+        {{ axisMode === 'staff' ? '表示対象の予約受付スタッフはいません。' : '表示対象のブースはありません。' }}
     </v-alert>
 
     <v-card v-else class="schedule-card">
-        <div class="schedule-scroll">
-            <div class="schedule-grid schedule-header" :style="gridStyle">
-                <div class="time-header">時刻</div>
-                <div
-                    v-for="lane in lanes"
-                    :key="lane.user_id ?? 'unassigned'"
-                    class="staff-header"
-                    :style="{ borderTopColor: lane.color }"
-                >
-                    {{ lane.display_name }}
-                </div>
-            </div>
-
-            <div class="schedule-grid" :style="gridStyle">
-                <div class="time-axis" :style="{ height: `${canvasHeight}px` }">
+        <section
+            v-for="displayDay in days"
+            :key="displayDay"
+            :class="{ 'week-day-section': viewMode === 'week' }"
+        >
+            <h2 v-if="viewMode === 'week'" class="date-header text-subtitle-1">
+                {{ dayLabel(displayDay) }}
+            </h2>
+            <div class="schedule-scroll" :class="{ 'schedule-scroll--day': viewMode === 'day' }">
+                <div class="schedule-grid schedule-header" :style="gridStyle">
+                    <div class="time-header">時刻</div>
                     <div
-                        v-for="tick in timeTicks"
-                        :key="tick"
-                        class="time-label"
-                        :style="{ top: `${(tick - openMinute) * pixelsPerMinute}px` }"
+                        v-for="lane in lanes"
+                        :key="lane.id ?? 'unassigned'"
+                        class="staff-header"
+                        :style="{ borderTopColor: lane.color }"
                     >
-                        {{ minuteToLabel(tick) }}
+                        {{ lane.display_name }}
                     </div>
                 </div>
 
-                <div
-                    v-for="lane in lanes"
-                    :key="lane.user_id ?? 'unassigned'"
-                    class="staff-lane"
-                    :style="{ height: `${canvasHeight}px` }"
-                >
+                <div class="schedule-grid" :style="gridStyle">
+                    <div class="time-axis" :style="{ height: `${canvasHeight}px` }">
+                        <div
+                            v-for="tick in timeTicks"
+                            :key="tick"
+                            class="time-label"
+                            :style="{ top: `${(tick - openMinute) * pixelsPerMinute}px` }"
+                        >
+                            {{ minuteToLabel(tick) }}
+                        </div>
+                    </div>
+
                     <div
-                        v-for="tick in timeTicks"
-                        :key="`line-${tick}`"
-                        class="time-line"
-                        :style="{ top: `${(tick - openMinute) * pixelsPerMinute}px` }"
-                    />
-                    <div
-                        v-for="(segment, index) in nonWorkingSegments(lane.user_id)"
-                        :key="`shade-${index}`"
-                        class="non-working"
-                        :style="{ top: `${segment.top}px`, height: `${segment.height}px` }"
-                    />
-                    <button
-                        v-for="reservation in reservationsFor(lane.user_id)"
-                        :key="reservation.id"
-                        type="button"
-                        class="reservation-card"
-                        :disabled="!canManage"
-                        :class="sourceClass(reservation.source)"
-                        :style="reservationStyle(reservation)"
-                        @click="router.visit(`/admin/reservations/${reservation.id}/edit`)"
+                        v-for="lane in lanes"
+                        :key="lane.id ?? 'unassigned'"
+                        class="staff-lane"
+                        :style="{ height: `${canvasHeight}px` }"
                     >
-                        <span class="reservation-time">{{ reservation.starts_at.slice(11, 16) }}</span>
-                        <strong>{{ reservation.customer_name }}</strong>
-                        <span>{{ reservation.service_name }}</span>
-                        <small>{{ statusLabel(reservation.status) }}・{{ reservation.source }}</small>
-                    </button>
+                        <div
+                            v-for="tick in timeTicks"
+                            :key="`line-${tick}`"
+                            class="time-line"
+                            :style="{ top: `${(tick - openMinute) * pixelsPerMinute}px` }"
+                        />
+                        <template v-if="viewMode === 'day' && axisMode === 'staff'">
+                            <div
+                                v-for="(segment, index) in nonWorkingSegments(lane.id)"
+                                :key="`shade-${index}`"
+                                class="non-working"
+                                :style="{ top: `${segment.top}px`, height: `${segment.height}px` }"
+                            />
+                        </template>
+                        <button
+                            v-for="reservation in reservationsFor(lane.id, displayDay)"
+                            :key="reservation.id"
+                            type="button"
+                            class="reservation-card"
+                            :disabled="!canManage"
+                            :class="sourceClass(reservation.source)"
+                            :style="reservationStyle(reservation)"
+                            @click="router.visit(`/admin/reservations/${reservation.id}/edit`)"
+                        >
+                            <span class="reservation-time">{{ reservation.starts_at.slice(11, 16) }}</span>
+                            <strong>{{ reservation.customer_name }}</strong>
+                            <span>{{ reservation.service_name }}</span>
+                            <small>{{ statusLabel(reservation.status) }}・{{ reservation.source }}</small>
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </section>
     </v-card>
 </template>
 
 <style scoped>
 .toolbar-grid {
     display: grid;
-    grid-template-columns: auto minmax(180px, 240px) minmax(220px, 320px);
+    grid-template-columns: auto minmax(180px, 240px) minmax(220px, 320px) auto auto;
     align-items: center;
     gap: 1rem;
 }
@@ -339,8 +448,23 @@ function createHref(): string {
 }
 
 .schedule-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.schedule-scroll--day {
     overflow: auto;
     max-height: calc(100vh - 270px);
+}
+
+.week-day-section + .week-day-section {
+    border-top: 1px solid #cfd8dc;
+}
+
+.date-header {
+    margin: 0;
+    padding: 10px 16px;
+    background: #f5f5f5;
 }
 
 .schedule-grid {

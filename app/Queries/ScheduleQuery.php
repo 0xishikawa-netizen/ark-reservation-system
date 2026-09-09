@@ -18,11 +18,28 @@ final class ScheduleQuery
      *   staff: list<array{user_id: int, display_name: string, color: string, sort_order: int}>,
      *   shifts: list<array{staff_id: int, start_at: string, end_at: string}>,
      *   reservations: list<array{id: int, customer_name: string, service_name: string, staff_id: int|null, booth_id: int|null, starts_at: string, ends_at: string, status: string, source: string}>,
-     *   business_hours: array{open: string, close: string, slot_minutes: int}
+     *   business_hours: array{open: string, close: string, slot_minutes: int},
+     *   view: 'day'|'week',
+     *   axis: 'staff'|'booth',
+     *   range: array{start: string, end: string},
+     *   days: list<string>,
+     *   booths: list<array{id: int, name: string, sort_order: int}>
      * }
      */
-    public function get(CarbonImmutable $date, ?int $staffId = null): array
-    {
+    public function get(
+        CarbonImmutable $date,
+        ?int $staffId = null,
+        string $view = 'day',
+        string $axis = 'staff',
+    ): array {
+        $rangeStart = $view === 'week' ? $date->startOfWeek() : $date;
+        $rangeEnd = $view === 'week' ? $date->endOfWeek() : $date;
+        $days = [];
+
+        for ($day = $rangeStart; $day->lte($rangeEnd); $day = $day->addDay()) {
+            $days[] = $day->toDateString();
+        }
+
         $staff = DB::table('staff')
             ->where('is_bookable', true)
             ->when($staffId !== null, fn ($query) => $query->where('user_id', $staffId))
@@ -38,10 +55,10 @@ final class ScheduleQuery
             ->all();
         $staffIds = array_column($staff, 'user_id');
 
-        $shifts = $staffIds === []
+        $shifts = $view !== 'day' || $axis !== 'staff' || $staffIds === []
             ? []
             : DB::table('staff_shifts')
-                ->whereDate('work_date', $date->toDateString())
+                ->whereDate('work_date', $rangeStart->toDateString())
                 ->whereIn('staff_id', $staffIds)
                 ->orderBy('staff_id')
                 ->orderBy('start_at')
@@ -57,7 +74,9 @@ final class ScheduleQuery
             ->join('customers', 'customers.user_id', '=', 'reservations.customer_id')
             ->join('users as customer_users', 'customer_users.id', '=', 'customers.user_id')
             ->join('services', 'services.id', '=', 'reservations.service_id')
-            ->whereDate('reservations.starts_at', $date->toDateString())
+            // starts_at インデックスを活かすため DATE() ではなく境界値で範囲指定する。
+            ->where('reservations.starts_at', '>=', $rangeStart->startOfDay())
+            ->where('reservations.starts_at', '<', $rangeEnd->addDay()->startOfDay())
             ->whereIn('reservations.status', [
                 ReservationStatus::PendingPayment->value,
                 ReservationStatus::PendingExternalSync->value,
@@ -91,6 +110,20 @@ final class ScheduleQuery
             ])
             ->all();
 
+        $booths = $axis === 'booth'
+            ? DB::table('booths')
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->get(['id', 'name', 'sort_order'])
+                ->map(static fn (object $row): array => [
+                    'id' => (int) $row->id,
+                    'name' => (string) $row->name,
+                    'sort_order' => (int) $row->sort_order,
+                ])
+                ->all()
+            : [];
+
         return [
             'staff' => $staff,
             'shifts' => $shifts,
@@ -109,6 +142,14 @@ final class ScheduleQuery
                     config('reservation.slot_minutes', 15),
                 ),
             ],
+            'view' => $view,
+            'axis' => $axis,
+            'range' => [
+                'start' => $rangeStart->toDateString(),
+                'end' => $rangeEnd->toDateString(),
+            ],
+            'days' => $days,
+            'booths' => $booths,
         ];
     }
 }

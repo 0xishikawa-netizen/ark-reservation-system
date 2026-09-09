@@ -62,6 +62,11 @@ const navigationItems = computed<NavigationItem[]>(() => {
         ...(can.failedJobsView
             ? [
                   {
+                      title: 'システム状態',
+                      href: '/admin/system/status',
+                      disabled: false,
+                  },
+                  {
                       title: '失敗ジョブ',
                       href: '/admin/system/failed-jobs',
                       disabled: false,
@@ -73,7 +78,7 @@ const navigationItems = computed<NavigationItem[]>(() => {
                   {
                       title: '監査ログ',
                       href: '/admin/system/audit-logs',
-                      disabled: true,
+                      disabled: false,
                   },
               ]
             : []),
