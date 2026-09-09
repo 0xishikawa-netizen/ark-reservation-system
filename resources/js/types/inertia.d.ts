@@ -35,6 +35,7 @@ interface SharedPageProps {
     flash: {
         success?: string;
         error?: string;
+        info?: string;
     };
 }
 

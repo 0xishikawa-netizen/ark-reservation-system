@@ -334,7 +334,10 @@ onBeforeUnmount(() => paymentElement?.unmount());
             お支払いが確認できず一時停止中です。
         </v-alert>
         <v-alert v-else-if="membership.status === 'pending'" type="info" variant="tonal" class="mb-4">
-            お申し込みを確認中です。
+            <div class="mb-2">お申し込みのお支払いが未完了です。</div>
+            <v-btn size="small" color="primary" variant="flat" @click="router.visit('/mypage/membership/confirm')">
+                お支払いを完了する
+            </v-btn>
         </v-alert>
 
         <v-card variant="outlined" class="mb-6">

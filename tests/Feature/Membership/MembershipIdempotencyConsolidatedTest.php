@@ -67,7 +67,7 @@ final class MembershipIdempotencyConsolidatedTest extends TestCase
     {
         $customer = Customer::factory()->create();
         $plan = MembershipPlan::factory()->create();
-        $membership = app(MembershipCheckoutSaga::class)->execute($customer, $plan);
+        $membership = app(MembershipCheckoutSaga::class)->execute($customer, $plan)->membership;
         $operationId = (string) $membership->membership_operation_id;
         $idempotencyKey = app(MembershipIdempotencyKeyFactory::class)
             ->subscriptionCreate($membership);

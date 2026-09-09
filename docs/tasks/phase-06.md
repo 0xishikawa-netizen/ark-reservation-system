@@ -778,3 +778,87 @@ E2E・concurrency（MySQL 2 コネクション）・authorization・idempotency 
 
 ### Phase 6 baseline commit
 Task 6-1〜6-10 全 green を確認後、`git add -A && git commit -m "Phase 6 membership baseline"` を実行（remote 追加なし・push なし）。
+
+---
+
+## 2026-09-09 — Phase 6 Stripe Integration Hardening（F-02 / 3DS・SCA 完了フロー / dahlia 実形状対応）
+
+開始 `e963d78`。目的 = 前回 QA で本番前ブロッカーとした「利用権申込の 3DS/SCA 完了導線が無い（F-02 CRITICAL）」
+「dahlia 実形状の未確認」を、コードと Fake 回帰テストで解消する。**実 Stripe Test Mode credential は本環境に無い**
+（`.env` は `pk_test_xxx` / `sk_test_xxx` / `whsec_test_xxx` のプレースホルダ）ため、実結合 QA は人手項目として明記する。
+
+### F-02 原因
+`MembershipSubscriptionService::startSubscription` は `payment_behavior=default_incomplete` で subscription を作るが、
+初回 invoice の PaymentIntent client_secret を一切取得・返却しておらず、顧客が 3DS/SCA を完了する画面も
+sync エンドポイントも無かった。`MembershipController::subscribe` は結果に関わらず「受け付けました」を success で表示し、
+pending を成功と誤表示していた。
+
+### 実装（SCA 完了フロー）
+- **DTO**: `SubscriptionResult` に `clientSecret` と `requiresConfirmation()`（`stripeStatus==='incomplete' && clientSecret!==null`）。
+  新規 `MembershipCheckoutResult{ membership, requiresConfirmation, clientSecret }`。
+- **Gateway（Api）**: `createSubscription` / `retrieveSubscription` / `setCancelAtPeriodEnd` の expand を
+  `latest_invoice` + `latest_invoice.confirmation_secret`（dahlia）+ `latest_invoice.payment_intent`（旧 API）に。
+  `payment_settings.save_default_payment_method=on_subscription` を追加（確定カードを以後の自動更新の既定に）。
+  `clientSecretFrom()` = `confirmation_secret.client_secret` → `payment_intent.client_secret` の順にフォールバック。
+- **startSubscription** → `MembershipCheckoutResult` を返す。二重送信対策を強化: TX1 で「解約以外」を lockForUpdate + `latest()`。
+  active/grace/canceling/paused があれば 422。**進行中の pending（自分の未完了申込）は行と membership_operation_id を再利用**し、
+  `stripe_subscription_id` があれば `retrieveSubscription`、無ければ同じ Idempotency-Key で `createSubscription` を再実行
+  （二重 subscription を作らない）。`syncCheckout()` = retrieve + 前進同期 + 「まだ確認が必要か」を返す。
+- **Controller**: `subscribe` は `PaymentGatewayDeclinedException`→「承認が得られませんでした」、`PaymentGatewayException`→
+  「確認に時間が…」。`requiresConfirmation` なら `mypage.membership.confirm` へ 302、active なら success、それ以外は **info**（pending を success にしない）。
+  `confirm`（GET）= 自分の pending 申込だけを対象に retrieve → `Customer/Membership/Confirm` を publishable key と
+  client_secret のみで描画。`syncPayment`（POST）= 自分の membership を `$request->user()->customer` から導出し retrieve、
+  active なら success / それ以外は info。**client がボディで membership/subscription/customer id を渡しても無視**（route param 無し）。
+- **routes**: `GET mypage/membership/confirm` / `POST mypage/membership/payment/sync`（throttle:reserve）。
+- **Vue**: 新規 `Customer/Membership/Confirm.vue` = Stripe.js `confirmCardPayment(client_secret)` →
+  `succeeded`/`processing` なら `POST /mypage/membership/payment/sync`、それ以外は日本語の案内。生 Stripe エラーは出さない。
+  `Membership/Index.vue` の pending 表示に「お支払いを完了する」導線。
+- **F-14 同時解消**: `HandleInertiaRequests` / `CustomerLayout` / `inertia.d.ts` に `flash.info` を追加
+  （SCA sync の「確認中」案内が表示されるようにするため必須）。
+- **Q-02 同時整理**: `config('stripe.handled_events')` を実ハンドラ定数の和集合
+  （+`invoice.payment_action_required` +`customer.subscription.created`）に整合。コメントで「正本はコード定数」と明記。
+
+### dahlia 実形状（コード＋Fake 検証。実 API 実測は人手項目）
+- subscription 請求期間: `items.data[0].current_period_*`（旧トップレベルにフォールバック）— 前回 F-01 の実装を維持。
+- invoice→subscription: `parent.subscription_details.subscription`（旧 `invoice.subscription` にフォールバック）— 同上。
+- client_secret: `latest_invoice.confirmation_secret.client_secret`（旧 `payment_intent.client_secret` にフォールバック）— 今回追加。
+- `StripeApiMembershipGatewayShapeTest` に `\Stripe\Subscription::constructFrom` で dahlia/旧の両形を投入して検証（unit）。
+
+### AUTOMATED FAKE/MOCK TEST（本コミットで green）
+- `MembershipScaCheckoutTest`（8）: SCA 必要→confirm へ 302・pending 維持・success 出さない / confirm 画面は
+  client_secret と publishable key のみ（`sk_` 非露出）/ 認証完了→sync で active・success / 認証前 sync は info（success 出さない）/
+  SCA 不要カードは即 active・success / 二重 POST で subscription 1 本・create 呼び出し 1 回 / 他人の confirm・sync を
+  操作できず A の membership が active にならない / 認証後 `invoice.paid` webhook で GRANT 1 回。
+- `StripeApiMembershipGatewayShapeTest`（+4）: dahlia confirmation_secret / 旧 payment_intent / 期間 item 側 /
+  active 時は confirmation 不要。
+- 既存 `MembershipSubscriptionServiceTest` / `MembershipLifecycleE2ETest` / `MembershipIdempotencyConsolidatedTest` は
+  `startSubscription` / `saga->execute` の戻り値変更（`->membership`）に追随。
+
+### REAL STRIPE TEST MODE QA（未実施 — credential 無し）
+本環境に実 Test Mode キーが無いため以下は未実施。人手 QA 手順として残す:
+1. Stripe（Test Mode・API version `2026-08-26.dahlia` を endpoint に設定）で会員プランの price を作成し `stripe_price_id` に登録。
+2. `.env` に実 `pk_test_` / `sk_test_` / `whsec_`（`stripe listen --forward-to localhost/stripe/webhook`）を設定。
+3. 通常カード `4242 4242 4242 4242` で申込 → `invoice.paid` → 会員ページで「当期残り 4 回」。
+4. 3DS カード `4000 0027 6000 3184` で申込 → confirm 画面で認証 → sync → active → GRANT 1 回・二重なし。
+5. `4000 0000 0000 9995`（残高不足）等で失敗 → grace（即 paused にならない）→ カード更新で retry success → active。
+6. active → 解約 → Stripe で `cancel_at_period_end=true` → 期末前は予約可 → resume → `false` → 24h 内に再解約し
+   `sub-cancel:{op}:{bucket}` が実 Stripe でも適用されること（F-05）。
+7. `stripe events resend <id>` で duplicate / reversed / failed 再送を流し F-03 の再処理挙動を確認。
+8. dahlia 実レスポンスで `latest_invoice.confirmation_secret.client_secret` /
+   `invoice.parent.subscription_details.subscription` / `subscription.items.data[0].current_period_*` が
+   コードの読み取りと一致することを（値そのものはログに出さず）確認。
+
+### 検証（本コミット）
+- `migrate:fresh --seed` 40 DONE / `npm run build` 型エラー 0 / `artisan test` **623 passed / 3536 assertions / 0 failed**
+  （612 → +11）/ `composer audit` 0 / `npm audit` 0。
+- scan: secrets / Stripe Live / 本番 DB 名 / 追記台帳 UPDATE-DELETE / IDOR / Phase 8 先行 → 検出なし。
+  client_secret は Confirm.vue の props と Stripe.js のみ（secret key 非露出）。gateway 呼び出し（retrieve/create/ensureCustomer）は
+  全て `DB::transaction` の外（Fake の `transactionLevel()===0` 検査で実証）。
+- commit: `Complete Phase 6 Stripe integration hardening`（remote 追加なし・push なし）。
+
+### 本番前に残るリスク
+- **実 Stripe Test Mode 結合 QA が未実施**（上記 8 項目）。コードは dahlia の新旧両対応・防御実装だが、
+  実 API での最終確認が必要。→ 利用権機能は実結合 QA 前に本番投入しない。
+- F-06（並行 retrieve の古い snapshot で active→grace 一時巻き戻り。自己回復）/ F-13（Phase 5・決済期限直前 capture 窓）/
+  F-15（Passkey vendor TTL）は今回変更なし。
+- Q-03（plan mutable・GRANT 時点値使用）は業務判断として保留。

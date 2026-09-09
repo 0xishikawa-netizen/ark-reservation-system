@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Membership;
 
+use App\Domain\Membership\Gateway\Dto\CreateSubscriptionCommand;
 use App\Domain\Membership\Gateway\Dto\SubscriptionResult;
 use App\Domain\Membership\Gateway\FakeMembershipStripeGateway;
-use App\Domain\Membership\Gateway\MembershipStripeGateway;
 use App\Domain\Membership\MembershipIdempotencyKeyFactory;
 use App\Domain\Membership\MembershipSubscriptionService;
 use App\Enums\Membership\MembershipStatus;
@@ -53,7 +53,7 @@ final class MembershipSubscriptionServiceTest extends TestCase
         $customer = Customer::factory()->create(['stripe_customer_id' => null]);
         $plan = $this->plan();
 
-        $membership = $this->service->startSubscription($customer, $plan);
+        $membership = $this->service->startSubscription($customer, $plan)->membership;
 
         $this->assertSame(MembershipStatus::Active, $membership->status);
         $this->assertNotNull($membership->stripe_subscription_id);
@@ -73,12 +73,12 @@ final class MembershipSubscriptionServiceTest extends TestCase
     public function test_subscription_create_retry_with_same_operation_id_does_not_double(): void
     {
         $customer = Customer::factory()->create();
-        $membership = $this->service->startSubscription($customer, $this->plan());
+        $membership = $this->service->startSubscription($customer, $this->plan())->membership;
         $subId = $membership->stripe_subscription_id;
 
         // 論理操作の retry: 永続化済み operation ID から同じ Idempotency-Key を導出して create を再実行。
         $key = app(MembershipIdempotencyKeyFactory::class)->subscriptionCreate($membership);
-        $again = $this->gateway->createSubscription(new \App\Domain\Membership\Gateway\Dto\CreateSubscriptionCommand(
+        $again = $this->gateway->createSubscription(new CreateSubscriptionCommand(
             customerUserId: (int) $customer->user_id,
             stripeCustomerId: (string) $customer->fresh()->stripe_customer_id,
             priceId: 'price_x',
@@ -129,7 +129,7 @@ final class MembershipSubscriptionServiceTest extends TestCase
     public function test_request_and_resume_cancel_at_period_end(): void
     {
         $customer = Customer::factory()->create();
-        $membership = $this->service->startSubscription($customer, $this->plan());
+        $membership = $this->service->startSubscription($customer, $this->plan())->membership;
 
         $this->service->requestCancelAtPeriodEnd($membership);
         $membership->refresh();
@@ -146,7 +146,7 @@ final class MembershipSubscriptionServiceTest extends TestCase
     public function test_cancel_now_requires_reason_and_terminates(): void
     {
         $customer = Customer::factory()->create();
-        $membership = $this->service->startSubscription($customer, $this->plan());
+        $membership = $this->service->startSubscription($customer, $this->plan())->membership;
 
         try {
             $this->service->cancelNow($membership, '  ');
@@ -165,7 +165,7 @@ final class MembershipSubscriptionServiceTest extends TestCase
     public function test_sync_from_stripe_advances_forward_only_and_never_rewinds_from_canceled(): void
     {
         $customer = Customer::factory()->create();
-        $membership = $this->service->startSubscription($customer, $this->plan());
+        $membership = $this->service->startSubscription($customer, $this->plan())->membership;
         $subId = (string) $membership->stripe_subscription_id;
 
         // past_due → grace

@@ -61,18 +61,24 @@ return [
     ],
 
     /*
-    | 処理対象の webhook イベント（設計プラン §9）
-    | PaymentIntent / Refund 系は Phase 5 で処理する。
-    | invoice.* / customer.subscription.* は Phase 6 対象のため Phase 5 では処理しない。
+    | Stripe Dashboard の webhook endpoint で購読すべきイベント一覧（設定リファレンス）。
+    | 実際に処理するかの正本はコード側の定数:
+    |   Phase 5: App\Domain\Payment\Webhook\StripeWebhookProcessor::PAYMENT_HANDLED
+    |   Phase 6: App\Domain\Membership\Webhook\MembershipWebhookHandler::HANDLED
+    | ここはその和集合と一致させ、Dashboard 側の購読設定と突き合わせるために使う。
     */
     'handled_events' => [
+        // Phase 5 単発決済 / 返金
         'payment_intent.succeeded',
         'payment_intent.amount_capturable_updated',
         'payment_intent.payment_failed',
         'payment_intent.canceled',
         'charge.refunded',
+        // Phase 6 利用権（invoice / subscription）
         'invoice.paid',
         'invoice.payment_failed',
+        'invoice.payment_action_required',
+        'customer.subscription.created',
         'customer.subscription.updated',
         'customer.subscription.deleted',
     ],

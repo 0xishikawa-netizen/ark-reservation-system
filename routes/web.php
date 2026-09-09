@@ -77,6 +77,12 @@ Route::middleware(['web', 'auth', 'verified'])
         Route::post('membership/subscribe', [CustomerMembershipController::class, 'subscribe'])
             ->middleware('throttle:reserve')
             ->name('membership.subscribe');
+        // 3DS/SCA 確認画面（自分の進行中申込のみ）と、認証完了後の状態取り込み。
+        Route::get('membership/confirm', [CustomerMembershipController::class, 'confirm'])
+            ->name('membership.confirm');
+        Route::post('membership/payment/sync', [CustomerMembershipController::class, 'syncPayment'])
+            ->middleware('throttle:reserve')
+            ->name('membership.payment.sync');
         Route::post('membership/cancel', [CustomerMembershipController::class, 'cancel'])
             ->name('membership.cancel');
         Route::post('membership/resume', [CustomerMembershipController::class, 'resume'])

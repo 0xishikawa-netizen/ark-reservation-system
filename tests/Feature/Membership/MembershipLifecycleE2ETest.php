@@ -70,7 +70,7 @@ final class MembershipLifecycleE2ETest extends TestCase
         [$customer, $service, $staff] = $this->reservationMasters();
         $plan = MembershipPlan::factory()->create(['usage_count_per_period' => 4]);
 
-        $membership = app(MembershipCheckoutSaga::class)->execute($customer, $plan);
+        $membership = app(MembershipCheckoutSaga::class)->execute($customer, $plan)->membership;
         $subscriptionId = (string) $membership->stripe_subscription_id;
         $this->setStripe($subscriptionId, 'active');
 

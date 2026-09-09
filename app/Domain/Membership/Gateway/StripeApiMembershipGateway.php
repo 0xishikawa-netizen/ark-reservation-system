@@ -45,6 +45,16 @@ final class StripeApiMembershipGateway implements MembershipStripeGateway
         });
     }
 
+    /**
+     * latest_invoice + 3DS/SCA 用の client_secret を取り出すための expand。
+     * dahlia は confirmation_secret、旧 API は payment_intent。
+     */
+    private const INVOICE_EXPAND = [
+        'latest_invoice',
+        'latest_invoice.confirmation_secret',
+        'latest_invoice.payment_intent',
+    ];
+
     public function createSubscription(CreateSubscriptionCommand $command): SubscriptionResult
     {
         return $this->execute(function () use ($command): SubscriptionResult {
@@ -52,7 +62,9 @@ final class StripeApiMembershipGateway implements MembershipStripeGateway
                 'customer' => $command->stripeCustomerId,
                 'items' => [['price' => $command->priceId]],
                 'payment_behavior' => 'default_incomplete',
-                'expand' => ['latest_invoice'],
+                // 認証完了で確定したカードを以後の自動更新の既定支払い方法にする。
+                'payment_settings' => ['save_default_payment_method' => 'on_subscription'],
+                'expand' => self::INVOICE_EXPAND,
                 'metadata' => $command->metadata,
             ];
 
@@ -73,7 +85,7 @@ final class StripeApiMembershipGateway implements MembershipStripeGateway
     public function retrieveSubscription(string $subscriptionId): SubscriptionResult
     {
         return $this->execute(function () use ($subscriptionId): SubscriptionResult {
-            $subscription = $this->client->subscriptions->retrieve($subscriptionId, ['expand' => ['latest_invoice']]);
+            $subscription = $this->client->subscriptions->retrieve($subscriptionId, ['expand' => self::INVOICE_EXPAND]);
 
             return $this->toResult($subscription);
         });
@@ -84,7 +96,7 @@ final class StripeApiMembershipGateway implements MembershipStripeGateway
         return $this->execute(function () use ($subscriptionId, $value, $idempotencyKey): SubscriptionResult {
             $subscription = $this->client->subscriptions->update(
                 $subscriptionId,
-                ['cancel_at_period_end' => $value, 'expand' => ['latest_invoice']],
+                ['cancel_at_period_end' => $value, 'expand' => self::INVOICE_EXPAND],
                 ['idempotency_key' => $idempotencyKey],
             );
 
@@ -131,7 +143,31 @@ final class StripeApiMembershipGateway implements MembershipStripeGateway
             nextPaymentAttempt: (is_object($invoice) && ! empty($invoice->next_payment_attempt))
                 ? Carbon::createFromTimestamp($invoice->next_payment_attempt)->toDateTimeString()
                 : null,
+            clientSecret: $this->clientSecretFrom($invoice),
         );
+    }
+
+    /**
+     * 初回 invoice の PaymentIntent client_secret を取り出す。
+     * dahlia: invoice.confirmation_secret.client_secret / 旧 API: invoice.payment_intent.client_secret。
+     */
+    private function clientSecretFrom(mixed $invoice): ?string
+    {
+        if (! is_object($invoice)) {
+            return null;
+        }
+
+        $confirmationSecret = $invoice->confirmation_secret ?? null;
+        if (is_object($confirmationSecret) && is_string($confirmationSecret->client_secret ?? null)) {
+            return $confirmationSecret->client_secret;
+        }
+
+        $paymentIntent = $invoice->payment_intent ?? null;
+        if (is_object($paymentIntent) && is_string($paymentIntent->client_secret ?? null)) {
+            return $paymentIntent->client_secret;
+        }
+
+        return null;
     }
 
     /**

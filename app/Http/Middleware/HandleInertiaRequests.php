@@ -57,6 +57,8 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn (): mixed => $request->session()->get('success'),
                 'error' => fn (): mixed => $request->session()->get('error'),
+                // 「結果不明・確認中」など、成功でも失敗でもない案内（3DS/SCA sync 等で使う）。
+                'info' => fn (): mixed => $request->session()->get('info'),
             ],
         ];
     }

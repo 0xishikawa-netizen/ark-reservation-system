@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Membership;
 
 use App\Domain\Membership\Gateway\Dto\CreateSubscriptionCommand;
+use App\Domain\Membership\Gateway\Dto\MembershipCheckoutResult;
 use App\Domain\Membership\Gateway\Dto\SubscriptionResult;
 use App\Domain\Membership\Gateway\MembershipStripeGateway;
 use App\Enums\Membership\MembershipStatus;
@@ -44,32 +45,45 @@ final class MembershipSubscriptionService
 
     /**
      * 新規申込。1 顧客 1 有効 membership。
+     *
+     * 二重送信対策: TX1 で「解約以外の membership」を lockForUpdate。
+     * - active / grace / canceling / paused が既にあれば 422（新規は作らせない）。
+     * - 進行中の pending（自分の未完了申込）は行を再利用し、同じ membership_operation_id で
+     *   Stripe を叩く。Idempotency-Key が固定なので二重 subscription にならない。
+     *
+     * 戻り値は 3DS/SCA が必要か（clientSecret 同梱）を表す MembershipCheckoutResult。
      */
     public function startSubscription(
         Customer $customer,
         MembershipPlan $plan,
         ?string $paymentMethodId = null,
         ?Authenticatable $actor = null,
-    ): Membership {
+    ): MembershipCheckoutResult {
         if (! $plan->is_active) {
             throw ValidationException::withMessages(['plan' => '選択されたプランは現在申し込めません。']);
         }
 
         // [TX1] ローカル確定（Stripe を呼ばない）。1 顧客 1 有効 membership を直列化して検査。
-        $membership = DB::transaction(function () use ($customer, $plan): Membership {
+        [$membership, $reuseSubscriptionId] = DB::transaction(function () use ($customer, $plan): array {
             $existing = Membership::query()
                 ->where('customer_id', $customer->user_id)
                 ->where('status', '!=', MembershipStatus::Canceled->value)
                 ->lockForUpdate()
-                ->exists();
+                ->latest('id')
+                ->first();
 
-            if ($existing) {
+            if ($existing !== null && $existing->status !== MembershipStatus::Pending) {
                 throw ValidationException::withMessages([
                     'membership' => 'すでに有効な利用権があります。',
                 ]);
             }
 
-            return Membership::query()->create([
+            if ($existing !== null) {
+                // 自分の未完了申込。行と operation_id を再利用（二重 subscription を作らない）。
+                return [$existing, $existing->stripe_subscription_id];
+            }
+
+            return [Membership::query()->create([
                 'customer_id' => $customer->user_id,
                 'membership_plan_id' => $plan->id,
                 'stripe_subscription_id' => null,
@@ -77,25 +91,29 @@ final class MembershipSubscriptionService
                 'pending_operation' => 'create',
                 'status' => MembershipStatus::Pending->value,
                 'period_available' => 0,
-            ]);
+            ]), null];
         });
 
-        // [HTTP] Stripe customer 確保 → subscription create（同一 key で安全に retry 可）。
+        // [HTTP] Stripe customer 確保 → subscription create / 再開時は retrieve（同一 key で安全に retry 可）。
         try {
-            $stripeCustomerId = $this->gateway->ensureCustomer($customer);
+            if (is_string($reuseSubscriptionId) && $reuseSubscriptionId !== '') {
+                $result = $this->gateway->retrieveSubscription($reuseSubscriptionId);
+            } else {
+                $stripeCustomerId = $this->gateway->ensureCustomer($customer);
 
-            $result = $this->gateway->createSubscription(new CreateSubscriptionCommand(
-                customerUserId: (int) $customer->user_id,
-                stripeCustomerId: $stripeCustomerId,
-                priceId: (string) $plan->stripe_price_id,
-                membershipOperationId: (string) $membership->membership_operation_id,
-                idempotencyKey: $this->keys->subscriptionCreate($membership),
-                paymentMethodId: $paymentMethodId,
-                metadata: [
-                    'membership_id' => (string) $membership->id,
-                    'membership_operation_id' => (string) $membership->membership_operation_id,
-                ],
-            ));
+                $result = $this->gateway->createSubscription(new CreateSubscriptionCommand(
+                    customerUserId: (int) $customer->user_id,
+                    stripeCustomerId: $stripeCustomerId,
+                    priceId: (string) $plan->stripe_price_id,
+                    membershipOperationId: (string) $membership->membership_operation_id,
+                    idempotencyKey: $this->keys->subscriptionCreate($membership),
+                    paymentMethodId: $paymentMethodId,
+                    metadata: [
+                        'membership_id' => (string) $membership->id,
+                        'membership_operation_id' => (string) $membership->membership_operation_id,
+                    ],
+                ));
+            }
         } catch (PaymentGatewayException $exception) {
             // 曖昧: Stripe 側で作成済みの可能性がある。状態を確定させず要対応にする。
             $this->flagAmbiguous($membership, 'create');
@@ -105,7 +123,11 @@ final class MembershipSubscriptionService
         // [TX2] Stripe の現在値へ同期（前進のみ）。
         $this->applyStripeResult($membership, $result, actor: $actor, isCreate: true);
 
-        return $membership->fresh() ?? $membership;
+        return new MembershipCheckoutResult(
+            membership: $membership->fresh() ?? $membership,
+            requiresConfirmation: $result->requiresConfirmation(),
+            clientSecret: $result->requiresConfirmation() ? $result->clientSecret : null,
+        );
     }
 
     /**
@@ -228,6 +250,24 @@ final class MembershipSubscriptionService
         $result = $this->gateway->retrieveSubscription((string) $membership->stripe_subscription_id);
 
         $this->applyStripeResult($membership, $result, actor: $actor, isCreate: false);
+    }
+
+    /**
+     * 申込確認画面 / 認証完了後の sync から使う。Stripe を retrieve し、
+     * ローカルへ前進同期したうえで「まだ 3DS/SCA が必要か」を返す。
+     */
+    public function syncCheckout(Membership $membership, ?Authenticatable $actor = null): MembershipCheckoutResult
+    {
+        $this->requireSubscription($membership);
+
+        $result = $this->gateway->retrieveSubscription((string) $membership->stripe_subscription_id);
+        $this->applyStripeResult($membership, $result, actor: $actor, isCreate: false);
+
+        return new MembershipCheckoutResult(
+            membership: $membership->fresh() ?? $membership,
+            requiresConfirmation: $result->requiresConfirmation(),
+            clientSecret: $result->requiresConfirmation() ? $result->clientSecret : null,
+        );
     }
 
     private function applyStripeResult(

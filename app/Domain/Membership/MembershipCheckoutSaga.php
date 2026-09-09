@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Membership;
 
+use App\Domain\Membership\Gateway\Dto\MembershipCheckoutResult;
 use App\Models\Customer;
-use App\Models\Membership;
 use App\Models\MembershipPlan;
 use Illuminate\Contracts\Auth\Authenticatable;
 
@@ -24,7 +24,7 @@ final class MembershipCheckoutSaga
         MembershipPlan $plan,
         ?string $paymentMethodId = null,
         ?Authenticatable $actor = null,
-    ): Membership {
+    ): MembershipCheckoutResult {
         return $this->subscriptions->startSubscription($customer, $plan, $paymentMethodId, $actor);
     }
 }

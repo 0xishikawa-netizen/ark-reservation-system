@@ -78,6 +78,58 @@ final class StripeApiMembershipGatewayShapeTest extends TestCase
         $this->assertNull($result->currentPeriodEnd);
     }
 
+    public function test_reads_client_secret_from_dahlia_confirmation_secret(): void
+    {
+        // dahlia: latest_invoice.confirmation_secret.client_secret（3DS/SCA 用）
+        $result = $this->toResult([
+            'id' => 'sub_4',
+            'status' => 'incomplete',
+            'cancel_at_period_end' => false,
+            'items' => ['object' => 'list', 'data' => []],
+            'latest_invoice' => [
+                'object' => 'invoice',
+                'id' => 'in_4',
+                'status' => 'open',
+                'confirmation_secret' => ['client_secret' => 'pi_dahlia_secret', 'type' => 'payment_intent'],
+            ],
+        ]);
+
+        $this->assertSame('pi_dahlia_secret', $result->clientSecret);
+        $this->assertTrue($result->requiresConfirmation());
+    }
+
+    public function test_reads_client_secret_from_legacy_payment_intent(): void
+    {
+        $result = $this->toResult([
+            'id' => 'sub_5',
+            'status' => 'incomplete',
+            'cancel_at_period_end' => false,
+            'items' => ['object' => 'list', 'data' => []],
+            'latest_invoice' => [
+                'object' => 'invoice',
+                'id' => 'in_5',
+                'status' => 'open',
+                'payment_intent' => ['object' => 'payment_intent', 'id' => 'pi_5', 'client_secret' => 'pi_legacy_secret'],
+            ],
+        ]);
+
+        $this->assertSame('pi_legacy_secret', $result->clientSecret);
+    }
+
+    public function test_no_confirmation_needed_when_active_and_no_secret(): void
+    {
+        $result = $this->toResult([
+            'id' => 'sub_6',
+            'status' => 'active',
+            'cancel_at_period_end' => false,
+            'items' => ['object' => 'list', 'data' => []],
+            'latest_invoice' => ['object' => 'invoice', 'id' => 'in_6', 'status' => 'paid'],
+        ]);
+
+        $this->assertNull($result->clientSecret);
+        $this->assertFalse($result->requiresConfirmation());
+    }
+
     public function test_webhook_handler_reads_invoice_subscription_from_dahlia_parent(): void
     {
         $handler = (new ReflectionClass(MembershipWebhookHandler::class))->newInstanceWithoutConstructor();

@@ -45,6 +45,8 @@ final class FakeMembershipStripeGateway implements MembershipStripeGateway
 
     private ?string $nextCreateInvoiceStatus = 'paid';
 
+    private ?string $nextCreateClientSecret = null;
+
     public function failNextCreateWith(Throwable $exception): void
     {
         $this->failCreateOnce = $exception;
@@ -64,6 +66,33 @@ final class FakeMembershipStripeGateway implements MembershipStripeGateway
     {
         $this->nextCreateStripeStatus = $stripeStatus;
         $this->nextCreateInvoiceStatus = $invoiceStatus;
+    }
+
+    /**
+     * 次の createSubscription を 3DS/SCA 待ち（incomplete + client_secret あり）で返させる。
+     */
+    public function nextCreateRequiresConfirmation(string $clientSecret = 'pi_fake_secret_confirm'): void
+    {
+        $this->nextCreateStripeStatus = 'incomplete';
+        $this->nextCreateInvoiceStatus = 'open';
+        $this->nextCreateClientSecret = $clientSecret;
+    }
+
+    /**
+     * 顧客が Stripe.js で認証を完了した状況を模す。以後の retrieve は active / invoice paid。
+     */
+    public function completeConfirmation(string $subscriptionId): void
+    {
+        $current = $this->retrieveInternal($subscriptionId);
+        $this->subscriptions[$subscriptionId] = new SubscriptionResult(
+            stripeSubscriptionId: $subscriptionId,
+            stripeStatus: 'active',
+            cancelAtPeriodEnd: $current->cancelAtPeriodEnd,
+            currentPeriodStart: $current->currentPeriodStart ?? now()->startOfMonth()->toDateString(),
+            currentPeriodEnd: $current->currentPeriodEnd ?? now()->startOfMonth()->addMonth()->toDateString(),
+            latestInvoiceStatus: 'paid',
+            latestInvoiceId: $current->latestInvoiceId,
+        );
     }
 
     /** テストが後続の retrieve 結果を差し替える。 */
@@ -119,10 +148,12 @@ final class FakeMembershipStripeGateway implements MembershipStripeGateway
             currentPeriodEnd: now()->startOfMonth()->addMonth()->toDateString(),
             latestInvoiceStatus: $this->nextCreateInvoiceStatus,
             latestInvoiceId: 'in_fake_'.$this->sequence,
+            clientSecret: $this->nextCreateClientSecret,
         );
 
         $this->nextCreateStripeStatus = 'active';
         $this->nextCreateInvoiceStatus = 'paid';
+        $this->nextCreateClientSecret = null;
         $this->idempotent[$command->idempotencyKey] = $result;
         $this->subscriptions[$subscriptionId] = $result;
 
