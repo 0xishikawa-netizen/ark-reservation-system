@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import { PageHeader, SectionCard } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 
 defineOptions({ layout: CustomerLayout });
@@ -33,8 +34,13 @@ const genderLabel = (value: string | null): string => {
 <template>
     <Head title="プロフィール" />
 
-    <v-card title="プロフィール">
-        <v-list lines="two">
+    <PageHeader
+        title="プロフィール"
+        subtitle="ご登録いただいているお客様情報を確認できます。"
+    />
+
+    <SectionCard title="登録情報">
+        <v-list lines="two" class="profile-list">
             <v-list-item title="氏名" :subtitle="customer.name" />
             <v-list-item title="カナ" :subtitle="customer.kana" />
             <v-list-item title="電話番号" :subtitle="display(customer.phone)" />
@@ -47,10 +53,15 @@ const genderLabel = (value: string | null): string => {
             />
         </v-list>
 
-        <v-card-actions class="pa-4">
-            <v-btn color="primary" href="/mypage/profile/edit">
-                プロフィールを編集
-            </v-btn>
-        </v-card-actions>
-    </v-card>
+        <v-btn color="primary" href="/mypage/profile/edit" class="mt-4">
+            プロフィールを編集
+        </v-btn>
+    </SectionCard>
 </template>
+
+<style scoped>
+.profile-list {
+    margin: calc(var(--ark-space-2) * -1) calc(var(--ark-space-4) * -1) 0;
+    background: transparent;
+}
+</style>

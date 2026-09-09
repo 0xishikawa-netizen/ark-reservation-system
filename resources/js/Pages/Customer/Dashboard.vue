@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 
 defineOptions({ layout: CustomerLayout });
@@ -57,7 +58,7 @@ const go = (href: string): void => {
         v-if="props.attention.length > 0"
         type="warning"
         variant="tonal"
-        class="mb-4"
+        class="mb-5"
         density="comfortable"
     >
         <ul class="pl-4 mb-0">
@@ -65,55 +66,67 @@ const go = (href: string): void => {
         </ul>
     </v-alert>
 
-    <v-card class="mb-4">
-        <v-card-item>
-            <v-card-title class="text-subtitle-1">次回のご予約</v-card-title>
-        </v-card-item>
-        <v-card-text>
-            <template v-if="props.next_reservation">
-                <div class="text-h6">{{ props.next_reservation.starts_at }}</div>
-                <div class="text-body-2 text-medium-emphasis">
-                    {{ props.next_reservation.service_name }}
-                    <template v-if="props.next_reservation.staff_name">
-                        ／ {{ props.next_reservation.staff_name }}
-                    </template>
-                </div>
-                <v-chip size="small" class="mt-2" color="primary" variant="tonal">
-                    {{ props.next_reservation.status_label }}
-                </v-chip>
-                <div class="mt-3">
-                    <v-btn
-                        size="small"
-                        variant="text"
-                        color="primary"
-                        @click="go(`/mypage/reservations/${props.next_reservation.id}`)"
-                    >
-                        予約の詳細
-                    </v-btn>
-                    <v-btn size="small" variant="text" @click="go('/mypage/reservations')">
-                        予約一覧（今後 {{ props.upcoming_count }} 件）
-                    </v-btn>
-                </div>
-            </template>
-            <template v-else>
-                <p class="text-body-2 text-medium-emphasis mb-3">今後のご予約はありません。</p>
-            </template>
-            <v-btn color="primary" block class="mt-2" @click="go('/reserve')">予約する</v-btn>
-        </v-card-text>
-    </v-card>
+    <PageHeader
+        title="マイページ"
+        subtitle="ご予約や会員情報、お支払い状況をまとめて確認できます。"
+    />
 
-    <v-card class="mb-4">
-        <v-card-item>
-            <v-card-title class="text-subtitle-1">利用権（会員）</v-card-title>
-        </v-card-item>
-        <v-card-text>
+    <SectionCard title="次回のご予約" class="next-reservation-card mb-6">
+        <template v-if="props.next_reservation">
+            <div class="text-h5 font-weight-bold text-primary">
+                {{ props.next_reservation.starts_at }}
+            </div>
+            <div class="text-body-1 mt-2">
+                {{ props.next_reservation.service_name }}
+                <template v-if="props.next_reservation.staff_name">
+                    <span class="text-medium-emphasis">／</span>
+                    {{ props.next_reservation.staff_name }}
+                </template>
+            </div>
+            <StatusChip
+                :status="props.next_reservation.status"
+                :label="props.next_reservation.status_label"
+                class="mt-3"
+            />
+
+            <div class="next-reservation-actions mt-5">
+                <v-btn color="primary" @click="go('/reserve')">予約する</v-btn>
+                <v-btn
+                    variant="outlined"
+                    color="primary"
+                    @click="go(`/mypage/reservations/${props.next_reservation.id}`)"
+                >
+                    予約の詳細
+                </v-btn>
+                <v-btn variant="text" @click="go('/mypage/reservations')">
+                    予約一覧（今後 {{ props.upcoming_count }} 件）
+                </v-btn>
+            </div>
+        </template>
+        <EmptyState
+            v-else
+            icon="mdi-calendar-blank-outline"
+            title="現在ご予定の予約はありません"
+            description="ご都合のよい日時を選んで、次回のご予約をお取りいただけます。"
+        >
+            <template #action>
+                <v-btn color="primary" @click="go('/reserve')">予約する</v-btn>
+            </template>
+        </EmptyState>
+    </SectionCard>
+
+    <div class="dashboard-sections">
+        <SectionCard title="利用権（会員）">
+            <template #append>
+                <StatusChip
+                    v-if="props.membership"
+                    :status="props.membership.status"
+                    :label="props.membership.status_label"
+                />
+            </template>
+
             <template v-if="props.membership">
-                <div class="d-flex align-center ga-2">
-                    <v-chip size="small" color="primary" variant="tonal">
-                        {{ props.membership.status_label }}
-                    </v-chip>
-                    <span class="text-body-2">当期残り {{ props.membership.available }} 回</span>
-                </div>
+                <div class="text-h6">当期残り {{ props.membership.available }} 回</div>
                 <div
                     v-if="props.membership.current_period_end"
                     class="text-body-2 text-medium-emphasis mt-1"
@@ -133,14 +146,9 @@ const go = (href: string): void => {
             <v-btn variant="text" color="primary" class="mt-2" @click="go('/mypage/membership')">
                 会員ページへ
             </v-btn>
-        </v-card-text>
-    </v-card>
+        </SectionCard>
 
-    <v-card class="mb-4">
-        <v-card-item>
-            <v-card-title class="text-subtitle-1">回数券</v-card-title>
-        </v-card-item>
-        <v-card-text>
+        <SectionCard title="回数券">
             <template v-if="props.tickets.total_available > 0">
                 <div class="text-h6">残り {{ props.tickets.total_available }} 回</div>
                 <div
@@ -156,14 +164,9 @@ const go = (href: string): void => {
             <v-btn variant="text" color="primary" class="mt-2" @click="go('/mypage/tickets')">
                 回数券ページへ
             </v-btn>
-        </v-card-text>
-    </v-card>
+        </SectionCard>
 
-    <v-card>
-        <v-card-item>
-            <v-card-title class="text-subtitle-1">直近のお支払い</v-card-title>
-        </v-card-item>
-        <v-card-text>
+        <SectionCard title="直近のお支払い">
             <template v-if="props.recent_payment">
                 <div class="text-h6">{{ yen(props.recent_payment.amount) }}</div>
                 <div class="text-body-2 text-medium-emphasis mt-1">
@@ -179,6 +182,31 @@ const go = (href: string): void => {
             <v-btn variant="text" color="primary" class="mt-2" @click="go('/mypage/payments')">
                 支払い履歴へ
             </v-btn>
-        </v-card-text>
-    </v-card>
+        </SectionCard>
+    </div>
 </template>
+
+<style scoped>
+.next-reservation-card {
+    border-top: 3px solid rgb(var(--v-theme-primary));
+}
+
+.next-reservation-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ark-space-2);
+}
+
+.dashboard-sections {
+    display: grid;
+    gap: var(--ark-space-4);
+}
+
+@media (min-width: 600px) {
+    .next-reservation-actions {
+        flex-direction: row;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+}
+</style>

@@ -45,21 +45,31 @@ const go = (href: string): void => {
 
 <template>
     <v-app>
-        <v-app-bar color="primary" density="comfortable">
-            <v-app-bar-title>{{ page.props.name }}</v-app-bar-title>
+        <v-app-bar color="surface" density="comfortable" border="b">
+            <v-app-bar-title class="text-primary font-weight-bold">
+                {{ page.props.name }}
+            </v-app-bar-title>
 
             <template #append>
-                <span v-if="page.props.auth.user" class="d-none d-sm-inline mr-3">
+                <span
+                    v-if="page.props.auth.user"
+                    class="d-none d-sm-inline mr-2 text-body-2 text-medium-emphasis"
+                >
                     {{ page.props.auth.user.name }}
                 </span>
-                <v-btn v-if="page.props.auth.user" variant="text" @click="logout">
+                <v-btn
+                    v-if="page.props.auth.user"
+                    variant="text"
+                    color="primary"
+                    @click="logout"
+                >
                     ログアウト
                 </v-btn>
             </template>
         </v-app-bar>
 
-        <v-main class="bg-grey-lighten-4 pb-16">
-            <v-container class="customer-content px-4 py-6">
+        <v-main class="bg-background pb-16">
+            <v-container class="customer-content px-4 py-8">
                 <v-alert
                     v-if="page.props.flash.success"
                     type="success"
@@ -92,13 +102,17 @@ const go = (href: string): void => {
         <v-bottom-navigation
             :model-value="activeIndex"
             color="primary"
+            bg-color="surface"
+            height="64"
             grow
+            class="customer-bottom-nav"
             aria-label="顧客メニュー"
         >
             <v-btn
-                v-for="item in navItems"
+                v-for="(item, index) in navItems"
                 :key="item.href"
                 :aria-label="item.label"
+                :aria-current="activeIndex === index ? 'page' : undefined"
                 @click="go(item.href)"
             >
                 <v-icon>{{ item.icon }}</v-icon>
@@ -111,5 +125,31 @@ const go = (href: string): void => {
 <style scoped>
 .customer-content {
     max-width: 48rem;
+}
+
+.customer-bottom-nav {
+    border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.customer-bottom-nav :deep(.v-btn) {
+    position: relative;
+    min-width: 44px;
+    min-height: 56px;
+    padding-inline: 2px;
+}
+
+.customer-bottom-nav :deep(.v-btn--active)::after {
+    position: absolute;
+    top: 0;
+    left: 22%;
+    width: 56%;
+    height: 3px;
+    border-radius: 0 0 var(--ark-radius-sm) var(--ark-radius-sm);
+    background: rgb(var(--v-theme-primary));
+    content: '';
+}
+
+.customer-bottom-nav :deep(.v-btn__content) {
+    gap: 1px;
 }
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 
 defineOptions({ layout: CustomerLayout });
@@ -74,57 +75,54 @@ function signed(delta: number): string {
 <template>
     <Head title="回数券" />
 
-    <div class="mb-5">
-        <h1 class="text-h5 mb-2">回数券</h1>
-        <p class="text-body-2 text-medium-emphasis mb-0">
-            回数券のご購入は店頭でご相談ください。
-        </p>
-    </div>
+    <PageHeader title="回数券" subtitle="回数券のご購入は店頭でご相談ください。" />
 
     <section aria-labelledby="wallets-heading" class="mb-8">
         <h2 id="wallets-heading" class="text-h6 mb-3">保有回数券</h2>
-        <v-alert v-if="wallets.length === 0" type="info" variant="tonal">
-            保有している回数券はありません。
-        </v-alert>
+        <EmptyState
+            v-if="wallets.length === 0"
+            icon="mdi-ticket-outline"
+            title="保有している回数券はありません"
+            description="回数券のご購入については、店頭でスタッフへご相談ください。"
+        />
         <div v-else class="d-flex flex-column ga-3">
-            <v-card v-for="wallet in wallets" :key="wallet.id" variant="outlined">
-                <v-card-title class="d-flex align-center justify-space-between ga-2 flex-wrap">
-                    <span class="text-subtitle-1">{{ wallet.product_name }}</span>
-                    <v-chip
-                        size="small"
-                        :color="wallet.status === 'active' ? 'success' : 'default'"
-                    >
-                        {{ statusLabels[wallet.status] ?? wallet.status }}
-                    </v-chip>
-                </v-card-title>
-                <v-card-text>
-                    <div class="ticket-counts mb-4">
-                        <div>
-                            <div class="text-caption text-medium-emphasis">利用可能</div>
-                            <div class="text-h5 text-primary">{{ wallet.available }}回</div>
-                        </div>
-                        <div>
-                            <div class="text-caption text-medium-emphasis">予約中</div>
-                            <div class="text-h6">{{ wallet.held }}回</div>
-                        </div>
-                        <div>
-                            <div class="text-caption text-medium-emphasis">合計</div>
-                            <div class="text-h6">{{ wallet.total }}回</div>
-                        </div>
+            <SectionCard v-for="wallet in wallets" :key="wallet.id" :title="wallet.product_name">
+                <template #append>
+                    <StatusChip
+                        :status="wallet.status"
+                        :label="statusLabels[wallet.status] ?? wallet.status"
+                    />
+                </template>
+
+                <div class="ticket-counts mb-4">
+                    <div>
+                        <div class="text-caption text-medium-emphasis">利用可能</div>
+                        <div class="text-h5 text-primary">{{ wallet.available }}回</div>
                     </div>
-                    <div class="text-body-2">
-                        有効期限：{{ formatDate(wallet.expires_at) }}
+                    <div>
+                        <div class="text-caption text-medium-emphasis">予約中</div>
+                        <div class="text-h6">{{ wallet.held }}回</div>
                     </div>
-                </v-card-text>
-            </v-card>
+                    <div>
+                        <div class="text-caption text-medium-emphasis">合計</div>
+                        <div class="text-h6">{{ wallet.total }}回</div>
+                    </div>
+                </div>
+                <div class="text-body-2">
+                    有効期限：{{ formatDate(wallet.expires_at) }}
+                </div>
+            </SectionCard>
         </div>
     </section>
 
     <section aria-labelledby="history-heading">
         <h2 id="history-heading" class="text-h6 mb-3">利用履歴</h2>
-        <v-alert v-if="history.length === 0" type="info" variant="tonal">
-            利用履歴はありません。
-        </v-alert>
+        <EmptyState
+            v-if="history.length === 0"
+            icon="mdi-history"
+            title="利用履歴はありません"
+            description="回数券の購入や利用があると、こちらに履歴が表示されます。"
+        />
         <v-card v-else variant="outlined">
             <v-list lines="two">
                 <template v-for="(item, index) in history" :key="item.id">
