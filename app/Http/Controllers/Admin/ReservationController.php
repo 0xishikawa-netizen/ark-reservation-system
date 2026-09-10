@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Reservation\UpdateReservationNotes;
+use App\Domain\Payment\ReservationAdjustmentService;
 use App\Domain\Reservation\AvailabilityService;
+use App\Domain\Reservation\RescheduleInput;
 use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
-use App\Domain\Reservation\RescheduleInput;
 use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
 use App\Exceptions\Reservation\StaleReservationException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\AdjustReservationAmountRequest;
 use App\Http\Requests\Admin\StoreAdminReservationRequest;
 use App\Http\Requests\Admin\UpdateAdminReservationRequest;
 use App\Models\Reservation;
@@ -20,6 +22,7 @@ use App\Models\User;
 use App\Queries\CustomerLookupQuery;
 use App\Queries\ReservationFormOptionsQuery;
 use App\Queries\ReservationListQuery;
+use App\Queries\ReservationPaymentSummaryQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -135,11 +138,61 @@ final class ReservationController extends Controller
     public function edit(
         Reservation $reservation,
         ReservationFormOptionsQuery $query,
+        ReservationPaymentSummaryQuery $paymentSummary,
     ): Response {
         return Inertia::render('Admin/Reservations/Edit', [
             'reservation' => $query->reservation((int) $reservation->id),
+            'payment_summary' => $paymentSummary->get($reservation),
             ...$query->get(),
         ]);
+    }
+
+    public function adjustment(
+        AdjustReservationAmountRequest $request,
+        Reservation $reservation,
+        ReservationAdjustmentService $adjustments,
+    ): RedirectResponse {
+        $finalAmount = (int) $request->validated('final_amount');
+
+        if ($finalAmount < $adjustments->netReceived($reservation)) {
+            abort_unless($request->user()?->can('refund.execute') === true, 403);
+        }
+
+        $result = $adjustments->requestAdjustment(
+            $reservation,
+            $finalAmount,
+            $this->userFor($request),
+        );
+
+        if (($result['refund_failed'] ?? false) === true) {
+            return back()->with(
+                'error',
+                '差額返金の一部または全部を完了できませんでした。要対応として確認してください。',
+            );
+        }
+
+        return match ($result['outcome']) {
+            'addon_created' => back()->with(
+                'success',
+                '差額のお支払いリンクを発行しました。お客様のマイページに表示されます。',
+            ),
+            'addon_reused' => back()->with(
+                'info',
+                '発行済みの差額支払いリンクをそのまま利用します。',
+            ),
+            'refunded' => back()->with(
+                'success',
+                '施術内容変更による差額を返金しました。',
+            ),
+            'no_change' => back()->with(
+                'info',
+                '実質受領額と最終施術金額が一致しているため、金銭処理はありません。',
+            ),
+            default => back()->with(
+                'error',
+                '差額のお支払いリンクを発行できませんでした。要対応として確認してください。',
+            ),
+        };
     }
 
     public function update(

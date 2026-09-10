@@ -239,6 +239,26 @@ Conflict Type: `TIME_CHANGED_BOTH` / `STATUS_CHANGED_BOTH` / `CANCEL_VS_UPDATE` 
 - **人間操作のみ** audit（manual retry / 将来の conflict resolution / mapping repair）。
 - 自動 Job の Telemetry は `reservation_sync_events` に閉じ、`audit_logs` へ大量投入しない。
 
+## 当日の施術金額変更と差額決済（Phase 9/10 追記）
+
+- 管理者が `reservations.final_amount`（最終施術金額）を設定し、予約に紐づく capture 済み
+  `payments.amount - payments.refunded_amount` の合計を「実質受領額」とする。pending / authorized /
+  failed / voided は実質受領額に含めない。既存 Payment の `amount` は変更しない。
+- 最終施術金額 > 実質受領額の場合は、不足分だけの `single_addon` Payment を別行で作成する。
+  保存カードの off-session 自動課金は行わず、顧客がマイページの Stripe Payment Element
+  で3DS/SCAを含めて確定する。`parent_payment_id` は当初の `single` Payment への追跡用で、
+  金額計算は必ず `reservation_id` 単位で行う。
+- 同じ最終金額の再送は有効期限内の追加 Payment を再利用し、2重の PaymentIntent を作らない。
+  追加 Payment の pending / authorized 中に金額が再変更された場合は、古い PaymentIntent を
+  transaction 外で void してから、現在の実質受領額に対する不足額全体を1件で作り直す。
+  void 結果が不明な場合は `needs_attention` にし、新しい追加 Payment は重ねない。
+- 最終施術金額 < 実質受領額の場合は既存の部分返金経路を使い、capture が新しい
+  Payment から順に返金する。各返金は `amount - refunded_amount` 以下、総額は
+  `net_received - final_amount` 以下に制限し、追加決済後の値下げでも過剰返金しない。
+- DB 更新と Stripe HTTP の境界を分離し、`final_amount` は Stripe 失敗時も巻き戻さない。
+  FakeStripeGateway で作成・再利用・void・capture・部分返金・webhook の検証を行う。
+  **Stripe Test Mode による実 Payment Element / 3DS/SCA QA は INCOMPLETE** とし、実施後に完了扱いとする。
+
 ## Security / PII
 
 - Provider credential は `.env` / secure config のみ。git / DB 平文 / Vue props / frontend JS / log /

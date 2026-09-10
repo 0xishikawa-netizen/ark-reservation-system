@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import { SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -48,11 +49,45 @@ interface AvailabilitySlot {
     available_staff_ids: number[];
 }
 
+interface PaymentRefundRow {
+    amount: number;
+    status: string;
+    reason: string;
+    created_at: string | null;
+}
+
+interface PaymentRow {
+    id: number;
+    kind: string;
+    kind_label: string;
+    amount: number;
+    status: string;
+    status_label: string;
+    stripe_payment_intent_id: string | null;
+    stripe_charge_id: string | null;
+    refunded_amount: number;
+    needs_attention: boolean;
+    created_at: string | null;
+    refunds: PaymentRefundRow[];
+}
+
+interface PaymentSummary {
+    original_amount: number;
+    captured_total: number;
+    refunded_total: number;
+    net_received: number;
+    final_amount: number | null;
+    delta: number;
+    in_flight_addon: { id: number; amount: number; status: string } | null;
+    payments: PaymentRow[];
+}
+
 const props = defineProps<{
     reservation: ReservationDetail;
     services: ServiceOption[];
     staff: StaffOption[];
     booths: BoothOption[];
+    payment_summary: PaymentSummary;
 }>();
 
 const selectedStaffId = ref<number | null>(props.reservation.staff_id);
@@ -65,6 +100,9 @@ const availabilityError = ref('');
 const dialog = ref<'cancel' | 'complete' | 'no-show' | null>(null);
 const actionProcessing = ref(false);
 const cancelReason = ref('');
+const adjustmentForm = useForm({
+    final_amount: props.payment_summary.final_amount ?? props.payment_summary.original_amount,
+});
 
 const service = computed<ServiceOption | null>(() =>
     props.services.find((item) => item.id === props.reservation.service_id) ?? null,
@@ -221,6 +259,20 @@ function formatDateTime(value: string): string {
 
 function timeLabel(value: string): string {
     return value.slice(11, 16);
+}
+
+function formatMoney(value: number): string {
+    return `${new Intl.NumberFormat('ja-JP').format(value)}円`;
+}
+
+function submitAdjustment(): void {
+    if (adjustmentForm.processing) {
+        return;
+    }
+
+    adjustmentForm.post(`/admin/reservations/${props.reservation.id}/adjustment`, {
+        preserveScroll: true,
+    });
 }
 </script>
 
@@ -386,6 +438,84 @@ function timeLabel(value: string): string {
             </v-card>
         </v-col>
     </v-row>
+
+    <SectionCard
+        title="決済サマリ"
+        subtitle="最終施術金額と実質受領額の差額を追加決済または返金で調整します。"
+        class="mt-6 ark-table-section"
+    >
+        <v-alert
+            v-if="payment_summary.in_flight_addon"
+            type="warning"
+            variant="tonal"
+            class="mb-4"
+        >
+            追加決済 #{{ payment_summary.in_flight_addon.id }}（{{ formatMoney(payment_summary.in_flight_addon.amount) }}）は
+            {{ payment_summary.in_flight_addon.status }} です。
+        </v-alert>
+
+        <v-row dense class="mb-2">
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">当初金額</div><div>{{ formatMoney(payment_summary.original_amount) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">capture総額</div><div>{{ formatMoney(payment_summary.captured_total) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">返金総額</div><div>{{ formatMoney(payment_summary.refunded_total) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">実質受領額</div><div class="font-weight-bold">{{ formatMoney(payment_summary.net_received) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">最終施術金額</div><div>{{ payment_summary.final_amount === null ? '未設定' : formatMoney(payment_summary.final_amount) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">差額</div><div>{{ formatMoney(payment_summary.delta) }}</div></v-col>
+        </v-row>
+
+        <v-form class="d-flex align-start ga-3 flex-wrap mb-5" @submit.prevent="submitAdjustment">
+            <v-text-field
+                v-model.number="adjustmentForm.final_amount"
+                type="number"
+                min="0"
+                label="最終施術金額（円）"
+                :error-messages="adjustmentForm.errors.final_amount"
+                style="max-width: 280px"
+            />
+            <v-btn
+                type="submit"
+                color="primary"
+                height="56"
+                :loading="adjustmentForm.processing"
+                :disabled="adjustmentForm.processing"
+            >
+                差額を反映
+            </v-btn>
+        </v-form>
+
+        <v-table density="compact">
+            <thead>
+                <tr>
+                    <th>種類</th><th class="text-right">金額</th><th>状態</th>
+                    <th>PaymentIntent</th><th>Charge</th><th class="text-right">返金済み</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template v-for="payment in payment_summary.payments" :key="payment.id">
+                    <tr>
+                        <td>
+                            <a :href="`/admin/payments/${payment.id}`">{{ payment.kind_label }}</a>
+                            <v-chip v-if="payment.needs_attention" color="warning" size="x-small" class="ml-2">要対応</v-chip>
+                        </td>
+                        <td class="text-right">{{ formatMoney(payment.amount) }}</td>
+                        <td><StatusChip :status="payment.status" :label="payment.status_label" /></td>
+                        <td class="text-caption">{{ payment.stripe_payment_intent_id ?? '—' }}</td>
+                        <td class="text-caption">{{ payment.stripe_charge_id ?? '—' }}</td>
+                        <td class="text-right">{{ formatMoney(payment.refunded_amount) }}</td>
+                    </tr>
+                    <tr v-for="(refund, index) in payment.refunds" :key="`${payment.id}-refund-${index}`" class="bg-surface-light">
+                        <td class="pl-8 text-caption">↳ 返金：{{ refund.reason }}</td>
+                        <td class="text-right text-caption">-{{ formatMoney(refund.amount) }}</td>
+                        <td><StatusChip :status="refund.status" :label="refund.status" /></td>
+                        <td colspan="3" class="text-caption">{{ refund.created_at ?? '—' }}</td>
+                    </tr>
+                </template>
+                <tr v-if="payment_summary.payments.length === 0">
+                    <td colspan="6" class="text-center text-medium-emphasis py-6">決済履歴はありません。</td>
+                </tr>
+            </tbody>
+        </v-table>
+    </SectionCard>
 
     <v-dialog :model-value="dialog !== null" max-width="520" @update:model-value="value => { if (!value) dialog = null; }">
         <v-card :title="actionTitle()">

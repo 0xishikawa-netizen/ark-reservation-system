@@ -27,6 +27,7 @@ use App\Http\Controllers\Customer\MembershipController as CustomerMembershipCont
 use App\Http\Controllers\Customer\PaymentController as CustomerPaymentController;
 use App\Http\Controllers\Customer\PaymentHistoryController as CustomerPaymentHistoryController;
 use App\Http\Controllers\Customer\ProfileController;
+use App\Http\Controllers\Customer\ReservationAddonPaymentController;
 use App\Http\Controllers\Customer\ReservationController as CustomerReservationController;
 use App\Http\Controllers\Customer\TicketController as CustomerTicketPageController;
 use App\Http\Controllers\HomeController;
@@ -72,6 +73,11 @@ Route::middleware(['web', 'auth', 'verified'])
         Route::post('reservations/{reservation}/payment/sync', [CustomerPaymentController::class, 'sync'])
             ->middleware('throttle:reserve')
             ->name('reservations.payment.sync');
+        Route::get('reservations/{reservation}/addon/checkout', [ReservationAddonPaymentController::class, 'show'])
+            ->name('reservations.addon.checkout');
+        Route::post('reservations/{reservation}/addon/payment/sync', [ReservationAddonPaymentController::class, 'sync'])
+            ->middleware('throttle:reserve')
+            ->name('reservations.addon.payment.sync');
         Route::get('tickets', [CustomerTicketPageController::class, 'index'])
             ->name('tickets.index');
         Route::get('payments', [CustomerPaymentHistoryController::class, 'index'])
@@ -145,6 +151,9 @@ Route::middleware([
     Route::put('reservations/{reservation}', [AdminReservationController::class, 'update'])
         ->middleware('can:reservations.manage')
         ->name('reservations.update');
+    Route::post('reservations/{reservation}/adjustment', [AdminReservationController::class, 'adjustment'])
+        ->middleware(['can:reservations.manage', 'password.confirm'])
+        ->name('reservations.adjustment');
     Route::patch('reservations/{reservation}/cancel', [AdminReservationController::class, 'cancel'])
         ->middleware('can:reservations.manage')
         ->name('reservations.cancel');

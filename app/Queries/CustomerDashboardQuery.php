@@ -141,6 +141,7 @@ final class CustomerDashboardQuery
     {
         return match ($kind) {
             'single' => 'カード決済',
+            'single_addon' => '追加のお支払い',
             'membership_invoice' => '利用権のお支払い',
             'ticket_purchase' => '回数券のご購入',
             default => 'お支払い',

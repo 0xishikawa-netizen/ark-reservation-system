@@ -176,6 +176,7 @@ final class CustomerOverviewQuery
     {
         return match ($kind) {
             PaymentKind::Single => '予約決済',
+            PaymentKind::SingleAddon => '追加のお支払い',
             PaymentKind::TicketPurchase => '回数券購入',
             PaymentKind::MembershipInvoice => '会員利用料',
         };

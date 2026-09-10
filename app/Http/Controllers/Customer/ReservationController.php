@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Customer;
 
+use App\Domain\Payment\ReservationAdjustmentService;
 use App\Domain\Reservation\AvailabilityService;
-use App\Domain\Reservation\ReservationService;
 use App\Domain\Reservation\RescheduleInput;
+use App\Domain\Reservation\ReservationService;
 use App\Enums\Reservation\ReservationStatus;
 use App\Exceptions\Reservation\SlotUnavailableException;
 use App\Http\Controllers\Controller;
@@ -34,8 +35,11 @@ class ReservationController extends Controller
         ]);
     }
 
-    public function show(Request $request, Reservation $reservation): Response
-    {
+    public function show(
+        Request $request,
+        Reservation $reservation,
+        ReservationAdjustmentService $adjustments,
+    ): Response {
         $this->customerFor($request);
         $this->authorize('view', $reservation);
         $reservation->loadMissing([
@@ -44,6 +48,7 @@ class ReservationController extends Controller
         ]);
         $canModify = $reservation->status === ReservationStatus::Confirmed
             && $reservation->starts_at->isFuture();
+        $addon = $adjustments->inFlightAddon($reservation);
 
         return Inertia::render('Customer/Reservations/Show', [
             'reservation' => [
@@ -65,6 +70,11 @@ class ReservationController extends Controller
                 'cancel_reason' => $reservation->cancel_reason,
                 'can_cancel' => $canModify,
                 'can_reschedule' => $canModify,
+            ],
+            'addon_payment' => $addon === null ? null : [
+                'id' => (int) $addon->id,
+                'amount' => (int) $addon->amount,
+                'status' => $addon->status->value,
             ],
         ]);
     }

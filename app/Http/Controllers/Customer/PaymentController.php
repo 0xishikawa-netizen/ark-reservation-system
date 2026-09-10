@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Customer;
 
 use App\Domain\Payment\ReservationCheckoutSaga;
+use App\Enums\Payment\PaymentKind;
 use App\Enums\Payment\PaymentStatus;
 use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\ReservationStatus;
@@ -89,6 +90,7 @@ class PaymentController extends Controller
 
         $payment = Payment::query()
             ->where('reservation_id', $reservation->getKey())
+            ->where('kind', PaymentKind::Single->value)
             ->whereIn('status', [
                 PaymentStatus::Pending->value,
                 PaymentStatus::Authorized->value,

@@ -19,12 +19,14 @@ class Payment extends Model
     protected $fillable = [
         'customer_id',
         'reservation_id',
+        'parent_payment_id',
         'kind',
         'provider',
         'payment_operation_id',
         'amount',
         'currency',
         'capture_method',
+        'payment_expires_at',
         'stripe_payment_intent_id',
         'stripe_charge_id',
         'authorized_at',
@@ -48,6 +50,17 @@ class Payment extends Model
         return $this->belongsTo(Customer::class, 'customer_id', 'user_id');
     }
 
+    public function parentPayment(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_payment_id');
+    }
+
+    /** @return HasMany<Payment, $this> */
+    public function addonPayments(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_payment_id');
+    }
+
     /** @return HasMany<PaymentRefund, $this> */
     public function refunds(): HasMany
     {
@@ -68,6 +81,7 @@ class Payment extends Model
             'amount' => 'integer',
             'refunded_amount' => 'integer',
             'needs_attention' => 'boolean',
+            'payment_expires_at' => 'datetime',
             'authorized_at' => 'datetime',
             'paid_at' => 'datetime',
             'voided_at' => 'datetime',

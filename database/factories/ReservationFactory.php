@@ -57,6 +57,7 @@ class ReservationFactory extends Factory
             'source' => ReservationSource::Admin,
             'payment_method' => PaymentMethod::Onsite,
             'payment_status' => PaymentStatus::Unpaid,
+            'final_amount' => null,
             'payment_expires_at' => null,
             'status' => ReservationStatus::Confirmed,
             'attended_at' => null,

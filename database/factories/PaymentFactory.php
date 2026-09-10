@@ -20,6 +20,7 @@ class PaymentFactory extends Factory
     {
         return [
             'reservation_id' => Reservation::factory(),
+            'parent_payment_id' => null,
             'customer_id' => static fn (array $attributes): int => (int) Reservation::query()
                 ->findOrFail($attributes['reservation_id'])
                 ->customer_id,
@@ -29,6 +30,7 @@ class PaymentFactory extends Factory
             'amount' => fake()->numberBetween(1000, 30000),
             'currency' => 'jpy',
             'status' => PaymentStatus::Pending,
+            'payment_expires_at' => null,
             'capture_method' => 'manual',
             'stripe_payment_intent_id' => null,
             'stripe_charge_id' => null,

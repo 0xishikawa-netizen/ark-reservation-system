@@ -297,6 +297,13 @@ const logout = (): void => {
                 >
                     {{ page.props.flash.error }}
                 </v-alert>
+                <v-alert
+                    v-if="page.props.flash.info"
+                    type="info"
+                    class="mb-4"
+                >
+                    {{ page.props.flash.info }}
+                </v-alert>
 
                 <slot />
             </v-container>

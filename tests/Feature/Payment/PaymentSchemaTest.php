@@ -27,12 +27,14 @@ class PaymentSchemaTest extends TestCase
             'id',
             'customer_id',
             'reservation_id',
+            'parent_payment_id',
             'kind',
             'provider',
             'payment_operation_id',
             'amount',
             'currency',
             'status',
+            'payment_expires_at',
             'capture_method',
             'stripe_payment_intent_id',
             'stripe_charge_id',
@@ -181,7 +183,7 @@ class PaymentSchemaTest extends TestCase
             array_column(PaymentStatus::cases(), 'value'),
         );
         $this->assertSame(
-            ['single', 'ticket_purchase', 'membership_invoice'],
+            ['single', 'single_addon', 'ticket_purchase', 'membership_invoice'],
             array_column(PaymentKind::cases(), 'value'),
         );
         $this->assertSame(

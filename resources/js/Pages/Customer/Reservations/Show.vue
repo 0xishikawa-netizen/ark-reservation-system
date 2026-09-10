@@ -30,7 +30,16 @@ interface AvailabilitySlot {
     available_staff_ids: number[];
 }
 
-const props = defineProps<{ reservation: ReservationDetail }>();
+interface AddonPayment {
+    id: number;
+    amount: number;
+    status: string;
+}
+
+const props = defineProps<{
+    reservation: ReservationDetail;
+    addon_payment: AddonPayment | null;
+}>();
 
 const changeOpen = ref(false);
 const cancelOpen = ref(false);
@@ -168,6 +177,23 @@ function cancelReservation(): void {
 
 <template>
     <Head title="予約詳細" />
+
+    <v-alert
+        v-if="addon_payment"
+        type="warning"
+        variant="tonal"
+        class="mx-auto mb-4"
+        max-width="640"
+    >
+        <div class="font-weight-bold mb-1">差額のお支払いが必要です</div>
+        <div class="mb-3">{{ formatPrice(addon_payment.amount) }} のお支払い手続きをお願いします。</div>
+        <v-btn
+            color="primary"
+            :href="`/mypage/reservations/${reservation.id}/addon/checkout`"
+        >
+            差額のお支払い
+        </v-btn>
+    </v-alert>
 
     <v-card class="mx-auto" max-width="640">
         <v-card-title class="d-flex align-center ga-3 pt-5">

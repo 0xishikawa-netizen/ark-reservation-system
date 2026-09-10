@@ -68,6 +68,7 @@ final class ReservationCheckoutSaga
 
             $existing = Payment::query()
                 ->where('reservation_id', $locked->getKey())
+                ->where('kind', PaymentKind::Single->value)
                 ->whereIn('status', [
                     PaymentStatus::Pending->value,
                     PaymentStatus::Authorized->value,
@@ -116,7 +117,7 @@ final class ReservationCheckoutSaga
         // authorize 済みなら capture する。authority=local のため外部予約登録は挟まらない。
         // ただし予約が既に失効・キャンセルされている場合は capture しない。
         // 解放済みの枠に対して課金してしまうため（期限切れ処理と webhook の競合）。
-        if ($payment->status === PaymentStatus::Authorized && $this->reservationStillAwaitingPayment($payment)) {
+        if ($payment->status === PaymentStatus::Authorized && $this->paymentCanBeCaptured($payment)) {
             $payment = $this->payments->capture($payment);
         }
 
@@ -124,11 +125,20 @@ final class ReservationCheckoutSaga
     }
 
     /**
-     * capture してよい予約かどうか。失効・キャンセル済みなら capture しない。
+     * capture してよい決済かどうか。失効・キャンセル済みなら capture しない。
      */
-    private function reservationStillAwaitingPayment(Payment $payment): bool
+    private function paymentCanBeCaptured(Payment $payment): bool
     {
         $reservation = Reservation::query()->find($payment->reservation_id);
+
+        if ($payment->kind === PaymentKind::SingleAddon) {
+            return $reservation !== null
+                && in_array($reservation->status, [
+                    ReservationStatus::Confirmed,
+                    ReservationStatus::Completed,
+                ], true)
+                && ($payment->payment_expires_at === null || $payment->payment_expires_at->isFuture());
+        }
 
         return $reservation !== null
             && $reservation->status === ReservationStatus::PendingPayment;
@@ -139,6 +149,11 @@ final class ReservationCheckoutSaga
      */
     public function reflectOnReservation(Payment $payment): Payment
     {
+        // 追加決済は予約本体の決済状態・予約状態を変更しない。
+        if ($payment->kind === PaymentKind::SingleAddon) {
+            return $payment->refresh();
+        }
+
         $target = match ($payment->status) {
             PaymentStatus::Pending => ReservationPaymentStatus::PendingPayment,
             PaymentStatus::Authorized => ReservationPaymentStatus::Authorized,
@@ -188,6 +203,7 @@ final class ReservationCheckoutSaga
 
         $payment = Payment::query()
             ->where('reservation_id', $reservation->getKey())
+            ->where('kind', PaymentKind::Single->value)
             ->whereIn('status', [
                 PaymentStatus::Pending->value,
                 PaymentStatus::Authorized->value,

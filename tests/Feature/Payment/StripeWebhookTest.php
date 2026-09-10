@@ -7,6 +7,7 @@ namespace Tests\Feature\Payment;
 use App\Domain\Payment\Gateway\Dto\PaymentIntentResult;
 use App\Domain\Payment\Gateway\FakeStripeGateway;
 use App\Domain\Payment\Gateway\StripeGateway;
+use App\Enums\Payment\PaymentKind;
 use App\Enums\Payment\PaymentStatus;
 use App\Enums\Payment\WebhookEventStatus;
 use App\Enums\Reservation\PaymentStatus as ReservationPaymentStatus;
@@ -16,8 +17,11 @@ use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\Service;
 use App\Models\WebhookEvent;
+use Database\Seeders\RolePermissionSeeder;
+use Database\Seeders\SettingsSeeder;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 class StripeWebhookTest extends TestCase
@@ -32,6 +36,7 @@ class StripeWebhookTest extends TestCase
     {
         parent::setUp();
 
+        $this->seed([RolePermissionSeeder::class, SettingsSeeder::class]);
         config()->set('stripe.webhook_secret', self::SECRET);
 
         $gateway = app(StripeGateway::class);
@@ -154,6 +159,36 @@ class StripeWebhookTest extends TestCase
 
     // ---------- その他 ----------
 
+    public function test_addon_succeeded_webhook_captures_addon_idempotently(): void
+    {
+        $customer = Customer::factory()->create();
+        $service = Service::factory()->create(['price' => 5000]);
+        $reservation = Reservation::factory()->create([
+            'customer_id' => $customer->user_id,
+            'service_id' => $service->id,
+            'status' => ReservationStatus::Confirmed,
+            'payment_status' => ReservationPaymentStatus::Paid,
+        ]);
+        $addon = Payment::factory()->create([
+            'customer_id' => $customer->user_id,
+            'reservation_id' => $reservation->id,
+            'kind' => PaymentKind::SingleAddon,
+            'amount' => 1800,
+            'status' => PaymentStatus::Pending,
+            'payment_expires_at' => now()->addMinutes(10),
+            'stripe_payment_intent_id' => 'pi_addon_webhook',
+        ]);
+        $this->gateway->setPaymentIntent($this->intent($addon, 'succeeded', received: 1800));
+        $event = $this->event('evt_addon_succeeded', 'payment_intent.succeeded', $addon);
+
+        $this->postEvent($event)->assertOk();
+        $this->postEvent($event)->assertOk();
+
+        $this->assertSame(PaymentStatus::Succeeded, $addon->refresh()->status);
+        $this->assertSame(ReservationStatus::Confirmed, $reservation->refresh()->status);
+        $this->assertSame(1, WebhookEvent::query()->where('stripe_event_id', 'evt_addon_succeeded')->count());
+    }
+
     public function test_phase6_events_are_ignored_not_processed(): void
     {
         $payment = $this->cardPayment();
@@ -191,7 +226,7 @@ class StripeWebhookTest extends TestCase
     // ---------- helpers ----------
 
     /** @param array<string, mixed> $event */
-    private function postEvent(array $event): \Illuminate\Testing\TestResponse
+    private function postEvent(array $event): TestResponse
     {
         $payload = json_encode($event, JSON_THROW_ON_ERROR);
         $timestamp = time();

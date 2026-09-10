@@ -22,6 +22,10 @@ interface CheckoutProps {
         publishable_key: string;
         client_secret: string | null;
     };
+    checkout?: {
+        kind: 'addon';
+        sync_url: string;
+    };
 }
 
 const props = defineProps<CheckoutProps>();
@@ -60,6 +64,8 @@ let paymentElement: StripeElement | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
 
 const amountLabel = computed(() => `${props.payment.amount.toLocaleString()} 円`);
+const isAddon = computed(() => props.checkout?.kind === 'addon');
+const pageTitle = computed(() => isAddon.value ? '差額のお支払い' : 'お支払い');
 
 const expired = computed(
     () => remainingSeconds.value !== null && remainingSeconds.value <= 0,
@@ -167,7 +173,7 @@ const submit = async (): Promise<void> => {
 
     // 認証結果はサーバー側で Stripe に問い合わせて確定する（client の申告を信用しない）。
     router.post(
-        `/mypage/reservations/${props.reservation.id}/payment/sync`,
+        props.checkout?.sync_url ?? `/mypage/reservations/${props.reservation.id}/payment/sync`,
         {},
         {
             onFinish: () => {
@@ -179,10 +185,10 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Head title="お支払い" />
+    <Head :title="pageTitle" />
 
     <v-container class="py-6" style="max-width: 640px">
-        <h1 class="text-h6 mb-4">お支払い</h1>
+        <h1 class="text-h6 mb-4">{{ pageTitle }}</h1>
 
         <v-card class="mb-4" variant="outlined">
             <v-card-text>
@@ -208,8 +214,13 @@ const submit = async (): Promise<void> => {
             density="comfortable"
             class="mb-4"
         >
-            この予約枠はあと <strong>{{ remainingLabel }}</strong> 確保されています。
-            期限を過ぎると枠は解放されます。
+            <template v-if="isAddon">
+                差額のお支払い期限まであと <strong>{{ remainingLabel }}</strong> です。
+            </template>
+            <template v-else>
+                この予約枠はあと <strong>{{ remainingLabel }}</strong> 確保されています。
+                期限を過ぎると枠は解放されます。
+            </template>
         </v-alert>
 
         <v-alert v-if="expired" type="warning" variant="tonal" class="mb-4">
@@ -244,7 +255,7 @@ const submit = async (): Promise<void> => {
 
         <p class="text-caption text-medium-emphasis mt-4">
             カード情報は Stripe が直接処理します。当店のサーバーには保存されません。
-            お支払いが確定した時点でご予約が完了します。
+            <template v-if="!isAddon">お支払いが確定した時点でご予約が完了します。</template>
         </p>
     </v-container>
 </template>
