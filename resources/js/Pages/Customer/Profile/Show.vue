@@ -53,9 +53,14 @@ const genderLabel = (value: string | null): string => {
             />
         </v-list>
 
-        <v-btn color="primary" href="/mypage/profile/edit" class="mt-4">
-            プロフィールを編集
-        </v-btn>
+        <div class="d-flex ga-3 flex-wrap mt-4">
+            <v-btn color="primary" variant="flat" href="/mypage/profile/edit">
+                プロフィールを編集
+            </v-btn>
+            <v-btn variant="outlined" href="/mypage/security" prepend-icon="mdi-shield-account-outline">
+                セキュリティ設定
+            </v-btn>
+        </div>
     </SectionCard>
 </template>
 

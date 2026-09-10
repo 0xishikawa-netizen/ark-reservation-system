@@ -23,7 +23,7 @@ class EnsureStaffMfa
         'admin.mfa.show',
         'admin.mfa.phone.start',
         'admin.mfa.phone.verify',
-        // TOTP（移行期の代替手段）
+        // TOTP セットアップ導線（setup 中に自分自身をブロックしない）
         'admin.two-factor-setup',
         'two-factor.enable',
         'two-factor.confirm',
@@ -32,12 +32,6 @@ class EnsureStaffMfa
         'two-factor.secret-key',
         'two-factor.recovery-codes',
         'two-factor.regenerate-recovery-codes',
-        // Passkey（第一選択）。setup 中に自分自身でブロックしない。
-        'passkey.registration-options',
-        'passkey.store',
-        'passkey.destroy',
-        'passkey.confirm-options',
-        'passkey.confirm',
         'password.confirm',
         'password.confirm.store',
         'logout',

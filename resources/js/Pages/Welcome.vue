@@ -11,27 +11,78 @@ defineProps<{
         <Head :title="appName" />
 
         <v-main class="welcome">
-            <v-card class="welcome-card" elevation="2">
-                <v-card-title>{{ appName }}</v-card-title>
-                <v-card-text>Inertia + Vue 3 + TypeScript + Vuetify 3</v-card-text>
-                <v-card-actions class="justify-center">
-                    <v-btn color="primary" variant="flat">Vuetify 3</v-btn>
-                </v-card-actions>
-            </v-card>
+            <div class="welcome__inner">
+                <span class="welcome__mark" aria-hidden="true">
+                    <svg viewBox="0 0 44 44" width="44" height="44">
+                        <defs>
+                            <linearGradient id="welcomeMark" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0" stop-color="#0087C5" />
+                                <stop offset="0.55" stop-color="#1B4B9C" />
+                                <stop offset="1" stop-color="#12193C" />
+                            </linearGradient>
+                        </defs>
+                        <path d="M22 4 L40 40 H30.5 L22 21 L13.5 40 H4 Z" fill="url(#welcomeMark)" />
+                    </svg>
+                </span>
+
+                <h1 class="welcome__title">{{ appName }}</h1>
+                <p class="welcome__lead">
+                    予約・回数券・月額会員をオンラインで。<br />
+                    アカウントにログインしてご利用ください。
+                </p>
+
+                <div class="welcome__actions">
+                    <v-btn color="primary" variant="flat" size="large" href="/login">
+                        ログイン
+                    </v-btn>
+                    <v-btn color="primary" variant="outlined" size="large" href="/register">
+                        新規登録
+                    </v-btn>
+                </div>
+            </div>
         </v-main>
     </v-app>
 </template>
 
 <style scoped>
 .welcome {
-    align-items: center;
     display: flex;
+    align-items: center;
     justify-content: center;
-    padding: 1.5rem;
+    min-height: 100vh;
+    background: rgb(var(--v-theme-background));
+    padding: var(--ark-space-5);
+}
+
+.welcome__inner {
+    width: min(100%, 30rem);
     text-align: center;
 }
 
-.welcome-card {
-    width: min(100%, 32rem);
+.welcome__mark {
+    display: inline-flex;
+    margin-bottom: var(--ark-space-4);
+}
+
+.welcome__title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: rgb(var(--v-theme-primary));
+    margin: 0 0 var(--ark-space-3);
+}
+
+.welcome__lead {
+    line-height: 1.8;
+    color: rgb(var(--v-theme-on-background));
+    opacity: 0.75;
+    margin: 0 0 var(--ark-space-6);
+}
+
+.welcome__actions {
+    display: flex;
+    gap: var(--ark-space-3);
+    justify-content: center;
+    flex-wrap: wrap;
 }
 </style>

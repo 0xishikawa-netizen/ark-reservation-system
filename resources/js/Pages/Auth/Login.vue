@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
-import { getPasskeyAssertion, isPasskeySupported } from '@/lib/webauthn';
+import { useForm } from '@inertiajs/vue3';
+import AuthCard from '@/components/auth/AuthCard.vue';
 
 defineProps<{
     status?: string | null;
@@ -18,107 +17,78 @@ const submit = (): void => {
         onFinish: () => form.reset('password'),
     });
 };
-
-// Passkey ログイン（スタッフの第一選択）。パスワード入力なしで完結する。
-const passkeySupported = isPasskeySupported();
-const passkeyLoading = ref(false);
-const passkeyError = ref<string | null>(null);
-
-const loginWithPasskey = async (): Promise<void> => {
-    if (!passkeySupported || passkeyLoading.value) {
-        return;
-    }
-    passkeyLoading.value = true;
-    passkeyError.value = null;
-
-    try {
-        const response = await fetch('/passkeys/login/options', {
-            headers: { Accept: 'application/json' },
-            credentials: 'same-origin',
-        });
-
-        if (!response.ok) {
-            throw new Error('options-failed');
-        }
-
-        const body = await response.json();
-        // laravel/passkeys は { options: {...} } 形式で返す。旧 { publicKey: {...} } も許容。
-        const assertion = await getPasskeyAssertion(body.options ?? body.publicKey ?? body);
-
-        router.post('/passkeys/login', { credential: assertion }, {
-            onError: () => {
-                passkeyError.value = 'Passkey でログインできませんでした。';
-            },
-            onFinish: () => {
-                passkeyLoading.value = false;
-            },
-        });
-    } catch (error) {
-        const cancelled =
-            error instanceof Error && error.message === 'passkey-assertion-cancelled';
-        passkeyError.value = cancelled
-            ? 'ログインがキャンセルされました。'
-            : 'Passkey を利用できませんでした。パスワードでログインしてください。';
-        passkeyLoading.value = false;
-    }
-};
 </script>
 
 <template>
-    <v-app>
-        <v-main class="d-flex align-center justify-center bg-grey-lighten-4 pa-4">
-            <v-card width="100%" max-width="440" title="ログイン">
-                <v-card-text>
-                    <v-alert v-if="status" type="success" class="mb-4">{{ status }}</v-alert>
-                    <v-alert v-if="passkeyError" type="error" variant="tonal" density="compact" class="mb-4">
-                        {{ passkeyError }}
-                    </v-alert>
+    <AuthCard title="ログイン" subtitle="ご登録のメールアドレスとパスワードでログインしてください。">
+        <v-alert v-if="status" type="success" variant="tonal" density="comfortable" class="mb-4">
+            {{ status }}
+        </v-alert>
 
-                    <template v-if="passkeySupported">
-                        <v-btn
-                            block
-                            color="primary"
-                            variant="flat"
-                            class="mb-2"
-                            :loading="passkeyLoading"
-                            @click="loginWithPasskey"
-                        >
-                            Passkey でログイン
-                        </v-btn>
-                        <p class="text-caption text-medium-emphasis text-center mb-3">
-                            Touch ID / Face ID / Windows Hello
-                        </p>
-                        <v-divider class="mb-4" />
-                    </template>
+        <v-form @submit.prevent="submit">
+            <v-text-field
+                v-model="form.email"
+                label="メールアドレス"
+                type="email"
+                autocomplete="email"
+                :error-messages="form.errors.email"
+                autofocus
+                required
+            />
+            <v-text-field
+                v-model="form.password"
+                label="パスワード"
+                type="password"
+                autocomplete="current-password"
+                :error-messages="form.errors.password"
+                required
+            />
+            <div class="d-flex align-center justify-space-between mb-2">
+                <v-checkbox
+                    v-model="form.remember"
+                    label="ログイン状態を保持する"
+                    density="compact"
+                    hide-details
+                />
+                <a href="/forgot-password" class="text-body-2">パスワードを忘れた方</a>
+            </div>
+            <v-btn
+                type="submit"
+                color="primary"
+                variant="flat"
+                size="large"
+                block
+                :loading="form.processing"
+            >
+                ログイン
+            </v-btn>
+        </v-form>
 
-                    <v-form @submit.prevent="submit">
-                        <v-text-field
-                            v-model="form.email"
-                            label="メールアドレス"
-                            type="email"
-                            autocomplete="email"
-                            :error-messages="form.errors.email"
-                            required
-                        />
-                        <v-text-field
-                            v-model="form.password"
-                            label="パスワード"
-                            type="password"
-                            autocomplete="current-password"
-                            :error-messages="form.errors.password"
-                            required
-                        />
-                        <v-checkbox v-model="form.remember" label="ログイン状態を保持する" />
-                        <v-btn type="submit" color="primary" block :loading="form.processing">
-                            ログイン
-                        </v-btn>
-                    </v-form>
-                </v-card-text>
-                <v-card-actions class="justify-space-between px-4 pb-4">
-                    <a href="/forgot-password">パスワードを忘れた方</a>
-                    <a href="/register">新規登録</a>
-                </v-card-actions>
-            </v-card>
-        </v-main>
-    </v-app>
+        <div class="ark-auth-divider my-5" role="separator" aria-label="または">
+            <span>または</span>
+        </div>
+
+        <v-btn
+            :href="'/auth/google/redirect'"
+            variant="outlined"
+            size="large"
+            block
+            class="ark-google-btn"
+        >
+            <span class="ark-google-btn__icon" aria-hidden="true">
+                <svg viewBox="0 0 18 18" width="18" height="18">
+                    <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+                    <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
+                    <path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.05l3.01-2.33z" />
+                    <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+                </svg>
+            </span>
+            Google でログイン
+        </v-btn>
+
+        <template #footer>
+            <span class="text-body-2 text-medium-emphasis">アカウントをお持ちでない方は</span>
+            <a href="/register" class="text-body-2 font-weight-medium ml-1">新規登録</a>
+        </template>
+    </AuthCard>
 </template>

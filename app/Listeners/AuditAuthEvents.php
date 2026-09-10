@@ -13,6 +13,7 @@ use Illuminate\Auth\Events\Verified;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Events\Dispatcher;
 use Laravel\Fortify\Events\TwoFactorAuthenticationConfirmed;
+use Laravel\Fortify\Events\TwoFactorAuthenticationEnabled;
 
 class AuditAuthEvents
 {
@@ -27,8 +28,36 @@ class AuditAuthEvents
             Failed::class => 'onFailed',
             PasswordReset::class => 'onPasswordReset',
             Verified::class => 'onVerified',
+            TwoFactorAuthenticationEnabled::class => 'onTwoFactorAuthenticationEnabled',
             TwoFactorAuthenticationConfirmed::class => 'onTwoFactorAuthenticationConfirmed',
         ];
+    }
+
+    /**
+     * TOTP を有効化（新規 or 秘密鍵の再生成）したら、必ず新しいコードでの
+     * 確認を要求する（`fortify.features` は confirm 必須）。
+     *
+     * 再生成時に `two_factor_confirmed_at` が残っていると、未確認の新しい秘密鍵が
+     * 「確認済み」として扱われ、旧端末が使えなくなった利用者がロックアウトされる／
+     * 攻撃者が自分の秘密鍵へ静かにローテーションできてしまう。ここで必ず null に戻す。
+     */
+    public function onTwoFactorAuthenticationEnabled(TwoFactorAuthenticationEnabled $event): void
+    {
+        $user = $event->user;
+
+        if (! is_object($user) || ! method_exists($user, 'forceFill')) {
+            return;
+        }
+
+        if (($user->two_factor_confirmed_at ?? null) !== null) {
+            $user->forceFill(['two_factor_confirmed_at' => null])->save();
+
+            $this->auditLogger->log(
+                'auth.two_factor_reset',
+                summary: '二要素認証の秘密鍵を再生成（要再確認）: '.$this->email($user),
+                actor: $user,
+            );
+        }
     }
 
     public function onLogin(Login $event): void

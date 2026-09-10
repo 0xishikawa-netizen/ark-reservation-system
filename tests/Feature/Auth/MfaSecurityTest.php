@@ -14,9 +14,11 @@ use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
-use Laravel\Passkeys\Passkey;
 use Tests\TestCase;
 
+/**
+ * Phase 9.6: Passkey 撤去後の MFA（TOTP + SMS フォールバック）セキュリティ。
+ */
 final class MfaSecurityTest extends TestCase
 {
     use RefreshDatabase;
@@ -29,147 +31,89 @@ final class MfaSecurityTest extends TestCase
         RateLimiter::clear('mfa-sms-send:127.0.0.1');
     }
 
-    // ---------- Passkey ルートの保護 ----------
-
-    public function test_passkey_registration_options_require_authentication(): void
-    {
-        $this->getJson('/user/passkeys/options')->assertUnauthorized();
-    }
-
-    public function test_passkey_registration_requires_password_confirmation(): void
-    {
-        $user = $this->staffWithPasskey();
-
-        // パスワード未確認では登録オプションを取得できない
-        $this->actingAs($user)
-            ->withSession(['auth.password_confirmed_at' => null])
-            ->get('/user/passkeys/options')
-            ->assertRedirect(route('password.confirm'));
-    }
-
-    public function test_passkey_login_options_are_available_to_guests(): void
-    {
-        // Passkey は「パスワードなしログイン」の入口なので guest から到達できる必要がある
-        $this->get('/passkeys/login/options')->assertOk();
-    }
-
-    public function test_invalid_passkey_assertion_is_rejected(): void
-    {
-        $this->postJson('/passkeys/login', [
-            'credential' => [
-                'id' => 'bogus',
-                'rawId' => 'bogus',
-                'type' => 'public-key',
-                'response' => [
-                    'clientDataJSON' => 'bogus',
-                    'authenticatorData' => 'bogus',
-                    'signature' => 'bogus',
-                ],
-            ],
-        ])->assertStatus(422);
-
-        $this->assertGuest();
-    }
-
     // ---------- 自己ロックアウト対策（最重要） ----------
 
-    public function test_last_mfa_method_cannot_be_deleted(): void
+    public function test_staff_cannot_disable_their_only_mfa_method(): void
     {
-        $user = $this->staffWithPasskey();
-        $passkey = $user->passkeys()->firstOrFail();
+        $user = $this->staffUser(confirmedTotp: true);
 
         $this->actingAs($user)
             ->withSession($this->confirmedPassword())
-            ->delete("/user/passkeys/{$passkey->id}")
-            ->assertSessionHasErrors('passkey');
+            ->delete('/user/two-factor-authentication')
+            ->assertSessionHasErrors('two_factor');
 
-        $this->assertSame(1, $user->passkeys()->count(), '最後の MFA 手段が削除された');
+        $this->assertNotNull($user->refresh()->two_factor_confirmed_at, 'staff の TOTP が無効化された');
     }
 
-    public function test_passkey_can_be_deleted_when_another_method_remains(): void
+    public function test_manager_and_admin_cannot_disable_totp(): void
     {
-        $user = $this->staffWithPasskey();
-        $this->givePasskey($user, 'credential-2');
-        $passkey = $user->passkeys()->firstOrFail();
+        foreach (['manager', 'admin'] as $role) {
+            $user = $this->staffUser($role, confirmedTotp: true);
 
+            $this->actingAs($user)
+                ->withSession($this->confirmedPassword())
+                ->delete('/user/two-factor-authentication')
+                ->assertSessionHasErrors('two_factor');
+
+            $this->assertNotNull($user->refresh()->two_factor_confirmed_at, $role);
+        }
+    }
+
+    public function test_regenerating_the_totp_secret_forces_reconfirmation(): void
+    {
+        $user = $this->staffUser(confirmedTotp: true);
+
+        // force=1 で秘密鍵を作り直す（端末変更などの再設定）。
         $this->actingAs($user)
             ->withSession($this->confirmedPassword())
-            ->delete("/user/passkeys/{$passkey->id}")
+            ->post('/user/two-factor-authentication', ['force' => '1'])
             ->assertSessionHasNoErrors();
 
-        $this->assertSame(1, $user->passkeys()->count());
-    }
+        // 新しい秘密鍵は「未確認」に戻り、確認するまで /admin へ入れない。
+        $this->assertNull($user->refresh()->two_factor_confirmed_at);
+        $this->actingAs($user)->get('/admin')->assertRedirect(route('admin.mfa.show'));
 
-    public function test_single_passkey_can_be_deleted_when_totp_is_configured(): void
-    {
-        $user = $this->staffWithPasskey();
-        $user->forceFill(['two_factor_confirmed_at' => now()])->save();
-        $passkey = $user->passkeys()->firstOrFail();
-
-        $this->actingAs($user)
-            ->withSession($this->confirmedPassword())
-            ->delete("/user/passkeys/{$passkey->id}")
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame(0, $user->passkeys()->count());
-    }
-
-    public function test_passkey_deletion_requires_password_confirmation(): void
-    {
-        $user = $this->staffWithPasskey();
-        $this->givePasskey($user, 'credential-2');
-        $passkey = $user->passkeys()->firstOrFail();
-
-        $this->actingAs($user)
-            ->withSession(['auth.password_confirmed_at' => null])
-            ->delete("/user/passkeys/{$passkey->id}")
-            ->assertRedirect(route('password.confirm'));
-
-        $this->assertSame(2, $user->passkeys()->count());
-    }
-
-    public function test_a_user_cannot_delete_another_users_passkey(): void
-    {
-        $owner = $this->staffWithPasskey();
-        $this->givePasskey($owner, 'owner-2');
-        $intruder = $this->staffWithPasskey();
-        // 侵入者側にも複数登録させ、「最後の 1 つ」ガードではなく
-        // 所有権チェックで弾かれることを確認する。
-        $this->givePasskey($intruder, 'intruder-2');
-        $passkey = $owner->passkeys()->firstOrFail();
-
-        $this->actingAs($intruder)
-            ->withSession($this->confirmedPassword())
-            ->delete("/user/passkeys/{$passkey->id}")
-            ->assertStatus(403);
-
-        $this->assertSame(2, $owner->passkeys()->count());
-    }
-
-    // ---------- 監査 ----------
-
-    public function test_passkey_events_are_audited_without_credential_material(): void
-    {
-        $user = $this->staffWithPasskey();
-        $this->givePasskey($user, 'credential-2');
-        $passkey = $user->passkeys()->firstOrFail();
-
-        $this->actingAs($user)
-            ->withSession($this->confirmedPassword())
-            ->delete("/user/passkeys/{$passkey->id}");
-
-        $log = AuditLog::query()->where('action', 'mfa.passkey.removed')->first();
-
+        $log = AuditLog::query()->where('action', 'auth.two_factor_reset')->first();
         $this->assertNotNull($log);
-        $this->assertStringNotContainsString('credential', strtolower((string) $log->summary));
-        $this->assertStringNotContainsString('publicKey', (string) $log->summary);
+        $this->assertStringNotContainsString('secret', strtolower((string) $log->summary));
     }
 
-    // ---------- 電話番号 ----------
+    public function test_password_confirmation_is_rate_limited(): void
+    {
+        $user = $this->staffUser(confirmedTotp: true);
+
+        for ($i = 0; $i < 6; $i++) {
+            $this->actingAs($user)->post('/user/confirm-password', ['password' => 'wrong'])
+                ->assertStatus(302);
+        }
+
+        $this->actingAs($user)->post('/user/confirm-password', ['password' => 'wrong'])
+            ->assertStatus(429);
+    }
+
+    public function test_customer_can_disable_their_optional_totp(): void
+    {
+        $customer = Customer::factory()->create();
+        $customer->user->assignRole('customer');
+        $customer->user->forceFill([
+            'two_factor_secret' => encrypt('secret'),
+            'two_factor_recovery_codes' => encrypt(json_encode(['aaaa-bbbb'])),
+            'two_factor_confirmed_at' => now(),
+        ])->save();
+
+        $this->actingAs($customer->user)
+            ->withSession($this->confirmedPassword())
+            ->delete('/user/two-factor-authentication')
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull($customer->user->refresh()->two_factor_confirmed_at);
+    }
+
+    // ---------- 電話番号（SMS フォールバック） ----------
 
     public function test_phone_registration_requires_reauthentication(): void
     {
-        $user = $this->staffWithPasskey();
+        $user = $this->staffUser();
 
         $this->actingAs($user)
             ->withSession(['auth.password_confirmed_at' => null])
@@ -181,14 +125,13 @@ final class MfaSecurityTest extends TestCase
 
     public function test_new_phone_is_not_verified_until_the_otp_is_confirmed(): void
     {
-        $user = $this->staffWithPasskey();
+        $user = $this->staffUser();
 
         $this->actingAs($user)
             ->withSession($this->confirmedPassword())
             ->post('/admin/mfa/phone', ['phone' => '09012345678'])
             ->assertSessionHasNoErrors();
 
-        // OTP 未検証の時点では確定させない
         $this->assertNull($user->staff->refresh()->phone_verified_at);
         $this->assertNull($user->staff->phone);
 
@@ -202,13 +145,12 @@ final class MfaSecurityTest extends TestCase
         $staff = $user->staff->refresh();
         $this->assertNotNull($staff->phone_verified_at);
         $this->assertSame('09012345678', $staff->phone);
-        // 等価検索用の HMAC が入り、平文の検索コピーは持たない
         $this->assertNotNull($staff->phone_hmac);
     }
 
     public function test_phone_change_with_a_wrong_code_does_not_switch_the_number(): void
     {
-        $user = $this->staffWithPasskey();
+        $user = $this->staffUser();
 
         $this->actingAs($user)
             ->withSession($this->confirmedPassword())
@@ -224,7 +166,7 @@ final class MfaSecurityTest extends TestCase
 
     public function test_phone_change_is_audited_without_the_number(): void
     {
-        $user = $this->staffWithPasskey();
+        $user = $this->staffUser();
 
         $this->actingAs($user)->withSession($this->confirmedPassword())
             ->post('/admin/mfa/phone', ['phone' => '09012345678']);
@@ -256,9 +198,9 @@ final class MfaSecurityTest extends TestCase
 
     // ---------- MFA 画面が秘密情報を漏らさない ----------
 
-    public function test_mfa_page_never_exposes_credentials_or_the_raw_phone_number(): void
+    public function test_mfa_page_never_exposes_the_raw_phone_number(): void
     {
-        $user = $this->staffWithPasskey();
+        $user = $this->staffUser(confirmedTotp: true);
         Staff::query()->where('user_id', $user->id)->update([
             'phone' => encrypt('09012345678'),
             'phone_verified_at' => now(),
@@ -271,15 +213,14 @@ final class MfaSecurityTest extends TestCase
             ->getContent();
 
         $this->assertStringNotContainsString('09012345678', $html, '電話番号平文が画面に出ている');
-        $this->assertStringNotContainsString('fake-public-key', $html, 'credential が画面に出ている');
-        $this->assertStringNotContainsString('credential_id', $html);
+        $this->assertStringNotContainsString('two_factor_secret', $html);
     }
 
     // ---------- Recovery Code（Fortify 標準の維持確認） ----------
 
     public function test_recovery_codes_are_not_stored_in_plaintext_columns(): void
     {
-        $user = $this->staffWithPasskey();
+        $user = $this->staffUser();
         $user->forceFill([
             'two_factor_secret' => encrypt('SECRETVALUE'),
             'two_factor_recovery_codes' => encrypt(json_encode(['aaaa-bbbb'])),
@@ -308,26 +249,20 @@ final class MfaSecurityTest extends TestCase
         return ['auth.password_confirmed_at' => now()->timestamp];
     }
 
-    private function staffWithPasskey(): User
+    private function staffUser(string $role = 'staff', bool $confirmedTotp = false): User
     {
         $user = User::factory()->create();
-        $user->assignRole('staff');
+        $user->assignRole($role);
         Staff::factory()->create(['user_id' => $user->id]);
-        $this->givePasskey($user, 'credential-'.$user->id);
+
+        if ($confirmedTotp) {
+            $user->forceFill([
+                'two_factor_secret' => encrypt('secret'),
+                'two_factor_recovery_codes' => encrypt(json_encode(['aaaa-bbbb'])),
+                'two_factor_confirmed_at' => now(),
+            ])->save();
+        }
 
         return $user->refresh();
-    }
-
-    private function givePasskey(User $user, string $credentialId): Passkey
-    {
-        $passkey = new Passkey([
-            'name' => 'テスト端末',
-            'credential_id' => $credentialId,
-            'credential' => ['publicKey' => 'fake-public-key-for-tests'],
-        ]);
-        $passkey->user_id = $user->id;
-        $passkey->save();
-
-        return $passkey;
     }
 }

@@ -111,7 +111,7 @@ const lanes = computed<ScheduleLane[]>(() => {
         const result: ScheduleLane[] = props.booths.map((booth) => ({
             id: booth.id,
             display_name: booth.name,
-            color: '#00897b',
+            color: '#1A2653',
             sort_order: booth.sort_order,
         }));
 
@@ -675,7 +675,7 @@ function dayLabel(value: string): string {
 }
 
 .reservation-card:focus-visible {
-    outline: 2px solid #1565c0;
+    outline: 2px solid #1A2653;
     outline-offset: -2px;
 }
 
@@ -737,11 +737,11 @@ function dayLabel(value: string): string {
 }
 
 .source-admin {
-    border-left-color: #673ab7;
+    border-left-color: #5B6470;
 }
 
 .source-ark-web {
-    border-left-color: #00897b;
+    border-left-color: #1A2653;
 }
 
 .source-hotpepper {
@@ -749,7 +749,7 @@ function dayLabel(value: string): string {
 }
 
 .source-epark {
-    border-left-color: #1e88e5;
+    border-left-color: #00838f;
 }
 
 .source-peak-manager {

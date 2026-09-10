@@ -10,11 +10,10 @@ use App\Models\Staff;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Laravel\Passkeys\Passkey;
 use Tests\TestCase;
 
 /**
- * MFA 要件判定の組合せ検証。
+ * MFA 要件判定の組合せ検証（Phase 9.6: TOTP 一本）。
  *
  * ここが誤ると **全スタッフがロックアウトされる**ため、
  * 「どの手段を持つとき管理画面に入れるか」を全パターンで固定する。
@@ -46,23 +45,15 @@ final class MfaPolicyTest extends TestCase
 
     // ---------- 満たすかどうかの組合せ ----------
 
-    public function test_passkey_alone_satisfies_the_requirement(): void
+    public function test_confirmed_totp_satisfies_the_requirement(): void
     {
         $user = $this->userWithRole('staff');
-        $this->givePasskey($user);
+        $user->forceFill(['two_factor_confirmed_at' => now()])->save();
 
         $policy = app(MfaPolicy::class);
 
         $this->assertTrue($policy->isSatisfiedBy($user));
         $this->assertFalse($policy->needsSetup($user));
-    }
-
-    public function test_confirmed_totp_alone_satisfies_the_requirement(): void
-    {
-        $user = $this->userWithRole('staff');
-        $user->forceFill(['two_factor_confirmed_at' => now()])->save();
-
-        $this->assertTrue(app(MfaPolicy::class)->isSatisfiedBy($user));
     }
 
     public function test_unconfirmed_totp_does_not_satisfy_the_requirement(): void
@@ -74,6 +65,7 @@ final class MfaPolicyTest extends TestCase
         ])->save();
 
         $this->assertFalse(app(MfaPolicy::class)->isSatisfiedBy($user));
+        $this->assertTrue(app(MfaPolicy::class)->needsSetup($user));
     }
 
     /**
@@ -112,48 +104,42 @@ final class MfaPolicyTest extends TestCase
         $this->assertFalse(app(MfaPolicy::class)->needsSetup($customer->user));
     }
 
-    // ---------- 最後の 1 手段 ----------
+    // ---------- 最後の 1 手段（自己ロックアウト対策） ----------
 
-    public function test_last_method_detection_counts_passkeys_and_totp(): void
+    public function test_primary_method_count_reflects_confirmed_totp(): void
     {
         $user = $this->userWithRole('admin');
         $policy = app(MfaPolicy::class);
 
-        $this->givePasskey($user, 'key-1');
+        $this->assertSame(0, $policy->primaryMethodCount($user));
+
+        $user->forceFill(['two_factor_confirmed_at' => now()])->save();
         $this->assertSame(1, $policy->primaryMethodCount($user));
-        $this->assertTrue($policy->wouldRemoveLastMethod($user));
-
-        $this->givePasskey($user, 'key-2');
-        $this->assertSame(2, $policy->primaryMethodCount($user));
-        $this->assertFalse($policy->wouldRemoveLastMethod($user));
     }
 
-    public function test_totp_counts_as_a_fallback_so_a_single_passkey_can_be_removed(): void
+    public function test_required_role_with_totp_would_remove_last_method_on_disable(): void
     {
         $user = $this->userWithRole('admin');
-        $this->givePasskey($user);
         $user->forceFill(['two_factor_confirmed_at' => now()])->save();
 
-        $this->assertFalse(app(MfaPolicy::class)->wouldRemoveLastMethod($user));
+        $this->assertTrue(app(MfaPolicy::class)->wouldRemoveLastMethod($user));
     }
 
-    // ---------- 移行導線 ----------
-
-    public function test_totp_only_user_is_prompted_to_add_a_passkey(): void
+    public function test_customer_is_never_subject_to_the_last_method_guard(): void
     {
-        $user = $this->userWithRole('manager');
-        $user->forceFill(['two_factor_confirmed_at' => now()])->save();
+        $customer = Customer::factory()->create();
+        $customer->user->assignRole('customer');
+        $customer->user->forceFill(['two_factor_confirmed_at' => now()])->save();
 
-        $policy = app(MfaPolicy::class);
-
-        $this->assertTrue($policy->isSatisfiedBy($user), '移行期の TOTP ユーザーはログインできる必要がある');
-        $this->assertTrue($policy->shouldPromotePasskey($user));
+        $this->assertFalse(app(MfaPolicy::class)->wouldRemoveLastMethod($customer->user));
     }
+
+    // ---------- 表示用要約 ----------
 
     public function test_summary_never_exposes_credentials_or_phone_numbers(): void
     {
         $user = $this->userWithRole('admin');
-        $this->givePasskey($user);
+        $user->forceFill(['two_factor_confirmed_at' => now()])->save();
         Staff::factory()->create([
             'user_id' => $user->id,
             'phone' => '09012345678',
@@ -166,24 +152,16 @@ final class MfaPolicyTest extends TestCase
 
         $this->assertStringNotContainsString('09012345678', $encoded);
         $this->assertStringNotContainsString('credential', strtolower($encoded));
+        $this->assertStringNotContainsString('secret', strtolower($encoded));
         $this->assertSame(
-            ['required', 'satisfied', 'passkey_count', 'totp_confirmed', 'phone_verified', 'should_promote_passkey'],
+            ['required', 'satisfied', 'totp_confirmed', 'phone_verified'],
             array_keys($summary),
         );
     }
 
     // ---------- middleware 経由の実挙動 ----------
 
-    public function test_staff_with_only_a_passkey_is_not_sent_to_totp_setup(): void
-    {
-        $user = $this->userWithRole('staff');
-        $this->givePasskey($user);
-
-        // Passkey だけのユーザーが setup へリダイレクトされない（Phase 5.5 の回帰防止）
-        $this->actingAs($user)->get('/admin')->assertOk();
-    }
-
-    public function test_staff_with_only_totp_can_still_reach_admin_during_migration(): void
+    public function test_staff_with_confirmed_totp_can_reach_admin(): void
     {
         $user = $this->userWithRole('staff');
         $user->forceFill(['two_factor_confirmed_at' => now()])->save();
@@ -215,18 +193,5 @@ final class MfaPolicyTest extends TestCase
         $user->assignRole($role);
 
         return $user->refresh();
-    }
-
-    private function givePasskey(User $user, string $credentialId = 'credential-1'): Passkey
-    {
-        $passkey = new Passkey([
-            'name' => 'テスト端末',
-            'credential_id' => $credentialId,
-            'credential' => ['publicKey' => 'fake-public-key-for-tests'],
-        ]);
-        $passkey->user_id = $user->id;
-        $passkey->save();
-
-        return $passkey;
     }
 }

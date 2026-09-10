@@ -159,12 +159,15 @@ App\Domain\Auth\Sms\SmsSender      … SMS 送信の抽象（provider 固有コ�
   ├ LogSmsSender                     … local / staging（実送信しない）
   └ FakeSmsSender                    … testing
 App\Http\Middleware\EnsureStaffMfa       … MFA 未設定なら設定画面へ誘導
-App\Http\Middleware\PreventLastMfaRemoval … 最後の MFA 手段の削除を拒否
+App\Http\Middleware\PreventStaffTotpDisable … 業務ロールの TOTP 無効化を拒否（自己ロックアウト対策）
 ```
 
-- Passkey / WebAuthn は `laravel/fortify` 同梱の `laravel/passkeys`（公式）に委ねる。
-  challenge / origin / RP ID 検証・replay 防止・credential 保存はライブラリの責務であり、
-  **アプリ側で暗号処理や独自 credential テーブルを実装しない**。
-- 再認証は `password.confirm` を基本とし、Passkey 再認証（Fortify の passkey confirm）も
-  同じ `auth.password_confirmed_at` セッションを立てるため、**機微操作のルート定義は変更不要**。
-- `two_factor_confirmed_at` を各所で直接判定しない。必ず `MfaPolicy` を通す。
+- **Phase 9.6**: Passkey / WebAuthn は撤去。認証は「メール・パスワード（または Google）
+  → 主認証成功 → 業務ロールのみ 6 桁 TOTP チャレンジ」。
+- Google ログインは `laravel/socialite`（stateful）。`App\Http\Controllers\Auth\GoogleAuthController`
+  が redirect / callback / 既存アカウント連携 / 解除を担う。identity は `user_social_accounts`
+  （`UNIQUE(provider, provider_user_id)`）。**token は保存しない。特権ロールは callback から
+  自動作成・自動昇格・silent link しない。**
+- 再認証は `password.confirm`。機微操作のルート定義は変更不要。
+- `two_factor_confirmed_at` を各所で直接判定しない。必ず `MfaPolicy` を通す
+  （`isSatisfiedBy` = 確認済み TOTP）。

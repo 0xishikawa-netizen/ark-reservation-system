@@ -28,6 +28,12 @@ class ThrottleFortifyRequests
             return $this->throttleRequests->handle($request, $next, 'password-reset');
         }
 
+        // 再認証（password.confirm）はセッション侵害時の封じ込め装置。
+        // Fortify は既定でレート制限を掛けないため、ここで総当たりを止める。
+        if ($request->routeIs('password.confirm.store')) {
+            return $this->throttleRequests->handle($request, $next, 'password-confirm');
+        }
+
         return $next($request);
     }
 }

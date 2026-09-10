@@ -74,28 +74,29 @@
 
 ## 認証 / MFA
 
-### Passkey だけ登録したのに MFA 設定画面へ飛ばされる
+> Phase 9.6 で Passkey / WebAuthn は撤去。MFA は 6 桁 TOTP + SMS フォールバック + Recovery Code。
 
-Phase 5.5 以前の判定（`two_factor_confirmed_at` 直参照）が残っている疑い。
-判定は `App\Domain\Auth\MfaPolicy` に集約されている。`grep -rn "two_factor_confirmed_at" app/` で
-`MfaPolicy` 以外に判定ロジックが無いか確認する。
+### スタッフが `/admin` から MFA 設定画面へ飛ばされ続ける
 
-### Passkey を削除できない
+TOTP 未設定（`two_factor_confirmed_at` が null）。`/admin/mfa` →「認証アプリを設定する」で
+QR を読み込み、6 桁コードを確認すれば通過する。判定は `App\Domain\Auth\MfaPolicy` に集約。
+`grep -rn "two_factor_confirmed_at" app/` で `MfaPolicy` 以外に判定ロジックが無いか確認する。
 
-**最後の MFA 手段は削除できない**仕様（自己ロックアウト対策）。
-別の Passkey を追加するか、認証アプリ（TOTP）を設定してから削除する。
+### スタッフが TOTP を無効化できない
 
-### Staging で登録した Passkey が本番で使えない
+**仕様。** 業務ロール（staff/manager/admin）は `PreventStaffTotpDisable` により TOTP 無効化を拒否する
+（自己ロックアウト対策）。端末変更は `/admin/mfa` の「認証アプリの再設定」で行う。
 
-**仕様どおり。** WebAuthn の RP ID はドメインに紐づくため、環境ごとに登録が必要。
-`PASSKEYS_RELYING_PARTY_ID` が各環境のホスト名と一致しているか確認する。
+### Google ログインが「管理者アカウントに使用されています」で弾かれる
 
-### Passkey 登録・ログインが必ず失敗する
+**仕様。** 特権ロールのメールアドレスと一致する Google ログインは silent link しない。
+ID・パスワードでログインし、`/admin/mfa` の「Google アカウント連携」から明示的に連携する。
+連携後も Google ログイン時に TOTP チャレンジは必須（bypass されない）。
 
-- `PASSKEYS_RELYING_PARTY_ID` と実際のホスト名が一致しているか。
-- `fortify.passkeys.allowed_origins` に実際のオリジン（スキーム込み）が含まれているか。
-- **本番は HTTPS 必須。** http では WebAuthn が動作しない（localhost は例外）。
-- ブラウザが対応しているか（未対応なら TOTP へ誘導される）。
+### Google 連携を解除できない
+
+パスワード未設定（Google のみで登録）だと解除不可。先にパスワードを設定する
+（唯一のログイン手段を失わせないため）。
 
 ### SMS の認証コードが届かない
 

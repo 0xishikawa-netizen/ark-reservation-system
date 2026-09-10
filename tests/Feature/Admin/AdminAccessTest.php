@@ -48,8 +48,7 @@ class AdminAccessTest extends TestCase
     }
 
     /**
-     * Phase 5.5: MFA 手段が 1 つも無い場合の誘導先は
-     * TOTP 専用画面ではなく統合 MFA 画面（Passkey を第一選択として提示する）。
+     * Phase 9.6: MFA 手段（TOTP）が無い staff の誘導先は統合 MFA 画面。
      */
     public function test_staff_without_any_mfa_method_is_redirected_to_mfa_setup(): void
     {

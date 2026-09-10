@@ -117,29 +117,30 @@ DEPLOYMENT.md §4-5 参照。要点のみ：
 
 ## 11b. 管理者アカウントの復旧（MFA ロックアウト）
 
-**Phase 5.5 で最も危険なのは「単一 admin の自己ロックアウト」。**
-Passkey・電話・Recovery Code をすべて失うと、正規の復旧手段は無い（裏口は意図的に作っていない）。
+**最も危険なのは「単一 admin の自己ロックアウト」。**
+認証アプリ（TOTP）・電話・Recovery Code をすべて失うと、正規の復旧手段は無い（裏口は意図的に作っていない）。
+（Phase 9.6 で Passkey は撤去。MFA 手段は TOTP のみ。）
 
 ### 予防（必ず守る）
 
 1. **admin は 2 名以上**にする。1 名運用なら次を必須にする。
 2. **Recovery Code を紙で保管**する（生成時のみ表示。再生成すると旧コードは無効）。
-3. Passkey は**最低 2 つ**登録する（例: Mac の Touch ID とスマートフォン）。
-4. 最後の MFA 手段はシステムが削除を拒否する（`PreventLastMfaRemoval`）。この警告を回避しない。
+3. 認証アプリの QR / secret を安全に控える（端末紛失時の再設定用）。
+4. 業務ロールは TOTP を無効化できない（`PreventStaffTotpDisable`）。端末変更は「無効化」ではなく
+   認証アプリ側で新しい QR を読み込んで再設定する。
 
 ### 症状別の対応
 
 | 症状 | 対応 |
 |---|---|
-| Passkey が使えない（端末変更・故障） | 別の Passkey か TOTP でログイン → 新しい Passkey を登録 → 古いものを削除 |
-| Passkey も TOTP も使えない | **Recovery Code** でログイン → 直ちに新しい Passkey を登録 |
-| Recovery Code も失った / admin が 1 名だけ | 他の admin が対象ユーザーの `passkeys` 行を削除し、`two_factor_*` を null にして再設定させる。**必ず理由を記録し監査に残す** |
+| 認証アプリを変えたい / 端末を機種変更した | ログイン後 `/admin/mfa` →「認証アプリの再設定」で新しい QR を発行して読み込む |
+| 認証アプリが使えない | **Recovery Code** でログイン → 直ちに `/admin/mfa` で再設定 |
+| Recovery Code も失った / admin が 1 名だけ | 他の admin が対象ユーザーの `two_factor_*` を null にして再設定させる。**必ず理由を記録し監査に残す** |
 | admin が 1 名でその 1 名が失った | サーバーに SSH できる運用者が `php artisan tinker` で当該ユーザーの MFA 資格情報を削除する。**この操作は最後の手段。実施したら必ず記録する** |
 
 ```
 # 最終手段（サーバー上で実行。実施記録を必ず残すこと）
 # 対象ユーザーの MFA 資格情報を消し、次回ログイン後に再設定させる
-User::where('email', '対象アドレス')->first()->passkeys()->delete();
 User::where('email', '対象アドレス')->update([
     'two_factor_secret' => null,
     'two_factor_recovery_codes' => null,
@@ -147,14 +148,13 @@ User::where('email', '対象アドレス')->update([
 ]);
 ```
 
-- **パスワードだけでログインできる状態にはしない。** 上記の後、対象ユーザーは
-  `/admin` へ入る前に MFA 設定画面へ誘導される。
-- Staging と本番では RP ID が異なるため **Passkey は環境ごとに登録し直す**。
+- **パスワード（または Google）だけで `/admin` に入れる状態にはしない。** 上記の後、対象ユーザーは
+  `/admin` へ入る前に MFA 設定画面へ誘導される（Google ログインでも同じ）。
 
 ### SMS が届かない
 
 SMS は**フォールバック**であり、これだけでは MFA 要件を満たさない。
-届かない場合は Passkey / TOTP / Recovery Code を使う。
+届かない場合は TOTP / Recovery Code を使う。
 （実 SMS provider は未契約。現在は `log` ドライバのため実送信されない。）
 
 ## 12. 運用コマンド一覧

@@ -1,5 +1,24 @@
 # MFA Modernization — Passkey 中心の認証への移行（Phase 5.5 候補）
 
+> **⚠️ Phase 9.6 で方針転換（2026-09-10）。**
+> Passkey / WebAuthn は **撤去**した。理由: 一般的な「メール・パスワード（＋Google）→
+> 必要ユーザーのみ 6 桁 TOTP」という広く知られた二段構えに整理し、ログイン画面を
+> シンプルにするため。
+>
+> - `Features::passkeys()` を無効化し、`config/fortify.php` の passkeys ブロックを削除。
+> - `MfaPolicy` は **確認済み TOTP のみ**で MFA 要件を判定する（`isSatisfiedBy` = `hasConfirmedTotp`）。
+> - `PreventLastMfaRemoval`（passkey 削除ガード）→ `PreventStaffTotpDisable`（業務ロールの TOTP
+>   無効化を拒否）へ置換。
+> - `passkeys` テーブルは新規 migration `2026_09_10_000008_drop_passkeys_table` で削除
+>   （履歴 migration は書き換えていない）。`laravel/passkeys` は `laravel/fortify` の依存として
+>   composer には残るが、アプリからの参照は 0。
+> - Google ログイン（Laravel Socialite）を追加。詳細は本書 §Google（末尾）と
+>   `app/Http/Controllers/Auth/GoogleAuthController.php`。
+> - SMS OTP フォールバック（`mfa_sms_challenges` / `staff.phone*`）は変更なし。
+>
+> 以下の本文は Phase 5.5 時点の設計記録。TOTP・SMS・Recovery Code・再認証・監査に関する
+> 記述は引き続き有効。**Passkey に関する記述は歴史的経緯として読むこと。**
+
 > **調査・設計文書。Phase 5.5 で実装済み**（実装計画と実行ログは `docs/tasks/phase-05-5.md`）。
 > 調査日: 2026-09-08 / 調査者: Claude Opus 5 / 対象: `ark-reservation-system`
 >

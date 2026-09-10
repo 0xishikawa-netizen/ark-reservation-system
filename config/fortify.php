@@ -134,31 +134,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Passkeys
-    |--------------------------------------------------------------------------
-    |
-    | These settings configure Fortify's passkey (WebAuthn) support. Passkeys
-    | allow users to sign in without needing to remember credentials since
-    | they use public-key cryptography - making them immune to breaches.
-    |
-    */
-
-    'passkeys' => [
-        'relying_party_id' => env('PASSKEYS_RELYING_PARTY_ID', parse_url(config('app.url'), PHP_URL_HOST)),
-        'allowed_origins' => [config('app.url')],
-        // WebAuthn user handle の導出鍵。APP_KEY ローテーションで既存 Passkey を失わないよう独立させる。
-        'user_handle_secret' => env('PASSKEYS_USER_HANDLE_SECRET', config('app.key')),
-        'timeout' => 60000,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
     | Features
     |--------------------------------------------------------------------------
     |
     | Some of the Fortify features are optional. You may disable the features
     | by removing them from this array. You're free to only remove some of
     | these features or you can even remove all of these if you need to.
+    |
+    | Phase 9.6: Passkey（WebAuthn）は撤去。認証は「メール/パスワード（＋Google）
+    | → 必要ユーザーのみ 6 桁 TOTP」の一般的な二段構えに整理した。
+    | Features::passkeys() は登録しない（Fortify の /passkeys/* ルートも生えない）。
     |
     */
 
@@ -173,9 +158,6 @@ return [
             'confirmPassword' => true,
             // 'window' => 0,
         ]),
-        // Phase 5.5: Passkey（WebAuthn）を staff/manager/admin の第一 MFA 手段として有効化。
-        // 登録・削除は password.confirm 配下（fortify-options.passkeys.confirmPassword 既定 true）。
-        Features::passkeys(),
     ],
 
 ];

@@ -7,14 +7,13 @@ namespace App\Domain\Auth;
 use App\Models\User;
 
 /**
- * スタッフ系ユーザーの MFA 要件判定を集約する唯一の入口（PLAN §12）。
+ * スタッフ系ユーザーの MFA 要件判定を集約する唯一の入口。
  *
  * middleware / UI / テストは必ずここを通す。
- * `users.two_factor_confirmed_at !== null` を各所で直接判定すると、
- * Passkey だけを登録したユーザーが「MFA 未設定」と誤判定され全員がロックアウトされる。
  *
- * 認証強度: Passkey > TOTP > SMS OTP。
- * **SMS は単独では要件を満たさない**（SIM スワップ耐性が無いため補助手段に限定する）。
+ * Phase 9.6: Passkey（WebAuthn）を撤去。MFA 手段は **6 桁 TOTP 一本**。
+ * SMS は SIM スワップ耐性が無いため、これ単独では要件を満たさない補助手段。
+ * 認証フローは「メール/パスワード（または Google）→ 主認証成功 → 必要なら TOTP チャレンジ」。
  */
 final class MfaPolicy
 {
@@ -30,11 +29,11 @@ final class MfaPolicy
     }
 
     /**
-     * MFA 要件を満たしているか（有効な「主」手段を 1 つ以上持つ）。
+     * MFA 要件を満たしているか（確認済み TOTP を持つ）。
      */
     public function isSatisfiedBy(User $user): bool
     {
-        return $this->hasPasskey($user) || $this->hasConfirmedTotp($user);
+        return $this->hasConfirmedTotp($user);
     }
 
     /**
@@ -45,11 +44,6 @@ final class MfaPolicy
         return $user !== null
             && $this->isRequiredFor($user)
             && ! $this->isSatisfiedBy($user);
-    }
-
-    public function hasPasskey(User $user): bool
-    {
-        return $user->passkeys()->exists();
     }
 
     public function hasConfirmedTotp(User $user): bool
@@ -68,39 +62,29 @@ final class MfaPolicy
     }
 
     /**
-     * 主たる MFA 手段の数。**最後の 1 つを削除させないための判定に使う。**
+     * 主たる MFA 手段の数（現在は TOTP のみ、0 か 1）。
      */
     public function primaryMethodCount(User $user): int
     {
-        return $user->passkeys()->count() + ($this->hasConfirmedTotp($user) ? 1 : 0);
+        return $this->hasConfirmedTotp($user) ? 1 : 0;
     }
 
     /**
-     * この Passkey を削除すると MFA がゼロになるか。
+     * TOTP を無効化すると MFA がゼロになる（＝業務ロールでは禁止）か。
      */
     public function wouldRemoveLastMethod(User $user): bool
     {
-        return $this->primaryMethodCount($user) <= 1;
+        return $this->isRequiredFor($user) && $this->primaryMethodCount($user) <= 1;
     }
 
     /**
-     * Passkey 登録を促すべきか（TOTP のみのユーザーへの移行導線）。
-     */
-    public function shouldPromotePasskey(User $user): bool
-    {
-        return $this->isRequiredFor($user) && ! $this->hasPasskey($user);
-    }
-
-    /**
-     * 画面表示用の要約。**secret / credential / 電話番号平文を含めない。**
+     * 画面表示用の要約。**secret / recovery code / 電話番号平文を含めない。**
      *
      * @return array{
      *     required: bool,
      *     satisfied: bool,
-     *     passkey_count: int,
      *     totp_confirmed: bool,
-     *     phone_verified: bool,
-     *     should_promote_passkey: bool
+     *     phone_verified: bool
      * }
      */
     public function summaryFor(User $user): array
@@ -108,10 +92,8 @@ final class MfaPolicy
         return [
             'required' => $this->isRequiredFor($user),
             'satisfied' => $this->isSatisfiedBy($user),
-            'passkey_count' => $user->passkeys()->count(),
             'totp_confirmed' => $this->hasConfirmedTotp($user),
             'phone_verified' => $this->hasVerifiedPhone($user),
-            'should_promote_passkey' => $this->shouldPromotePasskey($user),
         ];
     }
 }

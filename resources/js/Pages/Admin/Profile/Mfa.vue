@@ -1,94 +1,26 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { createPasskey, isPasskeySupported } from '@/lib/webauthn';
 
 defineOptions({ layout: AdminLayout });
-
-interface PasskeyRow {
-    id: number;
-    name: string;
-    authenticator: string | null;
-    created_at: string | null;
-    last_used_at: string | null;
-}
 
 defineProps<{
     mfa: {
         required: boolean;
         satisfied: boolean;
-        passkey_count: number;
         totp_confirmed: boolean;
         phone_verified: boolean;
-        should_promote_passkey: boolean;
     };
-    passkeys: PasskeyRow[];
     totp: { pending: boolean; enabled: boolean };
     phone: { verified: boolean; masked: string | null; pending_verification: boolean };
-    can_delete_passkey: boolean;
+    google: { linked: boolean };
 }>();
 
-const supported = isPasskeySupported();
-const registering = ref(false);
-const passkeyError = ref<string | null>(null);
-const passkeyName = ref('');
-
-const registerPasskey = async (): Promise<void> => {
-    if (!supported || registering.value) {
-        return;
-    }
-    registering.value = true;
-    passkeyError.value = null;
-
-    try {
-        const optionsResponse = await fetch('/user/passkeys/options', {
-            headers: { Accept: 'application/json' },
-            credentials: 'same-origin',
-        });
-
-        if (!optionsResponse.ok) {
-            throw new Error('options-failed');
-        }
-
-        const body = await optionsResponse.json();
-        // laravel/passkeys は { options: {...} } 形式で返す。旧 { publicKey: {...} } も許容。
-        const credential = await createPasskey(body.options ?? body.publicKey ?? body);
-
-        router.post(
-            '/user/passkeys',
-            {
-                name: passkeyName.value || 'このデバイス',
-                // サーバー（laravel/passkeys）は credential 配下を期待する
-                credential,
-            },
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    passkeyName.value = '';
-                },
-                onError: () => {
-                    passkeyError.value = 'Passkey を登録できませんでした。もう一度お試しください。';
-                },
-                onFinish: () => {
-                    registering.value = false;
-                },
-            },
-        );
-    } catch (error) {
-        // 生のエラーは表示しない（キャンセルも含めて同じ扱い）。
-        const cancelled =
-            error instanceof Error && error.message === 'passkey-creation-cancelled';
-        passkeyError.value = cancelled
-            ? '登録がキャンセルされました。'
-            : 'このデバイスでは Passkey を登録できませんでした。';
-        registering.value = false;
-    }
+const linkGoogle = (): void => {
+    window.location.href = '/auth/google/link?return=/admin/mfa';
 };
-
-const deleteForm = useForm({});
-const destroyPasskey = (id: number): void => {
-    deleteForm.delete(`/user/passkeys/${id}`, { preserveScroll: true });
+const unlinkGoogle = (): void => {
+    router.delete('/auth/google/unlink', { preserveScroll: true });
 };
 
 const phoneForm = useForm({ phone: '' });
@@ -106,119 +38,28 @@ const verifyCode = (): void => {
 </script>
 
 <template>
-    <Head title="多要素認証の設定" />
+    <Head title="二段階認証の設定" />
 
     <v-container class="py-4" style="max-width: 820px">
-        <h1 class="text-h6 mb-4">多要素認証（MFA）の設定</h1>
+        <h1 class="text-h6 mb-4">二段階認証（MFA）の設定</h1>
 
-        <v-alert
-            v-if="!mfa.satisfied"
-            type="warning"
-            variant="tonal"
-            class="mb-4"
-        >
-            <div class="font-weight-medium">認証手段の登録が必要です</div>
+        <v-alert v-if="!mfa.satisfied" type="warning" variant="tonal" class="mb-4">
+            <div class="font-weight-medium">認証アプリの登録が必要です</div>
             <div class="text-body-2">
-                管理画面を利用するには、Passkey か認証アプリ（TOTP）のいずれかを登録してください。
-                <strong>Passkey を推奨します。</strong>
+                管理画面を利用するには、認証アプリ（TOTP）で6桁コードを設定してください。
             </div>
         </v-alert>
-
-        <v-alert
-            v-else-if="mfa.should_promote_passkey"
-            type="info"
-            variant="tonal"
-            class="mb-4"
-        >
-            <div class="font-weight-medium">Passkey への移行をおすすめします</div>
-            <div class="text-body-2">
-                Passkey は Touch ID / Face ID / Windows Hello で認証でき、
-                フィッシングに強く、毎回コードを入力する必要がありません。
-                認証アプリ（TOTP）は予備として残せます。
-            </div>
+        <v-alert v-else type="success" variant="tonal" class="mb-4">
+            <div class="font-weight-medium">二段階認証は有効です</div>
+            <div class="text-body-2">ログイン時に認証アプリの6桁コードが求められます。</div>
         </v-alert>
-
-        <!-- Passkey -->
-        <v-card variant="outlined" class="mb-4">
-            <v-card-title class="text-subtitle-1">
-                Passkey（推奨）
-                <v-chip v-if="mfa.passkey_count > 0" color="green" size="small" variant="flat" class="ml-2">
-                    {{ mfa.passkey_count }} 件
-                </v-chip>
-            </v-card-title>
-            <v-card-text>
-                <v-alert v-if="!supported" type="info" variant="tonal" density="compact" class="mb-3">
-                    このブラウザは Passkey に対応していません。認証アプリ（TOTP）をご利用ください。
-                </v-alert>
-                <v-alert v-if="passkeyError" type="error" variant="tonal" density="compact" class="mb-3">
-                    {{ passkeyError }}
-                </v-alert>
-
-                <v-table v-if="passkeys.length > 0" density="compact" class="mb-4">
-                    <thead>
-                        <tr>
-                            <th>名前</th><th>認証器</th><th>登録日</th><th>最終利用</th><th />
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="passkey in passkeys" :key="passkey.id">
-                            <td>{{ passkey.name }}</td>
-                            <td class="text-caption">{{ passkey.authenticator ?? '—' }}</td>
-                            <td class="text-caption">{{ passkey.created_at ?? '—' }}</td>
-                            <td class="text-caption">{{ passkey.last_used_at ?? '未使用' }}</td>
-                            <td class="text-right">
-                                <v-btn
-                                    size="small"
-                                    variant="text"
-                                    color="error"
-                                    :disabled="!can_delete_passkey && passkeys.length === 1"
-                                    @click="destroyPasskey(passkey.id)"
-                                >
-                                    削除
-                                </v-btn>
-                            </td>
-                        </tr>
-                    </tbody>
-                </v-table>
-
-                <v-alert
-                    v-if="!can_delete_passkey && passkeys.length > 0"
-                    type="info"
-                    variant="tonal"
-                    density="compact"
-                    class="mb-3"
-                >
-                    これが最後の認証手段のため削除できません。
-                    別の Passkey か認証アプリを登録すると削除できるようになります。
-                </v-alert>
-
-                <div class="d-flex ga-3 align-center flex-wrap">
-                    <v-text-field
-                        v-model="passkeyName"
-                        label="デバイス名（任意）"
-                        placeholder="例: 自分の MacBook"
-                        density="compact"
-                        hide-details
-                        style="max-width: 280px"
-                    />
-                    <v-btn
-                        color="primary"
-                        :loading="registering"
-                        :disabled="!supported"
-                        @click="registerPasskey"
-                    >
-                        Passkey を追加
-                    </v-btn>
-                </div>
-            </v-card-text>
-        </v-card>
 
         <!-- TOTP -->
         <v-card variant="outlined" class="mb-4">
             <v-card-title class="text-subtitle-1">
                 認証アプリ（TOTP）
                 <v-chip
-                    :color="totp.enabled ? 'green' : 'grey'"
+                    :color="totp.enabled ? 'success' : 'grey'"
                     size="small"
                     variant="flat"
                     class="ml-2"
@@ -228,11 +69,11 @@ const verifyCode = (): void => {
             </v-card-title>
             <v-card-text>
                 <p class="text-body-2 mb-3">
-                    Passkey が使えない環境向けの代替手段です。
-                    既に設定済みの場合はそのままログインに利用できます。
+                    Google Authenticator / 1Password / Authy などの認証アプリに
+                    QRコードを読み込み、表示される6桁コードでログインします。
                 </p>
-                <v-btn variant="tonal" href="/admin/two-factor-setup">
-                    認証アプリの設定へ
+                <v-btn color="primary" variant="flat" href="/admin/two-factor-setup">
+                    {{ totp.enabled ? '認証アプリの再設定' : '認証アプリを設定する' }}
                 </v-btn>
             </v-card-text>
         </v-card>
@@ -242,7 +83,7 @@ const verifyCode = (): void => {
             <v-card-title class="text-subtitle-1">
                 SMS（予備の連絡先）
                 <v-chip
-                    :color="phone.verified ? 'green' : 'grey'"
+                    :color="phone.verified ? 'success' : 'grey'"
                     size="small"
                     variant="flat"
                     class="ml-2"
@@ -252,8 +93,8 @@ const verifyCode = (): void => {
             </v-card-title>
             <v-card-text>
                 <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-                    SMS は<strong>予備の手段</strong>です。これだけでは認証手段の要件を満たしません
-                    （Passkey か認証アプリのいずれかが必要です）。
+                    SMS は<strong>予備の連絡手段</strong>です。これだけでは二段階認証の要件を満たしません
+                    （認証アプリの設定が必要です）。
                 </v-alert>
 
                 <p v-if="phone.masked" class="text-body-2 mb-3">
@@ -297,6 +138,39 @@ const verifyCode = (): void => {
                         確認する
                     </v-btn>
                 </div>
+            </v-card-text>
+        </v-card>
+
+        <!-- Google 連携（二段階認証を代替しない） -->
+        <v-card variant="outlined" class="mt-4">
+            <v-card-title class="text-subtitle-1">
+                Google アカウント連携
+                <v-chip
+                    :color="google.linked ? 'success' : 'grey'"
+                    size="small"
+                    variant="flat"
+                    class="ml-2"
+                >
+                    {{ google.linked ? '連携済み' : '未連携' }}
+                </v-chip>
+            </v-card-title>
+            <v-card-text>
+                <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+                    Google 連携はログインを簡単にするための手段です。
+                    <strong>二段階認証（TOTP）は引き続き必須</strong>で、Google ログインでも省略されません。
+                </v-alert>
+                <v-btn
+                    v-if="!google.linked"
+                    color="primary"
+                    variant="flat"
+                    prepend-icon="mdi-google"
+                    @click="linkGoogle"
+                >
+                    Google アカウントを連携
+                </v-btn>
+                <v-btn v-else color="error" variant="outlined" @click="unlinkGoogle">
+                    連携を解除
+                </v-btn>
             </v-card-text>
         </v-card>
     </v-container>

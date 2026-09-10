@@ -23,12 +23,14 @@ use App\Http\Controllers\Admin\SystemStatusController;
 use App\Http\Controllers\Admin\TicketPolicySettingsController;
 use App\Http\Controllers\Admin\TicketProductController;
 use App\Http\Controllers\Admin\TwoFactorSetupController;
+use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Customer\MembershipController as CustomerMembershipController;
 use App\Http\Controllers\Customer\PaymentController as CustomerPaymentController;
 use App\Http\Controllers\Customer\PaymentHistoryController as CustomerPaymentHistoryController;
 use App\Http\Controllers\Customer\ProfileController;
 use App\Http\Controllers\Customer\ReservationAddonPaymentController;
 use App\Http\Controllers\Customer\ReservationController as CustomerReservationController;
+use App\Http\Controllers\Customer\SecurityController as CustomerSecurityController;
 use App\Http\Controllers\Customer\TicketController as CustomerTicketPageController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Reserve\ReserveController;
@@ -46,6 +48,32 @@ Route::get('/', HomeController::class)->name('home');
 Route::post('stripe/webhook', StripeWebhookController::class)
     ->withoutMiddleware([ThrottleFortifyRequests::class])
     ->name('stripe.webhook');
+
+// Google ログイン（Phase 9.6 / Socialite）。stateful（state 検証あり）。
+Route::middleware('web')->group(function (): void {
+    Route::get('auth/google/redirect', [GoogleAuthController::class, 'redirect'])
+        ->middleware('throttle:google-oauth')
+        ->name('auth.google.redirect');
+    Route::get('auth/google/callback', [GoogleAuthController::class, 'callback'])
+        ->middleware('throttle:google-oauth')
+        ->name('auth.google.callback');
+    // 「既存アカウントがあります」→ パスワード確認して連携。
+    Route::get('auth/google/confirm', [GoogleAuthController::class, 'confirm'])
+        ->name('auth.google.confirm');
+    Route::post('auth/google/link-existing', [GoogleAuthController::class, 'linkExisting'])
+        ->middleware('throttle:6,1')
+        ->name('auth.google.link-existing');
+
+    // ログイン済みユーザーの連携 / 解除（再認証必須）。
+    Route::middleware('auth')->group(function (): void {
+        Route::get('auth/google/link', [GoogleAuthController::class, 'startLink'])
+            ->middleware(['password.confirm', 'throttle:google-oauth'])
+            ->name('auth.google.link');
+        Route::delete('auth/google/unlink', [GoogleAuthController::class, 'unlink'])
+            ->middleware(['password.confirm', 'throttle:6,1'])
+            ->name('auth.google.unlink');
+    });
+});
 
 Route::middleware(['web', 'auth', 'verified'])->group(function (): void {
     Route::get('reserve', [ReserveController::class, 'create'])
@@ -99,6 +127,8 @@ Route::middleware(['web', 'auth', 'verified'])
             ->name('membership.resume');
         Route::put('membership/payment-method', [CustomerMembershipController::class, 'updatePaymentMethod'])
             ->name('membership.payment-method');
+        Route::get('security', [CustomerSecurityController::class, 'show'])
+            ->name('security.show');
         Route::get('profile', [ProfileController::class, 'show'])
             ->name('profile.show');
         Route::get('profile/edit', [ProfileController::class, 'edit'])
@@ -118,7 +148,7 @@ Route::middleware([
     Route::get('/', AdminDashboardController::class)->name('dashboard');
     Route::get('two-factor-setup', [TwoFactorSetupController::class, 'show'])
         ->name('two-factor-setup');
-    // MFA 管理（Passkey 一覧 / TOTP / SMS フォールバック）。自分の資格情報のみ。
+    // MFA 管理（TOTP / SMS フォールバック / Google 連携）。自分の資格情報のみ。
     Route::get('mfa', [MfaController::class, 'show'])->name('mfa.show');
     // 電話番号の登録・変更は機微操作: 再認証 + OTP 検証 + 監査
     Route::post('mfa/phone', [MfaController::class, 'startPhoneVerification'])

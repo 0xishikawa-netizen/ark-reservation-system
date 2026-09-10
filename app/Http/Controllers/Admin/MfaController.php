@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StartPhoneVerificationRequest;
 use App\Http\Requests\Admin\VerifyPhoneRequest;
 use App\Models\User;
+use App\Models\UserSocialAccount;
 use App\Support\Audit\AuditLogger;
 use App\Support\Security\PiiHasher;
 use Illuminate\Http\RedirectResponse;
@@ -21,8 +22,8 @@ use Inertia\Response;
  * スタッフ自身の MFA 管理（PLAN §12）。
  *
  * 自分の資格情報だけを扱う。**他ユーザーの credential には一切アクセスしない。**
- * Passkey の登録・削除自体は Fortify / laravel-passkeys のルートが担当し、
- * ここは一覧表示と電話番号（SMS フォールバック）の設定を担う。
+ * TOTP の有効化・確認・無効化は Fortify のルートが担当し、
+ * ここは状態表示と電話番号（SMS フォールバック）の設定を担う。
  */
 class MfaController extends Controller
 {
@@ -41,17 +42,6 @@ class MfaController extends Controller
 
         return Inertia::render('Admin/Profile/Mfa', [
             'mfa' => $mfaPolicy->summaryFor($user),
-            // credential / 公開鍵は返さない。表示に必要な情報だけ。
-            'passkeys' => $user->passkeys()
-                ->orderByDesc('id')
-                ->get()
-                ->map(fn ($passkey): array => [
-                    'id' => (int) $passkey->id,
-                    'name' => (string) $passkey->name,
-                    'authenticator' => $passkey->authenticator,
-                    'created_at' => $passkey->created_at?->format('Y-m-d H:i'),
-                    'last_used_at' => $passkey->last_used_at?->format('Y-m-d H:i'),
-                ])->all(),
             'totp' => [
                 'pending' => $user->two_factor_secret !== null && $user->two_factor_confirmed_at === null,
                 'enabled' => $user->two_factor_confirmed_at !== null,
@@ -62,7 +52,11 @@ class MfaController extends Controller
                 'masked' => $this->maskedPhone($user),
                 'pending_verification' => $request->session()->has('mfa.phone.pending'),
             ],
-            'can_delete_passkey' => ! $mfaPolicy->wouldRemoveLastMethod($user),
+            'google' => [
+                'linked' => $user->socialAccounts()
+                    ->where('provider', UserSocialAccount::PROVIDER_GOOGLE)
+                    ->exists(),
+            ],
         ]);
     }
 

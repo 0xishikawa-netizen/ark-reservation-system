@@ -41,6 +41,13 @@
 - 2026-09-08: Phase 5 で Cashier を導入しない（subscription は Phase 6）。`stripe/stripe-php` のみ。
 - 2026-09-08: Phase 5.5 で MFA を Passkey 標準へ。判定は `MfaPolicy` に集約し、SMS 単独では要件を満たさない。
 - 2026-09-08: SMS provider 未契約のため `SmsSender` interface + log/fake のみ実装。実 provider へは接続しない。
+- 2026-09-10: **Phase 9.6 で Passkey / WebAuthn を撤去**。認証を「メール・パスワード（＋Google）→ 業務ロールのみ TOTP」に整理。
+  `MfaPolicy` は確認済み TOTP のみで判定。`passkeys` テーブルは新規 migration で drop（履歴は不変更）。
+- 2026-09-10: **Google ログインを追加**（Laravel Socialite / stateful）。`user_social_accounts` に identity を保存し
+  token は保持しない。特権ロールの silent linking・自動昇格は不可。**実 Google OAuth credential は未発行のため
+  REAL GOOGLE OAUTH QA = INCOMPLETE**（Socialite モックによる自動テストは GREEN）。
+- 2026-09-10: ARK ブランド色を公式サイト（ark-conditioning.com）実 CSS から再抽出し navy `#1A2653` へ統一。
+  旧 teal 系（`#1F8A80`）は撤去。根拠は `docs/design/ARK_DESIGN_SYSTEM.md`。
 
 ## Phase 9 追加の未確認事項（外部予約連携 — 推測で回答しない）
 

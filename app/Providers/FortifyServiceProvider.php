@@ -72,6 +72,17 @@ class FortifyServiceProvider extends ServiceProvider
             Str::lower((string) $request->input('email')).'|'.$request->ip(),
         ));
 
+        // 再認証（POST /user/confirm-password）の総当たり対策。ユーザー ID + IP で絞る。
+        RateLimiter::for('password-confirm', fn (Request $request) => Limit::perMinute(6)->by(
+            ($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip(),
+        ));
+
+        // Google OAuth の redirect / callback。IP 単位で緩めに制限（正規利用を阻害しない）。
+        RateLimiter::for('google-oauth', fn (Request $request) => [
+            Limit::perMinute(15)->by((string) $request->ip()),
+            Limit::perMinute(30)->by((string) ($request->session()->getId() ?: $request->ip())),
+        ]);
+
         RateLimiter::for('reserve', fn (Request $request) => Limit::perMinute(10)->by(
             (string) ($request->user()?->id ?? $request->ip()),
         ));

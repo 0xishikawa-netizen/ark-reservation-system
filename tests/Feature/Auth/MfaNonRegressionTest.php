@@ -33,14 +33,13 @@ use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\SettingsSeeder;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Carbon;
-use Laravel\Passkeys\Passkey;
 use Tests\TestCase;
 
 /**
- * Phase 5.5 の認証変更が Phase 4（回数券）/ Phase 5（Stripe）を壊していないことの確認。
+ * Phase 9.6 の認証変更（Passkey 撤去 / TOTP 一本化）が
+ * Phase 4（回数券）/ Phase 5（Stripe）を壊していないことの確認。
  *
- * とくに「TOTP を持たず Passkey だけの manager」が
- * 従来どおり機微操作（返金）を行えることを保証する。
+ * とくに「TOTP を確認済みの manager」が従来どおり機微操作（返金）を行えることを保証する。
  */
 final class MfaNonRegressionTest extends TestCase
 {
@@ -68,26 +67,23 @@ final class MfaNonRegressionTest extends TestCase
 
     // ---------- Phase 5 非退行 ----------
 
-    public function test_manager_with_only_a_passkey_can_reach_the_payments_screen(): void
+    public function test_manager_with_confirmed_totp_can_reach_the_payments_screen(): void
     {
-        // 以前は two_factor_confirmed_at が無いと /admin へ入れなかった。
-        $manager = $this->staffUser('manager', withPasskey: true);
+        $manager = $this->staffUser('manager', confirmedTotp: true);
 
         $this->actingAs($manager)->get('/admin/payments')->assertOk();
     }
 
-    public function test_manager_with_only_a_passkey_can_execute_a_refund(): void
+    public function test_manager_with_confirmed_totp_can_execute_a_refund(): void
     {
-        $manager = $this->staffUser('manager', withPasskey: true);
+        $manager = $this->staffUser('manager', confirmedTotp: true);
         $payment = $this->capturedPayment();
 
         $this->actingAs($manager)
-            // Passkey 再認証は Fortify 側で session()->passwordConfirmed() を呼ぶため、
-            // 既存の password.confirm middleware がそのまま満たされる。
             ->withSession(['auth.password_confirmed_at' => now()->timestamp])
             ->post("/admin/payments/{$payment->id}/refund", [
                 'amount' => 3000,
-                'reason' => 'Passkey 再認証後の返金',
+                'reason' => 'TOTP 有効ユーザーの再認証後の返金',
             ])
             ->assertRedirect();
 
@@ -99,7 +95,7 @@ final class MfaNonRegressionTest extends TestCase
 
     public function test_refund_still_requires_reauthentication_after_the_mfa_change(): void
     {
-        $manager = $this->staffUser('manager', withPasskey: true);
+        $manager = $this->staffUser('manager', confirmedTotp: true);
         $payment = $this->capturedPayment();
 
         $this->actingAs($manager)
@@ -164,6 +160,7 @@ final class MfaNonRegressionTest extends TestCase
     {
         $gateway = app(StripeGateway::class);
         $this->assertInstanceOf(FakeStripeGateway::class, $gateway);
+
         return $gateway;
     }
 
@@ -266,20 +263,18 @@ final class MfaNonRegressionTest extends TestCase
         return $wallet->refresh();
     }
 
-    private function staffUser(string $role, bool $withPasskey = false): User
+    private function staffUser(string $role, bool $confirmedTotp = false): User
     {
         $user = User::factory()->create();
         $user->assignRole($role);
         Staff::factory()->create(['user_id' => $user->id]);
 
-        if ($withPasskey) {
-            $passkey = new Passkey([
-                'name' => 'テスト端末',
-                'credential_id' => 'credential-'.$user->id,
-                'credential' => ['publicKey' => 'fake-public-key-for-tests'],
-            ]);
-            $passkey->user_id = $user->id;
-            $passkey->save();
+        if ($confirmedTotp) {
+            $user->forceFill([
+                'two_factor_secret' => encrypt('secret'),
+                'two_factor_recovery_codes' => encrypt(json_encode(['aaaa-bbbb'])),
+                'two_factor_confirmed_at' => now(),
+            ])->save();
         }
 
         return $user->refresh();

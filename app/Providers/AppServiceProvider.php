@@ -14,7 +14,6 @@ use App\Domain\Payment\Gateway\FakeStripeGateway;
 use App\Domain\Payment\Gateway\StripeApiGateway;
 use App\Domain\Payment\Gateway\StripeGateway;
 use App\Listeners\AuditAuthEvents;
-use App\Listeners\AuditPasskeyEvents;
 use App\Models\Customer;
 use App\Support\Settings\Settings;
 use Illuminate\Support\Facades\Event;
@@ -91,11 +90,6 @@ class AppServiceProvider extends ServiceProvider
         self::assertNoStripeLiveKeys();
 
         Event::subscribe(AuditAuthEvents::class);
-
-        // Passkey の登録 / 削除 / 認証を監査する（credential 本体は記録しない）。
-        Event::listen(\Laravel\Passkeys\Events\PasskeyRegistered::class, [AuditPasskeyEvents::class, 'handleRegistered']);
-        Event::listen(\Laravel\Passkeys\Events\PasskeyDeleted::class, [AuditPasskeyEvents::class, 'handleDeleted']);
-        Event::listen(\Laravel\Passkeys\Events\PasskeyVerified::class, [AuditPasskeyEvents::class, 'handleVerified']);
     }
 
     public static function assertNoStripeLiveKeys(): void

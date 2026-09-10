@@ -212,13 +212,20 @@ index: `(payment_id)`
 - Cashier 標準テーブル（`subscriptions` / `subscription_items`）は**課金契約の記録専用**。
   「月何回」は置かない。`memberships.stripe_subscription_id` で参照。
 
-### 認証・MFA（Phase 5.5）
+### 認証・MFA（Phase 5.5 / Phase 9.6 で更新）
 
-**passkeys**（`laravel/passkeys` 同梱 migration をそのまま使用。独自 credential schema を作らない）
-| id | user_id FK users cascade | name varchar | credential_id varchar **UNIQUE** | credential json（公開鍵・sign counter 等） | last_used_at timestamp null | timestamps |
+> **Phase 9.6**: `passkeys` テーブルは撤去（migration `2026_09_10_000008_drop_passkeys_table`）。
+> MFA は 6 桁 TOTP + SMS フォールバック + Recovery Code のみ。
 
-- WebAuthn の challenge / origin / RP ID 検証・replay 防止はライブラリの責務。アプリ側で暗号処理を書かない。
-- **RP ID は環境ごとに異なる**ため、Staging で登録した Passkey は本番では使えない。
+**users**（Phase 9.6）
+| password varchar **NULL 許容**（Google のみで登録したユーザーはパスワード未設定） |
+
+**user_social_accounts**（Phase 9.6 / Google ログイン）
+| id | user_id FK users cascade | provider varchar(32) | provider_user_id varchar(191) | provider_email varchar null | timestamps |
+
+- **`UNIQUE(provider, provider_user_id)`**。email は identity key にしない。
+- OAuth の access/refresh token は保存しない（ログイン用途のみ）。
+- 将来 Apple / LINE を足しても行を増やすだけ（users に provider 列を増やさない）。
 
 **staff**（Phase 5.5 で追加）
 | phone **text** null `encrypted` | phone_hmac char(64) index | phone_verified_at datetime null |

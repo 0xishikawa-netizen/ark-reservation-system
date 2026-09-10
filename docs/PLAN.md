@@ -173,23 +173,24 @@ Staging/Prod は小規模 VPS を推奨。ローカル開発は環境非依存�
 管理者保護：**MFA 必須**、`/admin` の短い idle timeout、`/admin/*` は deny-by-default、
 機微操作（返金・回数券/利用権の付与/取消/調整/期限変更・契約解約）は manager 以上 + 理由必須 + 再認証 + 監査。
 
-**MFA 方式（Phase 5.5 で TOTP 必須から移行）**：認証強度は **Passkey > TOTP > SMS OTP**。
+**MFA 方式（Phase 5.5 で TOTP 必須へ / Phase 9.6 で Passkey 撤去・TOTP 一本化）**
 
 | 手段 | 位置づけ |
 |---|---|
-| Passkey / WebAuthn | **第一選択**。`laravel/fortify` 同梱の `laravel/passkeys`（公式）。独自 WebAuthn 実装はしない |
-| TOTP | 代替。既存ユーザーの互換と移行期のバックアップ。**一括削除しない** |
+| TOTP（6 桁） | **主手段**。業務ロール（staff/manager/admin）は必須 |
 | SMS OTP | フォールバック。**単独では MFA 要件を満たさない**（SIM スワップ耐性が無いため） |
 | Recovery Code | 最終復旧（Fortify 標準） |
 
-- 要件判定は `App\Domain\Auth\MfaPolicy` に集約する。`two_factor_confirmed_at` を各所で直接見ない
-  （Passkey のみのユーザーが「MFA 未設定」と誤判定され全員ロックアウトされるため）。
-- 満たす条件：**Passkey が 1 つ以上 OR TOTP 確認済み**。
-- **最後の MFA 手段は削除できない**（自己ロックアウト対策）。裏口の master password や
+- 認証フロー：メール・パスワード（または Google）→ 主認証成功 → 業務ロールのみ TOTP チャレンジ。
+- 要件判定は `App\Domain\Auth\MfaPolicy` に集約する。`two_factor_confirmed_at` を各所で直接見ない。
+  満たす条件：**確認済み TOTP**。
+- 業務ロールは **TOTP を無効化できない**（`PreventStaffTotpDisable`）。裏口の master password や
   local だけの MFA バイパスは作らない。
-- 再認証は `password.confirm` を基本とし、Passkey 登録者は Passkey 再認証も選べる
-  （Fortify の passkey confirm が `session()->passwordConfirmed()` を立てるため既存 middleware がそのまま機能する）。
+- 再認証は `password.confirm`。
 - 顧客には MFA を課さない。
+- **Google ログイン（Phase 9.6 / Socialite）**：顧客は利用可。特権ロールは callback から
+  自動作成・自動昇格・silent link しない。Google ログインでも業務ロールの TOTP チャレンジは省略されない。
+  identity は `user_social_accounts`（`UNIQUE(provider, provider_user_id)`、token 非保存）。
 
 ## 13. セキュリティ
 

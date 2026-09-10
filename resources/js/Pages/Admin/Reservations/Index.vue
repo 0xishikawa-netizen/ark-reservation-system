@@ -2,6 +2,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { statusColor } from '@/design/tokens';
 
 defineOptions({ layout: AdminLayout });
 
@@ -92,25 +93,17 @@ const sourceLabels: Record<string, string> = {
     PEAK_MANAGER: 'Peak Manager',
 };
 
-const statusColors: Record<string, string> = {
-    confirmed: 'primary',
-    completed: 'success',
-    no_show: 'warning',
-    canceled: 'grey',
-    pending_payment: 'orange',
-    pending_external_sync: 'info',
-    expired: 'grey-darken-1',
-};
-
+// 予約ステータスの配色は design/tokens.ts（statusColor）を唯一の正本にする。
+// 予約「経路」はステータスではなくデータ区分なので、判別しやすい別系統の色を割り当てる
+// （ARK 自社 Web = ブランド primary、外部予約サイトは中間色）。
 const sourceColors: Record<string, string> = {
-    ARK_WEB: 'teal',
-    ADMIN: 'deep-purple',
-    HOTPEPPER: 'pink',
-    EPARK: 'blue',
+    ARK_WEB: 'primary',
+    ADMIN: 'secondary',
+    HOTPEPPER: 'pink-darken-1',
+    EPARK: 'cyan-darken-2',
     PEAK_MANAGER: 'indigo',
 };
 
-const statusColor = (value: string): string => statusColors[value] ?? 'grey';
 const sourceColor = (value: string): string => sourceColors[value] ?? 'grey';
 
 function applyFilters(): void {
