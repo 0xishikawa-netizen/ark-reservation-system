@@ -495,3 +495,11 @@ Outbox / Inbound / skeleton provider）はそのまま維持。将来差し込�
 - **REAL STRIPE TEST MODE QA = INCOMPLETE**（不変）。
 - **Membership Production Readiness = NOT READY**（不変）。
 - **SALON BOARD & Peak Manager Real Integration = BLOCKED**（不変）。
+
+## 2026-09-10 — キャンセルポリシー + ポリシー返金
+
+- 予約キャンセル返金率を、予約開始までの最低残り時間（`min_hours_before`）と返金率（`refund_percent`）の降順 tier で定義した。既定は `config/reservation.php`、運用時の上書きは settings を正とする。
+- settings key は `reservation.cancellation_tiers`（JSON）と `reservation.no_show_refund_percent`（int）。管理画面 `/admin/settings/reservation` から `settings.manage` 権限 + パスワード再確認付きで更新し、`reservation_policy.updated` を監査する。
+- `ReservationService::cancel` の既存 transaction では、予約の canceled 遷移・枠解放・回数券/利用権解放・Outbox 記録だけを行う。commit 後に capture 済みの単発カード決済を検索し、ポリシー算出額が正の場合だけ `PaymentService::refund` を呼ぶ。Stripe/Gateway 呼び出しは transaction 内で行わない。
+- 返金成功は `reservation.cancel_refunded`（返金額・率）を監査する。Gateway 失敗はキャンセルを取り消さず、決済を `needs_attention` にして `reservation.cancel_refund_failed` を監査し、手動確認へ回す。
+- 自動返金は testing 環境の Fake gateway で検証する。**REAL STRIPE TEST MODE QA = INCOMPLETE**（実 Test Mode credential / Stripe CLI による QA は未完了）。

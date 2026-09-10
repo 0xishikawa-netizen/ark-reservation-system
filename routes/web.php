@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\MembershipPlanController;
 use App\Http\Controllers\Admin\MfaController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\ReservationController as AdminReservationController;
+use App\Http\Controllers\Admin\ReservationPolicySettingsController;
 use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\StaffController;
@@ -292,4 +293,10 @@ Route::middleware([
     Route::patch('settings/tickets', [TicketPolicySettingsController::class, 'update'])
         ->middleware(['can:ticket_policy.manage', 'password.confirm'])
         ->name('settings.tickets.update');
+    Route::get('settings/reservation', [ReservationPolicySettingsController::class, 'show'])
+        ->middleware('can:settings.manage')
+        ->name('settings.reservation.show');
+    Route::patch('settings/reservation', [ReservationPolicySettingsController::class, 'update'])
+        ->middleware(['can:settings.manage', 'password.confirm'])
+        ->name('settings.reservation.update');
 });

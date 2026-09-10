@@ -193,6 +193,17 @@ const navigationItems = computed<NavigationItem[]>(() => {
                   },
               ]
             : []),
+        ...(can.settingsManage
+            ? [
+                  {
+                      title: '予約ポリシー',
+                      href: '/admin/settings/reservation',
+                      disabled: false,
+                      icon: 'mdi-calendar-alert-outline',
+                      group: 'マスタ' as const,
+                  },
+              ]
+            : []),
     ];
 });
 

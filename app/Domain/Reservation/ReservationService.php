@@ -7,7 +7,11 @@ namespace App\Domain\Reservation;
 use App\Domain\Integration\Enum\SyncOperation;
 use App\Domain\Integration\Service\ReservationOutboxRecorder;
 use App\Domain\Membership\MembershipReservationService;
+use App\Domain\Payment\PaymentService;
 use App\Domain\Ticket\TicketReservationService;
+use App\Enums\Payment\PaymentKind;
+use App\Enums\Payment\PaymentStatus as CardPaymentStatus;
+use App\Enums\Payment\RefundStatus;
 use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\PaymentStatus;
 use App\Enums\Reservation\ReservationStatus;
@@ -17,6 +21,7 @@ use App\Exceptions\NonBoundaryStartException;
 use App\Exceptions\Reservation\SlotUnavailableException;
 use App\Exceptions\Reservation\StaleReservationException;
 use App\Models\Booth;
+use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\ReservationResourceSlot;
 use App\Models\Service;
@@ -33,6 +38,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 final class ReservationService
 {
@@ -41,6 +47,8 @@ final class ReservationService
         private readonly TicketReservationService $tickets,
         private readonly MembershipReservationService $memberships,
         private readonly ReservationOutboxRecorder $outbox,
+        private readonly CancellationPolicy $cancellationPolicy,
+        private readonly PaymentService $payments,
     ) {}
 
     /** @throws ValidationException|SlotUnavailableException */
@@ -242,7 +250,87 @@ final class ReservationService
             $actor,
         );
 
+        // Stripe 返金は予約キャンセル transaction の commit 後にだけ実行する。
+        $payment = $reservation->payments()
+            ->where('kind', PaymentKind::Single->value)
+            ->where('status', CardPaymentStatus::Succeeded->value)
+            ->whereColumn('refunded_amount', '<', 'amount')
+            ->latest('id')
+            ->first();
+
+        if ($payment !== null) {
+            $percent = $this->cancellationPolicy->refundPercentFor($reservation, now());
+            $amount = $this->cancellationPolicy->refundableAmount($payment, $percent);
+
+            if ($amount > 0) {
+                $actorId = $actor instanceof User ? (int) $actor->id : null;
+
+                if ($actorId === null) {
+                    $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $actor);
+                } else {
+                    try {
+                        // PaymentService の既存契約は Authenticatable を受け取るため、検証済み User を渡す。
+                        $refund = $this->payments->refund(
+                            $payment,
+                            $amount,
+                            "キャンセルポリシーによる返金（{$percent}%）",
+                            $actor,
+                        );
+                    } catch (Throwable) {
+                        $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $actor);
+
+                        return $reservation;
+                    }
+
+                    if (in_array($refund->status, [
+                        RefundStatus::Succeeded,
+                        RefundStatus::Pending,
+                    ], true)) {
+                        $settlementNote = $refund->status === RefundStatus::Pending
+                            ? '・Stripe完了待ち'
+                            : '';
+                        $this->auditLogger->log(
+                            'reservation.cancel_refunded',
+                            $reservation,
+                            "予約キャンセル返金 #{$reservation->id} {$amount}円（{$percent}%{$settlementNote}）",
+                            $actor,
+                        );
+                    } elseif ($refund->status === RefundStatus::Failed) {
+                        $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $actor);
+                    }
+                }
+            }
+        }
+
         return $reservation;
+    }
+
+    private function recordCancelRefundFailure(
+        Reservation $reservation,
+        Payment $payment,
+        int $amount,
+        int $percent,
+        ?Authenticatable $actor,
+    ): void {
+        $freshPayment = $payment->fresh();
+
+        if ($freshPayment !== null) {
+            $changes = ['needs_attention' => true];
+
+            if ($freshPayment->failure_code === null) {
+                $changes['failure_code'] = 'cancel_refund_failed';
+                $changes['failure_message'] = 'キャンセルに伴う自動返金の確認が必要です。';
+            }
+
+            $freshPayment->forceFill($changes)->save();
+        }
+
+        $this->auditLogger->log(
+            'reservation.cancel_refund_failed',
+            $reservation,
+            "予約キャンセル返金失敗 #{$reservation->id} {$amount}円（{$percent}%）要確認",
+            $actor,
+        );
     }
 
     /** @throws ValidationException */

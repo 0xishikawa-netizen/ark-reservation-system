@@ -54,6 +54,7 @@ class HandleInertiaRequests extends Middleware
                     'membershipManage' => $user?->can('membership.manage') ?? false,
                     'integrationsView' => $user?->can('integrations.view') ?? false,
                     'integrationsManage' => $user?->can('integrations.manage') ?? false,
+                    'settingsManage' => $user?->can('settings.manage') ?? false,
                 ],
             ],
             'flash' => [

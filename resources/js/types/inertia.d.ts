@@ -26,6 +26,7 @@ interface AuthPermissions {
     membershipManage: boolean;
     integrationsView: boolean;
     integrationsManage: boolean;
+    settingsManage: boolean;
 }
 
 interface SharedPageProps {

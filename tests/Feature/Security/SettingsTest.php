@@ -26,7 +26,8 @@ class SettingsTest extends TestCase
             app(Settings::class)->get('ticket.expiration_hold_policy'),
         );
         $this->assertSame('consume', app(Settings::class)->get('membership.no_show_policy'));
-        $this->assertSame(8, Setting::query()->count());
+        // Phase 9: reservation.cancellation_tiers / reservation.no_show_refund_percent を追加。
+        $this->assertSame(10, Setting::query()->count());
     }
 
     public function test_missing_setting_returns_the_given_default(): void

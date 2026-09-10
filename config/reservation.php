@@ -53,6 +53,16 @@ return [
         'close' => '22:00',
     ],
 
+    // 予約開始までの残り時間に応じた返金率。上から順に最初に一致した段階を適用する。
+    'cancellation' => [
+        'tiers' => [
+            ['min_hours_before' => 48, 'refund_percent' => 100],
+            ['min_hours_before' => 24, 'refund_percent' => 50],
+            ['min_hours_before' => 0, 'refund_percent' => 0],
+        ],
+        'no_show_refund_percent' => 0,
+    ],
+
     // 顧客に「予約完了」を表示してよいタイミングの決定表（設計プラン §3）
     // local            : 自作 DB commit 時
     // peak_manager/... : Gateway.pushReservation() 成功後のみ
