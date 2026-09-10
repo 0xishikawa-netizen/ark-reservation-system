@@ -184,6 +184,13 @@ final class ReservationAdjustmentService
         Payment $addon,
         Authenticatable $adminActor,
     ): bool {
+        // cancelableAddons 取得後に webhook / sync で settle 済みへ変わっている競合。
+        // 既に取消不能なら「処理済み」として扱い、要対応化しない。
+        $fresh = $addon->fresh();
+        if ($fresh === null || ! in_array($fresh->status, [PaymentStatus::Pending, PaymentStatus::Authorized], true)) {
+            return true;
+        }
+
         try {
             if ($addon->stripe_payment_intent_id !== null) {
                 // Stripe HTTP: DB transaction 外。
@@ -198,6 +205,9 @@ final class ReservationAdjustmentService
                     }
                 });
             }
+        } catch (ValidationException) {
+            // cancel() 内で「取消不能」判定になった（直前に settle）。処理済み扱い。
+            return true;
         } catch (PaymentGatewayException) {
             $addon->refresh()->forceFill([
                 'needs_attention' => true,

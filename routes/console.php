@@ -24,6 +24,9 @@ Schedule::command('payments:expire')->everyMinute()->withoutOverlapping();
 // 決済の突合（read-only）。差異があれば非 zero exit で失敗として記録される。
 Schedule::command('payments:reconcile')->dailyAt('03:45')->withoutOverlapping();
 
+// timeout / 曖昧応答で pending のまま止まった返金を冪等キーで再送し settle する（Phase 9.5）。
+Schedule::command('payments:settle-pending-refunds')->everyTenMinutes()->withoutOverlapping();
+
 Schedule::command('memberships:grant-current')->dailyAt('04:00')->withoutOverlapping();
 
 Schedule::command('memberships:expire-grace')->dailyAt('04:15')->withoutOverlapping();
@@ -33,6 +36,9 @@ Schedule::command('memberships:reconcile')->dailyAt('04:30')->withoutOverlapping
 
 // DB 使用量の日次スナップショット（PLAN §14 / Phase 8）。閾値超過で非 zero exit。
 Schedule::command('db:snapshot-size')->dailyAt('02:45')->withoutOverlapping();
+
+// 技術ログの保持期間 prune（webhook_events / audit_logs。open / failed / 金銭・PII は保持）。
+Schedule::command('system:prune-technical-logs')->dailyAt('02:40')->withoutOverlapping();
 
 // Phase 9 外部予約連携（Provider 実仕様が無いため間隔は config 化・推測しない）。
 Schedule::command('reservations:dispatch-outbox')->everyMinute()->withoutOverlapping();
