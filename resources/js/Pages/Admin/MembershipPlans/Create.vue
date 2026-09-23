@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -20,12 +21,12 @@ function submit(): void {
 </script>
 
 <template>
-    <Head title="会員プラン作成" />
+    <Head title="月額プラン作成" />
 
-    <v-card max-width="760" title="会員プラン作成">
+    <v-card max-width="760" title="月額プラン作成">
         <v-card-text>
             <v-alert type="info" variant="tonal" class="mb-4">
-                Stripe の Test Mode で作成した price ID（price_ から始まる値）を入力してください。
+                {{ MESSAGES.membership.priceIdHint }}
             </v-alert>
             <v-form @submit.prevent="submit">
                 <v-text-field
@@ -63,7 +64,7 @@ function submit(): void {
                 />
                 <v-text-field
                     v-model="form.stripe_price_id"
-                    label="Stripe Price ID"
+                    label="Stripe 価格ID"
                     maxlength="40"
                     placeholder="price_..."
                     :error-messages="form.errors.stripe_price_id"

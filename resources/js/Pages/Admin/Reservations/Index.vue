@@ -1,8 +1,14 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { statusColor } from '@/design/tokens';
+import {
+    reservationSourceColor,
+    reservationSourceLabel,
+    reservationStatusLabel,
+    statusColor,
+} from '@/design/tokens';
+import { DateField, PageHeader, SectionCard } from '@/components/ark';
 
 defineOptions({ layout: AdminLayout });
 
@@ -41,12 +47,19 @@ interface Filters {
     date: string | null;
     staff_id: number | null;
     status: string | null;
+    customer_id: number | null;
+}
+
+interface FilteredCustomer {
+    user_id: number;
+    name: string;
 }
 
 const props = defineProps<{
     reservations: ReservationPaginator;
     staff: StaffOption[];
     filters: Filters;
+    filtered_customer: FilteredCustomer | null;
 }>();
 const page = usePage();
 const canManage = computed(() => page.props.auth.can.reservationsManage);
@@ -58,60 +71,30 @@ const status = ref<string | null>(props.filters.status);
 const headers = [
     { title: '日時', key: 'starts_at', sortable: false },
     { title: '顧客', key: 'customer_name', sortable: false },
-    { title: 'サービス', key: 'service_name', sortable: false },
+    { title: 'メニュー', key: 'service_name', sortable: false },
     { title: '担当', key: 'staff_name', sortable: false },
     { title: '状態', key: 'status', sortable: false },
     { title: '予約元', key: 'source', sortable: false },
-    { title: '', key: 'actions', sortable: false },
+    { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
 const statusItems = [
     { title: '予約確定', value: 'confirmed' },
     { title: '完了', value: 'completed' },
-    { title: 'No-show', value: 'no_show' },
+    { title: '無断キャンセル', value: 'no_show' },
     { title: 'キャンセル', value: 'canceled' },
     { title: '支払い待ち', value: 'pending_payment' },
     { title: '外部連携待ち', value: 'pending_external_sync' },
     { title: '期限切れ', value: 'expired' },
 ];
 
-const statusLabels: Record<string, string> = {
-    confirmed: '予約確定',
-    completed: '完了',
-    no_show: 'No-show',
-    canceled: 'キャンセル',
-    pending_payment: '支払い待ち',
-    pending_external_sync: '外部連携待ち',
-    expired: '期限切れ',
-};
-
-const sourceLabels: Record<string, string> = {
-    ARK_WEB: 'ARK Web',
-    ADMIN: '管理',
-    HOTPEPPER: 'Hot Pepper',
-    EPARK: 'EPARK',
-    PEAK_MANAGER: 'Peak Manager',
-};
-
-// 予約ステータスの配色は design/tokens.ts（statusColor）を唯一の正本にする。
-// 予約「経路」はステータスではなくデータ区分なので、判別しやすい別系統の色を割り当てる
-// （ARK 自社 Web = ブランド primary、外部予約サイトは中間色）。
-const sourceColors: Record<string, string> = {
-    ARK_WEB: 'primary',
-    ADMIN: 'secondary',
-    HOTPEPPER: 'pink-darken-1',
-    EPARK: 'cyan-darken-2',
-    PEAK_MANAGER: 'indigo',
-};
-
-const sourceColor = (value: string): string => sourceColors[value] ?? 'grey';
-
 function applyFilters(): void {
     router.get('/admin/reservations', {
         date: date.value || undefined,
         staff_id: staffId.value ?? undefined,
         status: status.value ?? undefined,
-    }, { preserveState: true, replace: true });
+        customer_id: props.filters.customer_id ?? undefined,
+    }, { preserveState: true, replace: true, preserveScroll: true });
 }
 
 function clearFilters(): void {
@@ -119,6 +102,24 @@ function clearFilters(): void {
     staffId.value = null;
     status.value = null;
     applyFilters();
+}
+
+function clearCustomerFilter(): void {
+    router.get('/admin/reservations', {
+        date: date.value || undefined,
+        staff_id: staffId.value ?? undefined,
+        status: status.value ?? undefined,
+    }, { preserveState: true, replace: true, preserveScroll: true });
+}
+
+function goToPage(targetPage: number): void {
+    router.get('/admin/reservations', {
+        page: targetPage,
+        date: date.value || undefined,
+        staff_id: staffId.value ?? undefined,
+        status: status.value ?? undefined,
+        customer_id: props.filters.customer_id ?? undefined,
+    }, { preserveState: true, preserveScroll: true });
 }
 
 function formatDateTime(value: string): string {
@@ -141,42 +142,67 @@ function openReservation(reservationId: number): void {
 <template>
     <Head title="予約" />
 
-    <div class="d-flex align-center justify-space-between mb-6 flex-wrap ga-3">
-        <div>
-            <h1 class="text-h4">予約</h1>
-            <div class="text-medium-emphasis mt-1">全 {{ reservations.total }} 件</div>
-        </div>
-        <v-btn v-if="canManage" color="primary" href="/admin/reservations/create">
-            新規予約
-        </v-btn>
-    </div>
+    <PageHeader title="予約" :subtitle="`全 ${reservations.total} 件`">
+        <template #actions>
+            <!-- 予約はブッキングボードから取る（専用の新規予約画面は廃止）。 -->
+            <v-btn
+                v-if="canManage"
+                color="primary"
+                prepend-icon="mdi-calendar-month-outline"
+                href="/admin/schedule?panel=create"
+            >
+                ブッキングボードで予約
+            </v-btn>
+        </template>
+    </PageHeader>
 
-    <v-card>
-        <v-card-text>
+    <v-alert
+        v-if="filtered_customer"
+        type="info"
+        variant="tonal"
+        closable
+        class="mb-4"
+        @click:close="clearCustomerFilter"
+    >
+        <strong>{{ filtered_customer.name }}</strong> 様の予約のみ表示しています。
+    </v-alert>
+
+    <SectionCard title="予約一覧" class="ark-table-section">
+        <div class="ark-table-section__filters">
             <v-form class="filter-grid" @submit.prevent="applyFilters">
-                <v-text-field v-model="date" type="date" label="日付" hide-details />
+                <div class="filter-grid__date">
+                    <DateField
+                        v-model="date"
+                        label="日付"
+                        density="compact"
+                        @update:model-value="applyFilters"
+                    />
+                </div>
                 <v-select
                     v-model="staffId"
                     :items="staff"
                     item-title="display_name"
                     item-value="user_id"
                     label="担当"
+                    density="compact"
                     clearable
                     hide-details
+                    class="filter-grid__staff"
+                    @update:model-value="applyFilters"
                 />
                 <v-select
                     v-model="status"
                     :items="statusItems"
                     label="状態"
+                    density="compact"
                     clearable
                     hide-details
+                    class="filter-grid__status"
+                    @update:model-value="applyFilters"
                 />
-                <div class="d-flex ga-2 align-center">
-                    <v-btn type="submit" variant="tonal">絞り込む</v-btn>
-                    <v-btn variant="text" @click="clearFilters">クリア</v-btn>
-                </div>
+                <v-btn variant="text" @click="clearFilters">クリア</v-btn>
             </v-form>
-        </v-card-text>
+        </div>
 
         <v-divider />
 
@@ -196,12 +222,12 @@ function openReservation(reservationId: number): void {
             </template>
             <template #item.status="{ item }">
                 <v-chip :color="statusColor(item.status)" size="small">
-                    {{ statusLabels[item.status] ?? item.status }}
+                    {{ reservationStatusLabel(item.status) }}
                 </v-chip>
             </template>
             <template #item.source="{ item }">
-                <v-chip :color="sourceColor(item.source)" size="small" variant="tonal">
-                    {{ sourceLabels[item.source] ?? item.source }}
+                <v-chip :color="reservationSourceColor(item.source)" size="small" variant="tonal">
+                    {{ reservationSourceLabel(item.source) }}
                 </v-chip>
             </template>
             <template #item.customer_name="{ item }">
@@ -219,7 +245,9 @@ function openReservation(reservationId: number): void {
                 <v-btn
                     v-if="canManage"
                     size="small"
-                    variant="text"
+                    variant="tonal"
+                    color="primary"
+                    prepend-icon="mdi-pencil-outline"
                     @click="openReservation(item.id)"
                 >
                     編集
@@ -227,32 +255,43 @@ function openReservation(reservationId: number): void {
             </template>
         </v-data-table>
 
-        <v-divider />
-        <div class="d-flex align-center justify-center ga-4 pa-4">
-            <Link
-                v-if="reservations.links[0]?.url"
-                :href="reservations.links[0].url"
-                preserve-scroll
-            >
-                前へ
-            </Link>
-            <span>{{ reservations.current_page }} / {{ reservations.last_page }}</span>
-            <Link
-                v-if="reservations.links[reservations.links.length - 1]?.url"
-                :href="reservations.links[reservations.links.length - 1]?.url ?? ''"
-                preserve-scroll
-            >
-                次へ
-            </Link>
-        </div>
-    </v-card>
+        <template v-if="reservations.last_page > 1">
+            <v-divider />
+            <div class="d-flex justify-center pa-4">
+                <v-pagination
+                    :model-value="reservations.current_page"
+                    :length="reservations.last_page"
+                    :total-visible="7"
+                    density="comfortable"
+                    rounded="circle"
+                    @update:model-value="goToPage"
+                />
+            </div>
+        </template>
+    </SectionCard>
 </template>
 
 <style scoped>
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+
+.ark-table-section__filters {
+    padding: var(--ark-space-4);
+}
+
 .filter-grid {
-    display: grid;
-    grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
-    gap: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.filter-grid__date,
+.filter-grid__staff,
+.filter-grid__status {
+    width: 240px;
+    flex: 0 0 auto;
 }
 
 .customer-link {
@@ -261,8 +300,10 @@ function openReservation(reservationId: number): void {
 }
 
 @media (max-width: 900px) {
-    .filter-grid {
-        grid-template-columns: 1fr 1fr;
+    .filter-grid__date,
+    .filter-grid__staff,
+    .filter-grid__status {
+        width: 100%;
     }
 }
 </style>

@@ -67,7 +67,7 @@ class ServiceController extends Controller
         $createService->execute($request->validated(), $request->user());
 
         return redirect()->route('admin.services.index')
-            ->with('success', 'サービスを作成しました。');
+            ->with('success', __('messages.service.created'));
     }
 
     public function edit(
@@ -102,7 +102,7 @@ class ServiceController extends Controller
         $setServiceStaff->execute($service, $data['staff_ids'] ?? [], $request->user());
 
         return redirect()->route('admin.services.index')
-            ->with('success', 'サービスを更新しました。');
+            ->with('success', __('messages.service.updated'));
     }
 
     public function setActive(

@@ -26,19 +26,19 @@ final class UpdateTicketPolicy
     ): void {
         if (! in_array($noShowPolicy, TicketPolicyResolver::ALLOWED_NO_SHOW, true)) {
             throw ValidationException::withMessages([
-                'no_show_policy' => '不正なポリシー値です。',
+                'no_show_policy' => __('messages.common.invalid_policy_value'),
             ]);
         }
 
         if (! in_array($expirationHoldPolicy, TicketPolicyResolver::ALLOWED_EXPIRATION_HOLD, true)) {
             throw ValidationException::withMessages([
-                'expiration_hold_policy' => '不正なポリシー値です。',
+                'expiration_hold_policy' => __('messages.common.invalid_policy_value'),
             ]);
         }
 
         if (trim($reason) === '') {
             throw ValidationException::withMessages([
-                'reason' => '理由は必須です。',
+                'reason' => __('messages.common.reason_required'),
             ]);
         }
 

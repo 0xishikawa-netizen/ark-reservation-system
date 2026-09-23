@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Customer\CreateProvisionalCustomer;
+use App\Actions\Reservation\UpdateReservationNomination;
 use App\Actions\Reservation\UpdateReservationNotes;
 use App\Domain\Payment\ReservationAdjustmentService;
 use App\Domain\Reservation\AvailabilityService;
@@ -22,12 +24,14 @@ use App\Models\User;
 use App\Queries\CustomerLookupQuery;
 use App\Queries\ReservationFormOptionsQuery;
 use App\Queries\ReservationListQuery;
+use App\Queries\ReservationPanelQuery;
 use App\Queries\ReservationPaymentSummaryQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -37,24 +41,29 @@ final class ReservationController extends Controller
         Request $request,
         ReservationListQuery $query,
         ReservationFormOptionsQuery $optionsQuery,
+        CustomerLookupQuery $customerLookup,
     ): Response {
         $validated = $request->validate([
             'date' => ['nullable', 'date_format:Y-m-d'],
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
             'status' => ['nullable', Rule::enum(ReservationStatus::class)],
+            'customer_id' => ['nullable', 'integer', 'exists:customers,user_id'],
         ]);
         $date = $this->nullableString($validated['date'] ?? null);
         $status = $this->nullableString($validated['status'] ?? null);
         $staffId = isset($validated['staff_id']) ? (int) $validated['staff_id'] : null;
+        $customerId = isset($validated['customer_id']) ? (int) $validated['customer_id'] : null;
 
         return Inertia::render('Admin/Reservations/Index', [
-            'reservations' => $query->paginate($date, $staffId, $status),
+            'reservations' => $query->paginate($date, $staffId, $status, customerId: $customerId),
             'staff' => $optionsQuery->staff(),
             'filters' => [
                 'date' => $date,
                 'staff_id' => $staffId,
                 'status' => $status,
+                'customer_id' => $customerId,
             ],
+            'filtered_customer' => $customerId === null ? null : $customerLookup->find($customerId),
         ]);
     }
 
@@ -69,6 +78,52 @@ final class ReservationController extends Controller
         return response()->json($query->search((string) ($validated['q'] ?? '')));
     }
 
+    /**
+     * 電話予約などで未登録のお客様の予約を取るための仮登録（§新規のお客様）。
+     * 氏名・カナ・電話番号のうち、聞けたものだけで顧客を作れる。
+     */
+    public function storeProvisionalCustomer(
+        Request $request,
+        CreateProvisionalCustomer $createProvisionalCustomer,
+        CustomerLookupQuery $query,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:100'],
+            'kana' => ['nullable', 'string', 'max:100'],
+            'phone' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        // 全部空だと後から誰の予約か辿れないため、最低1つは必須にする。
+        if (collect($validated)->filter(fn (?string $v): bool => trim((string) $v) !== '')->isEmpty()) {
+            throw ValidationException::withMessages([
+                'name' => __('messages.reservation.customer_search_required'),
+            ]);
+        }
+
+        $customer = $createProvisionalCustomer->execute($validated, $this->userFor($request));
+
+        return response()->json($query->find((int) $customer->user_id));
+    }
+
+    /**
+     * 予約台帳の「顧客・予約詳細パネル」用の集約データ（§17）。
+     * 予約カード 1 クリックで必要な情報を 1 レスポンスで返す。閲覧は can:reservations.view、
+     * 顧客 PII は can:customers.view を持つ場合のみ含める（§19・サーバー側でも認可）。
+     */
+    public function panel(
+        Request $request,
+        Reservation $reservation,
+        ReservationPanelQuery $query,
+    ): JsonResponse {
+        $user = $request->user();
+
+        return response()->json($query->get(
+            $reservation,
+            canManage: $user?->can('reservations.manage') === true,
+            canViewCustomer: $user?->can('customers.view') === true,
+        ));
+    }
+
     public function availability(
         Request $request,
         AvailabilityService $availabilityService,
@@ -78,6 +133,9 @@ final class ReservationController extends Controller
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
             'booth_id' => ['nullable', 'integer', 'exists:booths,id'],
             'date' => ['required', 'date_format:Y-m-d'],
+            'buffer_min' => ['nullable', 'integer', 'min:0', 'max:60'],
+            // 台帳の「メニューで空きを確認」用：空きブースの有無も考慮する。
+            'with_booths' => ['nullable', 'boolean'],
         ]);
 
         return response()->json($availabilityService->openStartTimes(
@@ -85,28 +143,29 @@ final class ReservationController extends Controller
             isset($validated['staff_id']) ? (int) $validated['staff_id'] : null,
             isset($validated['booth_id']) ? (int) $validated['booth_id'] : null,
             CarbonImmutable::parse((string) $validated['date']),
+            (int) ($validated['buffer_min'] ?? 0),
+            (bool) ($validated['with_booths'] ?? false),
         ));
     }
 
-    public function create(
+    /**
+     * メニュー選択時にブースを自動提案する（空いていなければ null）。
+     * あくまで初期提案。実際の予約作成時はサーバー側で改めて検証される。
+     */
+    public function availableBooth(
         Request $request,
-        ReservationFormOptionsQuery $query,
-    ): Response {
+        AvailabilityService $availabilityService,
+    ): JsonResponse {
         $validated = $request->validate([
-            'date' => ['nullable', 'date_format:Y-m-d'],
-            'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
-            'starts_at' => ['nullable', 'date'],
+            'service_id' => ['required', 'integer', 'exists:services,id'],
+            'starts_at' => ['required', 'date'],
         ]);
 
-        return Inertia::render('Admin/Reservations/Create', [
-            ...$query->get(),
-            'prefill' => [
-                'date' => $this->nullableString($validated['date'] ?? null),
-                'staff_id' => isset($validated['staff_id'])
-                    ? (int) $validated['staff_id']
-                    : null,
-                'starts_at' => $this->nullableString($validated['starts_at'] ?? null),
-            ],
+        return response()->json([
+            'booth_id' => $availabilityService->firstAvailableBooth(
+                (int) $validated['service_id'],
+                CarbonImmutable::parse((string) $validated['starts_at']),
+            ),
         ]);
     }
 
@@ -128,11 +187,34 @@ final class ReservationController extends Controller
             actorUserId: (int) $user->id,
             notes: $this->normalizeNotes($data['notes'] ?? null),
             adminContext: true,
+            isStaffRequested: (bool) ($data['is_staff_requested'] ?? false),
+            bufferMin: (int) ($data['buffer_min'] ?? 0),
         ));
 
         return redirect()
-            ->route('admin.schedule.index', ['date' => $startsAt->toDateString()])
-            ->with('success', '予約を作成しました。');
+            ->route('admin.schedule.index', $this->scheduleReturnParams($request, $startsAt->toDateString()))
+            ->with('success', __('messages.reservation.created'));
+    }
+
+    /**
+     * 台帳の軸・スタッフ絞り込み表示状態を保ったまま予約台帳へ戻る（date だけの
+     * リダイレクトだと軸が「スタッフ」にリセットされてしまうのを防ぐ）。
+     *
+     * @return array<string, string>
+     */
+    private function scheduleReturnParams(Request $request, string $date): array
+    {
+        $params = ['date' => $date];
+
+        foreach (['view', 'axis', 'staff_id'] as $key) {
+            $value = $request->query($key);
+
+            if ($value !== null && $value !== '') {
+                $params[$key] = (string) $value;
+            }
+        }
+
+        return $params;
     }
 
     public function edit(
@@ -200,6 +282,7 @@ final class ReservationController extends Controller
         Reservation $reservation,
         ReservationService $reservationService,
         UpdateReservationNotes $updateNotes,
+        UpdateReservationNomination $updateNomination,
     ): RedirectResponse {
         $data = $request->validated();
         $startsAt = CarbonImmutable::parse((string) $data['starts_at']);
@@ -211,6 +294,11 @@ final class ReservationController extends Controller
             ? $this->normalizeNotes($data['notes'])
             : $reservation->notes;
         $notesChanged = $notesProvided && $notes !== $reservation->notes;
+        $nominationProvided = array_key_exists('is_staff_requested', $data);
+        $isStaffRequested = $nominationProvided
+            ? (bool) $data['is_staff_requested']
+            : (bool) $reservation->is_staff_requested;
+        $nominationChanged = $nominationProvided && $isStaffRequested !== (bool) $reservation->is_staff_requested;
         $scheduleChanged = ! $startsAt->equalTo(CarbonImmutable::instance($reservation->starts_at))
             || $staffId !== ($reservation->staff_id === null ? null : (int) $reservation->staff_id)
             || $boothId !== ($reservation->booth_id === null ? null : (int) $reservation->booth_id);
@@ -227,16 +315,24 @@ final class ReservationController extends Controller
                 adminContext: true,
                 updateNotes: $notesProvided,
                 notes: $notes,
+                isStaffRequested: $nominationProvided ? $isStaffRequested : null,
             ));
-        } elseif ($notesChanged) {
-            $updateNotes->execute($reservation, $notes, $version, $user);
-        } elseif ($version !== $reservation->version) {
-            throw new StaleReservationException;
+        } else {
+            if ($notesChanged) {
+                $reservation = $updateNotes->execute($reservation, $notes, $version, $user);
+                $version = $reservation->version;
+            } elseif ($version !== $reservation->version) {
+                throw new StaleReservationException;
+            }
+
+            if ($nominationChanged) {
+                $reservation = $updateNomination->execute($reservation, $isStaffRequested, $version, $user);
+            }
         }
 
         return redirect()
             ->route('admin.reservations.edit', $reservation)
-            ->with('success', '予約を更新しました。');
+            ->with('success', __('messages.reservation.updated'));
     }
 
     public function cancel(
@@ -253,7 +349,7 @@ final class ReservationController extends Controller
             $request->user(),
         );
 
-        return back()->with('success', '予約をキャンセルしました。');
+        return back()->with('success', __('messages.reservation.canceled'));
     }
 
     public function complete(
@@ -263,7 +359,7 @@ final class ReservationController extends Controller
     ): RedirectResponse {
         $reservationService->markCompleted($reservation, $request->user());
 
-        return back()->with('success', '予約を完了にしました。');
+        return back()->with('success', __('messages.reservation.completed'));
     }
 
     public function noShow(
@@ -273,7 +369,7 @@ final class ReservationController extends Controller
     ): RedirectResponse {
         $reservationService->markNoShow($reservation, $request->user());
 
-        return back()->with('success', '予約をNo-showにしました。');
+        return back()->with('success', __('messages.reservation.no_show'));
     }
 
     private function userFor(Request $request): User

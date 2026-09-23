@@ -58,6 +58,6 @@ final class TicketPolicySettingsController extends Controller
             $request->user(),
         );
 
-        return back()->with('success', '回数券運用設定を更新しました。');
+        return back()->with('success', __('messages.ticket.policy_updated'));
     }
 }

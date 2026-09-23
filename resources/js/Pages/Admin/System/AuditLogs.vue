@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
-import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
+import { DateField, EmptyState, PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -105,15 +105,13 @@ const entityLabel = (item: AuditLogRow): string =>
                     clearable
                     hide-details
                 />
-                <v-text-field
+                <DateField
                     v-model="dateFrom"
-                    type="date"
                     label="開始日"
                     hide-details
                 />
-                <v-text-field
+                <DateField
                     v-model="dateTo"
-                    type="date"
                     label="終了日"
                     hide-details
                 />

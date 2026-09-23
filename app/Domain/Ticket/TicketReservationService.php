@@ -27,8 +27,7 @@ final class TicketReservationService
     public function hold(
         Reservation $reservation,
         ?Authenticatable $actor = null,
-    ): TicketReservationUsage
-    {
+    ): TicketReservationUsage {
         $existing = $this->usageFor($reservation);
 
         if ($existing !== null) {
@@ -39,7 +38,7 @@ final class TicketReservationService
             $wallet = $this->fefo->selectForHold((int) $reservation->customer_id);
 
             if ($wallet === null) {
-                throw new InsufficientTicketBalanceException('利用可能な回数券がありません');
+                throw new InsufficientTicketBalanceException(__('messages.ticket.none_available'));
             }
 
             $this->ledger->append(
@@ -72,8 +71,7 @@ final class TicketReservationService
     public function release(
         Reservation $reservation,
         ?Authenticatable $actor = null,
-    ): void
-    {
+    ): void {
         $usage = $this->usageFor($reservation);
 
         if ($usage === null || $usage->status !== TicketReservationUsageStatus::Held) {
@@ -121,8 +119,7 @@ final class TicketReservationService
     public function consume(
         Reservation $reservation,
         ?Authenticatable $actor = null,
-    ): void
-    {
+    ): void {
         $usage = $this->usageFor($reservation);
 
         if ($usage === null || in_array($usage->status, [
@@ -171,8 +168,7 @@ final class TicketReservationService
     public function handleNoShow(
         Reservation $reservation,
         ?Authenticatable $actor = null,
-    ): void
-    {
+    ): void {
         $usage = $this->usageFor($reservation);
 
         if ($usage === null) {

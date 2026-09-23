@@ -25,15 +25,22 @@ final class AvailabilityService
     }
 
     /**
-     * @return list<array{starts_at: string, ends_at: string, available_staff_ids: list<int>}>
+     * @param  bool  $withBooths  true のとき、ブース未指定でも「空いているブースが1つ以上ある」
+     *                            開始時刻だけを返し、各時刻に available_booth_ids を付ける
+     *                            （台帳の「メニューで空きを確認」でブースも考慮するため）。
+     * @return list<array{starts_at: string, ends_at: string, available_staff_ids: list<int>, available_booth_ids?: list<int>}>
      */
     public function openStartTimes(
         int $serviceId,
         ?int $staffId,
         ?int $boothId,
         CarbonImmutable $date,
+        int $bufferMin = 0,
+        bool $withBooths = false,
     ): array {
         $service = Service::query()->findOrFail($serviceId);
+        // 着替え等のバッファも枠として押さえるため、空き判定は施術時間＋バッファで行う。
+        $occupiedMin = $service->duration_min + max($bufferMin, 0);
 
         if (! $service->is_active) {
             return [];
@@ -68,8 +75,21 @@ final class AvailabilityService
             return [];
         }
 
+        // ブースも考慮する時の候補ブース。指定があればそのブースだけ、なければ有効な全ブース。
+        $boothPool = $boothId !== null
+            ? [$boothId]
+            : ($withBooths
+                ? Booth::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')
+                    ->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all()
+                : []);
+
+        if ($withBooths && $boothPool === []) {
+            return [];
+        }
+
         $shiftsByStaff = $this->shiftsByStaff($staffPool, $date);
-        $occupiedByResource = $this->occupiedByResource($staffPool, $boothId, $date);
+        $occupiedByResource = $this->occupiedByResource($staffPool, $boothPool, $date);
+        $blockedRangesByResource = $this->blockedRangesByResource($staffPool, $boothPool, $date);
         $firstCandidate = $open;
 
         while ($firstCandidate->lessThan($close) && ! $this->slotKey->isBoundary($firstCandidate)) {
@@ -80,10 +100,10 @@ final class AvailabilityService
 
         for (
             $startsAt = $firstCandidate;
-            $startsAt->addMinutes($service->duration_min)->lessThanOrEqualTo($close);
+            $startsAt->addMinutes($occupiedMin)->lessThanOrEqualTo($close);
             $startsAt = $startsAt->addMinutes($this->slotKey->slotMinutes())
         ) {
-            $endsAt = $startsAt->addMinutes($service->duration_min);
+            $endsAt = $startsAt->addMinutes($occupiedMin);
             $slots = $this->slotKey->occupiedSlots($startsAt, $endsAt, false);
             $availableStaffIds = [];
 
@@ -105,6 +125,17 @@ final class AvailabilityService
                     continue;
                 }
 
+                // 予定ブロック（休憩・ミーティング等）と重なる時間は予約不可（§34-35）。
+                if ($this->hasBlockOverlap(
+                    ResourceType::Staff,
+                    $candidateStaffId,
+                    $startsAt,
+                    $endsAt,
+                    $blockedRangesByResource,
+                )) {
+                    continue;
+                }
+
                 $availableStaffIds[] = $candidateStaffId;
             }
 
@@ -116,25 +147,101 @@ final class AvailabilityService
                 continue;
             }
 
-            if ($boothId !== null && $this->hasOccupiedSlot(
-                ResourceType::Booth,
-                $boothId,
-                $slots,
-                $occupiedByResource,
-            )) {
+            $availableBoothIds = [];
+
+            foreach ($boothPool as $candidateBoothId) {
+                if ($this->hasOccupiedSlot(
+                    ResourceType::Booth,
+                    $candidateBoothId,
+                    $slots,
+                    $occupiedByResource,
+                ) || $this->hasBlockOverlap(
+                    ResourceType::Booth,
+                    $candidateBoothId,
+                    $startsAt,
+                    $endsAt,
+                    $blockedRangesByResource,
+                )) {
+                    continue;
+                }
+
+                $availableBoothIds[] = $candidateBoothId;
+            }
+
+            // ブースを指定された時、またはブースも考慮する時は、空きブースが無ければ不可。
+            if ($boothPool !== [] && $availableBoothIds === []) {
                 continue;
             }
 
-            $results[] = [
+            $result = [
                 'starts_at' => $startsAt->format('Y-m-d H:i:s'),
                 'ends_at' => $endsAt->format('Y-m-d H:i:s'),
                 'available_staff_ids' => $staffId !== null || ! $service->requires_staff
                     ? []
                     : $availableStaffIds,
             ];
+
+            if ($withBooths) {
+                $result['available_booth_ids'] = $availableBoothIds;
+            }
+
+            $results[] = $result;
         }
 
         return $results;
+    }
+
+    /**
+     * 指定した開始時刻ちょうどで空いている最初のブースを返す（メニュー選択時の自動割当用）。
+     * あくまで画面側の初期提案であり、最終的な二重予約防止は既存の
+     * ReservationService::create()/reschedule() が改めて検証する。
+     */
+    public function firstAvailableBooth(int $serviceId, CarbonImmutable $startsAt): ?int
+    {
+        $service = Service::query()->findOrFail($serviceId);
+
+        if (! $service->is_active) {
+            return null;
+        }
+
+        $endsAt = $startsAt->addMinutes($service->duration_min);
+        $boothIds = Booth::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->pluck('id');
+
+        foreach ($boothIds as $boothId) {
+            $hasReservationConflict = DB::table('reservations')
+                ->where('booth_id', $boothId)
+                ->whereIn('status', [
+                    ReservationStatus::PendingPayment->value,
+                    ReservationStatus::PendingExternalSync->value,
+                    ReservationStatus::Confirmed->value,
+                ])
+                ->where('starts_at', '<', $endsAt->format('Y-m-d H:i:s'))
+                ->where('ends_at', '>', $startsAt->format('Y-m-d H:i:s'))
+                ->exists();
+
+            if ($hasReservationConflict) {
+                continue;
+            }
+
+            $hasBlockConflict = DB::table('staff_schedule_blocks')
+                ->where('booth_id', $boothId)
+                ->whereDate('work_date', $startsAt->toDateString())
+                ->whereTime('start_at', '<', $endsAt->format('H:i:s'))
+                ->whereTime('end_at', '>', $startsAt->format('H:i:s'))
+                ->exists();
+
+            if ($hasBlockConflict) {
+                continue;
+            }
+
+            return (int) $boothId;
+        }
+
+        return null;
     }
 
     /** @return list<int> */
@@ -193,14 +300,15 @@ final class AvailabilityService
 
     /**
      * @param  list<int>  $staffIds
+     * @param  list<int>  $boothIds
      * @return array<string, array<string, true>>
      */
     private function occupiedByResource(
         array $staffIds,
-        ?int $boothId,
+        array $boothIds,
         CarbonImmutable $date,
     ): array {
-        if ($staffIds === [] && $boothId === null) {
+        if ($staffIds === [] && $boothIds === []) {
             return [];
         }
 
@@ -213,7 +321,7 @@ final class AvailabilityService
             ])
             ->where('slots.slot_start', '>=', $date->startOfDay()->format('Y-m-d H:i:s'))
             ->where('slots.slot_start', '<', $date->addDay()->startOfDay()->format('Y-m-d H:i:s'))
-            ->where(function (Builder $query) use ($staffIds, $boothId): void {
+            ->where(function (Builder $query) use ($staffIds, $boothIds): void {
                 if ($staffIds !== []) {
                     $query->where(function (Builder $staffQuery) use ($staffIds): void {
                         $staffQuery
@@ -222,13 +330,13 @@ final class AvailabilityService
                     });
                 }
 
-                if ($boothId !== null) {
+                if ($boothIds !== []) {
                     $method = $staffIds === [] ? 'where' : 'orWhere';
 
-                    $query->{$method}(function (Builder $boothQuery) use ($boothId): void {
+                    $query->{$method}(function (Builder $boothQuery) use ($boothIds): void {
                         $boothQuery
                             ->where('slots.resource_type', ResourceType::Booth->value)
-                            ->where('slots.resource_id', $boothId);
+                            ->whereIn('slots.resource_id', $boothIds);
                     });
                 }
             })
@@ -289,5 +397,77 @@ final class AvailabilityService
     private function resourceKey(ResourceType $resourceType, int $resourceId): string
     {
         return $resourceType->value.':'.$resourceId;
+    }
+
+    /**
+     * 予定ブロック（休憩・ミーティング等）の時間帯。予約とは別テーブルで管理しているため、
+     * 同じ日付ぶんをまとめて1クエリで取得する（N+1禁止・§49）。
+     *
+     * @param  list<int>  $staffIds
+     * @param  list<int>  $boothIds
+     * @return array<string, list<array{start: CarbonImmutable, end: CarbonImmutable}>>
+     */
+    private function blockedRangesByResource(
+        array $staffIds,
+        array $boothIds,
+        CarbonImmutable $date,
+    ): array {
+        if ($staffIds === [] && $boothIds === []) {
+            return [];
+        }
+
+        $rows = DB::table('staff_schedule_blocks')
+            ->whereDate('work_date', $date->toDateString())
+            ->where(function (Builder $query) use ($staffIds, $boothIds): void {
+                if ($staffIds !== []) {
+                    $query->whereIn('staff_id', $staffIds);
+                }
+
+                if ($boothIds !== []) {
+                    $method = $staffIds === [] ? 'whereIn' : 'orWhereIn';
+                    $query->{$method}('booth_id', $boothIds);
+                }
+            })
+            ->get(['staff_id', 'booth_id', 'start_at', 'end_at']);
+
+        $ranges = [];
+
+        foreach ($rows as $row) {
+            $range = [
+                'start' => $this->businessTime($date, (string) $row->start_at),
+                'end' => $this->businessTime($date, (string) $row->end_at),
+            ];
+
+            if ($row->staff_id !== null) {
+                $ranges[$this->resourceKey(ResourceType::Staff, (int) $row->staff_id)][] = $range;
+            }
+
+            if ($row->booth_id !== null) {
+                $ranges[$this->resourceKey(ResourceType::Booth, (int) $row->booth_id)][] = $range;
+            }
+        }
+
+        return $ranges;
+    }
+
+    /**
+     * @param  array<string, list<array{start: CarbonImmutable, end: CarbonImmutable}>>  $blockedRangesByResource
+     */
+    private function hasBlockOverlap(
+        ResourceType $resourceType,
+        int $resourceId,
+        CarbonImmutable $startsAt,
+        CarbonImmutable $endsAt,
+        array $blockedRangesByResource,
+    ): bool {
+        $ranges = $blockedRangesByResource[$this->resourceKey($resourceType, $resourceId)] ?? [];
+
+        foreach ($ranges as $range) {
+            if ($startsAt->lessThan($range['end']) && $endsAt->greaterThan($range['start'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

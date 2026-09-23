@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Customer;
 
 use App\Models\Customer;
+use App\Models\Reservation;
 use App\Models\Service;
 use App\Models\Staff;
 use App\Models\StaffShift;
@@ -87,7 +88,7 @@ final class CustomerPortalE2ETest extends TestCase
         $response->assertRedirect();
 
         $reservation = $customer->user->customer->refresh()
-            ? \App\Models\Reservation::query()->where('customer_id', $customer->user_id)->firstOrFail()
+            ? Reservation::query()->where('customer_id', $customer->user_id)->firstOrFail()
             : null;
         $this->assertNotNull($reservation);
         $this->assertSame('confirmed', $reservation->status->value);
@@ -112,10 +113,10 @@ final class CustomerPortalE2ETest extends TestCase
         $other = $this->customer();
         [$service, $staff] = $this->bookable();
 
-        \App\Models\Reservation::factory()->create([
+        Reservation::factory()->create([
             'customer_id' => $me->user_id, 'starts_at' => now()->subDays(3), 'status' => 'completed',
         ]);
-        \App\Models\Reservation::factory()->create([
+        Reservation::factory()->create([
             'customer_id' => $other->user_id, 'starts_at' => now()->subDays(3), 'status' => 'completed',
         ]);
 

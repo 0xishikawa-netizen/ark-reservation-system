@@ -41,7 +41,7 @@ return [
     | - slot_minutes : reservation_resource_slots の粒度。顧客予約の開始時刻はこの倍数に限定。
     | - allow_admin_free_time : true のとき管理者は任意時刻予約可。占有スロットは start=floor / end=ceil。
     */
-    'slot_minutes' => (int) env('RESERVATION_SLOT_MINUTES', 15),
+    'slot_minutes' => (int) env('RESERVATION_SLOT_MINUTES', 5),
     'allow_admin_free_time' => (bool) env('RESERVATION_ALLOW_ADMIN_FREE_TIME', false),
 
     // 仮予約（pending_payment）の枠 HOLD 時間（分）

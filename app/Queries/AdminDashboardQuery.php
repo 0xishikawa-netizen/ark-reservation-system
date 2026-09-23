@@ -22,7 +22,7 @@ final class AdminDashboardQuery
     /**
      * @return array{
      *     today_reservation_count: int|null,
-     *     next_arrivals: list<array{id: int, starts_at: string, customer_name: string, service_name: string, staff_name: string|null}>|null,
+     *     next_arrivals: list<array{id: int, starts_at: string, customer_id: int, customer_name: string, service_name: string, staff_name: string|null}>|null,
      *     needs_attention_payment_count: int|null,
      *     stale_pending_reservation_count: int|null,
      *     membership_attention: array{grace: int, paused: int, canceling: int}|null,
@@ -73,7 +73,10 @@ final class AdminDashboardQuery
     }
 
     /**
-     * @return list<array{id: int, starts_at: string, customer_name: string, service_name: string, staff_name: string|null}>
+     * 本日の予約のうち、まだ来店（完了）していない人を、開始時刻の早い順に全件返す。
+     * 5件などに絞らないのは、本日の未対応者を漏れなく把握するためのリストだから。
+     *
+     * @return list<array{id: int, starts_at: string, customer_id: int, customer_name: string, service_name: string, staff_name: string|null}>
      */
     private function nextArrivals(): array
     {
@@ -86,13 +89,13 @@ final class AdminDashboardQuery
                 ReservationStatus::Confirmed->value,
                 ReservationStatus::PendingExternalSync->value,
             ])
-            ->where('reservations.starts_at', '>=', now())
+            ->whereDate('reservations.starts_at', today())
             ->orderBy('reservations.starts_at')
             ->orderBy('reservations.id')
-            ->limit(5)
             ->get([
                 'reservations.id',
                 'reservations.starts_at',
+                'customers.user_id as customer_id',
                 'customer_users.name as customer_name',
                 'services.name as service_name',
                 'staff.display_name as staff_name',
@@ -100,6 +103,7 @@ final class AdminDashboardQuery
             ->map(static fn (object $row): array => [
                 'id' => (int) $row->id,
                 'starts_at' => (string) $row->starts_at,
+                'customer_id' => (int) $row->customer_id,
                 'customer_name' => (string) $row->customer_name,
                 'service_name' => (string) $row->service_name,
                 'staff_name' => $row->staff_name === null ? null : (string) $row->staff_name,

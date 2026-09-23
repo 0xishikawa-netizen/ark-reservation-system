@@ -78,7 +78,7 @@ final class MembershipLedgerService
                     }
 
                     throw ValidationException::withMessages([
-                        'membership' => '当期の利用可能回数を超える操作です。',
+                        'membership' => __('messages.membership.over_period_limit'),
                     ]);
                 }
 
@@ -218,18 +218,18 @@ final class MembershipLedgerService
         ?Authenticatable $actor = null,
     ): MembershipUsageTransaction {
         if ($delta === 0) {
-            throw ValidationException::withMessages(['delta' => '調整数は 0 以外で指定してください。']);
+            throw ValidationException::withMessages(['delta' => __('messages.membership.adjust_nonzero')]);
         }
 
         if (trim($reason) === '') {
-            throw ValidationException::withMessages(['reason' => '理由は必須です。']);
+            throw ValidationException::withMessages(['reason' => __('messages.common.reason_required')]);
         }
 
         // 空の operation key は dedupe_key を "adjust:" に潰し、以後の調整が全 membership 横断で
         // 既存行扱いになり黙って無視される。HTTP 経路は FormRequest が uuid を強制するが、
         // console / job / 将来の呼び出し元に対する多層防御としてここでも弾く。
         if (trim($operationKey) === '') {
-            throw ValidationException::withMessages(['operation_key' => '操作キーは必須です。']);
+            throw ValidationException::withMessages(['operation_key' => __('messages.membership.operation_key_required')]);
         }
 
         $period = $this->currentPeriod($membership);

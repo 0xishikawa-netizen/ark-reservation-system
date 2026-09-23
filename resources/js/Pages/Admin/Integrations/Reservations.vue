@@ -2,6 +2,7 @@
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -90,7 +91,7 @@ function retry(row: ActionableRow): void {
             density="comfortable"
             class="mb-4"
         >
-            現在、実動する外部予約連携はありません（Mock のみ利用可能）。
+            {{ MESSAGES.integration.noneActive }}
         </v-alert>
 
         <div class="provider-grid">
@@ -134,7 +135,7 @@ function retry(row: ActionableRow): void {
             density="comfortable"
             class="mb-3"
         >
-            再送には「連携管理」権限が必要です。
+            {{ MESSAGES.integration.retryForbidden }}
         </v-alert>
         <v-table density="compact">
             <thead>
@@ -179,7 +180,7 @@ function retry(row: ActionableRow): void {
             variant="tonal"
             density="comfortable"
         >
-            同期履歴はまだありません。
+            {{ MESSAGES.integration.noSyncHistory }}
         </v-alert>
         <v-table v-else density="compact">
             <thead>

@@ -56,8 +56,9 @@ final class AdminReservationManagementTest extends TestCase
                 ->component('Admin/Schedule/Index')
                 ->where('auth.can.reservationsView', true)
                 ->where('auth.can.reservationsManage', false));
+        // 新規予約の専用画面は廃止したため、同じ権限で守られたAPIで確認する。
         $this->actingAs($staff)
-            ->get('/admin/reservations/create')
+            ->get('/admin/reservations/availability?service_id=1&date=2026-10-01')
             ->assertForbidden();
         $this->actingAs($staff)
             ->postJson('/admin/reservations', [])
@@ -257,10 +258,11 @@ final class AdminReservationManagementTest extends TestCase
                 'date' => '2026-10-01',
             ]))
             ->assertOk();
+        // 予約の作成はブッキングボード（Admin/Schedule/Index）のパネルから行う。
         $this->actingAs($manager)
-            ->get('/admin/reservations/create')
+            ->get('/admin/schedule?date=2026-10-01&panel=create')
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->component('Admin/Reservations/Create'));
+            ->assertInertia(fn (Assert $page) => $page->component('Admin/Schedule/Index'));
     }
 
     /** @return array{Customer, Service, Staff, Booth} */

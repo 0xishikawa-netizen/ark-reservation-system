@@ -35,8 +35,11 @@ final class StoreAdminReservationRequest extends FormRequest
                 ),
             ],
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
+            'is_staff_requested' => ['nullable', 'boolean'],
             'booth_id' => ['nullable', 'integer', 'exists:booths,id'],
             'starts_at' => ['required', 'date'],
+            // 施術後の着替え・片付け用の余白（分）。台帳から選べる値だけに限定する。
+            'buffer_min' => ['nullable', 'integer', Rule::in([0, 5, 10, 15])],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];
     }
@@ -65,7 +68,7 @@ final class StoreAdminReservationRequest extends FormRequest
         $staffId = $this->input('staff_id');
 
         if ($service?->requires_staff && $staffId === null) {
-            $validator->errors()->add('staff_id', 'このサービスには担当スタッフが必要です。');
+            $validator->errors()->add('staff_id', __('messages.reservation.staff_required'));
 
             return;
         }
@@ -83,7 +86,7 @@ final class StoreAdminReservationRequest extends FormRequest
         if ($staff === null || ! $staff->is_bookable || ! $assigned) {
             $validator->errors()->add(
                 'staff_id',
-                'このスタッフは選択したサービスを担当できません。',
+                __('messages.reservation.staff_not_assigned_to_selected'),
             );
         }
     }
@@ -100,7 +103,7 @@ final class StoreAdminReservationRequest extends FormRequest
             ->exists();
 
         if (! $active) {
-            $validator->errors()->add('booth_id', 'このブースは現在利用できません。');
+            $validator->errors()->add('booth_id', __('messages.reservation.booth_unavailable'));
         }
     }
 
@@ -120,7 +123,7 @@ final class StoreAdminReservationRequest extends FormRequest
         if (! SlotKey::fromSettings()->isBoundary($startsAt)) {
             $validator->errors()->add(
                 'starts_at',
-                '開始時刻を予約枠の境界に合わせてください。',
+                __('messages.reservation.non_boundary_start'),
             );
         }
     }

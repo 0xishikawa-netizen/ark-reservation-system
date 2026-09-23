@@ -27,14 +27,13 @@ class UpdateShift
                 ->whereKeyNot($shift->getKey())
                 ->lockForUpdate()
                 ->get(['id', 'start_at', 'end_at'])
-                ->contains(fn (StaffShift $existingShift): bool =>
-                    substr((string) $existingShift->start_at, 0, 5) < (string) $data['end_at']
+                ->contains(fn (StaffShift $existingShift): bool => substr((string) $existingShift->start_at, 0, 5) < (string) $data['end_at']
                     && substr((string) $existingShift->end_at, 0, 5) > (string) $data['start_at']
                 );
 
             if ($hasOverlap) {
                 throw ValidationException::withMessages([
-                    'start_at' => '同じスタッフの勤務枠と時間帯が重複しています。',
+                    'start_at' => __('messages.shift.overlap'),
                 ]);
             }
 

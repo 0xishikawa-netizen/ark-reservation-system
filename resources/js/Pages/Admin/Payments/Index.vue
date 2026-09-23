@@ -26,9 +26,15 @@ interface Paginated<T> {
     last_page: number;
 }
 
+interface FilteredCustomer {
+    user_id: number;
+    name: string;
+}
+
 const props = defineProps<{
     payments: Paginated<PaymentRow>;
-    filters: { status: string; needs_attention: boolean };
+    filters: { status: string; needs_attention: boolean; customer_id: number | null };
+    filtered_customer: FilteredCustomer | null;
     statuses: string[];
     attention_count: number;
 }>();
@@ -38,12 +44,12 @@ const needsAttention = ref(props.filters.needs_attention);
 
 const statusLabels: Record<string, string> = {
     pending: '手続き中',
-    authorized: '与信済み（未確定）',
+    authorized: 'カード仮押さえ（未請求）',
     succeeded: '支払い済み',
-    voided: '与信取消',
+    voided: '仮押さえ取消',
     failed: '失敗',
-    partially_refunded: '一部返金',
-    refunded: '返金済み',
+    partially_refunded: '一部返金済み',
+    refunded: '全額返金済み',
 };
 
 const applyFilters = (): void => {
@@ -52,6 +58,7 @@ const applyFilters = (): void => {
         {
             status: status.value || undefined,
             needs_attention: needsAttention.value ? 1 : undefined,
+            customer_id: props.filters.customer_id ?? undefined,
         },
         { preserveState: true, replace: true },
     );
@@ -64,8 +71,20 @@ const goToPage = (page: number): void => {
             page,
             status: status.value || undefined,
             needs_attention: needsAttention.value ? 1 : undefined,
+            customer_id: props.filters.customer_id ?? undefined,
         },
         { preserveState: true },
+    );
+};
+
+const clearCustomerFilter = (): void => {
+    router.get(
+        '/admin/payments',
+        {
+            status: status.value || undefined,
+            needs_attention: needsAttention.value ? 1 : undefined,
+        },
+        { preserveState: true, replace: true },
     );
 };
 </script>
@@ -84,25 +103,52 @@ const goToPage = (page: number): void => {
             </template>
         </PageHeader>
 
+        <v-alert
+            v-if="filtered_customer"
+            type="info"
+            variant="tonal"
+            closable
+            class="mb-4"
+            @click:close="clearCustomerFilter"
+        >
+            <strong>{{ filtered_customer.name }}</strong> 様の決済のみ表示しています。
+        </v-alert>
+
         <div class="ark-page__sections">
             <SectionCard title="絞り込み" variant="outlined">
                 <div class="d-flex flex-wrap ga-4 align-center">
-                <v-select
-                    v-model="status"
-                    :items="[{ title: 'すべて', value: '' }, ...statuses.map((s) => ({ title: statusLabels[s] ?? s, value: s }))]"
-                    label="ステータス"
-                    density="compact"
-                    hide-details
-                    style="max-width: 220px"
-                    @update:model-value="applyFilters"
-                />
-                <v-checkbox
-                    v-model="needsAttention"
-                    label="要対応のみ"
-                    density="compact"
-                    hide-details
-                    @update:model-value="applyFilters"
-                />
+                    <v-select
+                        v-model="status"
+                        :items="[{ title: 'すべて', value: '' }, ...statuses.map((s) => ({ title: statusLabels[s] ?? s, value: s }))]"
+                        label="ステータス"
+                        density="compact"
+                        hide-details
+                        style="max-width: 240px"
+                        @update:model-value="applyFilters"
+                    />
+
+                    <v-btn-toggle
+                        :model-value="needsAttention ? 'attention' : 'all'"
+                        density="compact"
+                        variant="outlined"
+                        divided
+                        mandatory
+                        @update:model-value="(v: string) => { needsAttention = v === 'attention'; applyFilters(); }"
+                    >
+                        <v-btn value="all" size="small">すべて表示</v-btn>
+                        <v-btn value="attention" size="small" color="error">
+                            要対応のみ
+                            <v-chip
+                                v-if="attention_count > 0"
+                                size="x-small"
+                                color="error"
+                                variant="flat"
+                                class="ml-2"
+                            >
+                                {{ attention_count }}
+                            </v-chip>
+                        </v-btn>
+                    </v-btn-toggle>
                 </div>
             </SectionCard>
 
@@ -153,7 +199,9 @@ const goToPage = (page: number): void => {
                         <td class="text-right">
                             <v-btn
                                 size="small"
-                                variant="text"
+                                variant="tonal"
+                                color="primary"
+                                append-icon="mdi-chevron-right"
                                 :href="`/admin/payments/${payment.id}`"
                                 @click.prevent="router.get(`/admin/payments/${payment.id}`)"
                             >

@@ -371,8 +371,7 @@ class PaymentServiceTest extends TestCase
         string $status,
         ?string $id = null,
         int $amountReceived = 0,
-    ): PaymentIntentResult
-    {
+    ): PaymentIntentResult {
         return new PaymentIntentResult(
             id: $id ?? (string) ($payment->stripe_payment_intent_id ?? 'pi_fake_result'),
             status: $status,

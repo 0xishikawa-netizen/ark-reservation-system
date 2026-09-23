@@ -60,7 +60,7 @@ class RescheduleReservationRequest extends FormRequest
         if ($staff === null || ! $staff->is_bookable || ! $isAssigned) {
             $validator->errors()->add(
                 'staff_id',
-                'このスタッフは予約サービスを担当できません。',
+                __('messages.reservation.staff_not_assigned_to_reserved'),
             );
         }
     }
@@ -80,7 +80,7 @@ class RescheduleReservationRequest extends FormRequest
         if (! SlotKey::fromSettings()->isBoundary($startsAt)) {
             $validator->errors()->add(
                 'starts_at',
-                '開始時刻を予約枠の境界に合わせてください。',
+                __('messages.reservation.non_boundary_start'),
             );
         }
     }

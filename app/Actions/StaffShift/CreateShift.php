@@ -57,14 +57,13 @@ class CreateShift
             ->where('work_date', $workDate)
             ->lockForUpdate()
             ->get(['id', 'start_at', 'end_at'])
-            ->contains(fn (StaffShift $shift): bool =>
-                substr((string) $shift->start_at, 0, 5) < $endAt
+            ->contains(fn (StaffShift $shift): bool => substr((string) $shift->start_at, 0, 5) < $endAt
                 && substr((string) $shift->end_at, 0, 5) > $startAt
             );
 
         if ($hasOverlap) {
             throw ValidationException::withMessages([
-                'start_at' => '同じスタッフの勤務枠と時間帯が重複しています。',
+                'start_at' => __('messages.shift.overlap'),
             ]);
         }
     }

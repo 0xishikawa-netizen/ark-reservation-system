@@ -10,6 +10,8 @@ use App\Domain\Ticket\TicketLedgerService;
 use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
+use App\Enums\Reservation\ResourceType;
+use App\Models\Booth;
 use App\Models\Customer;
 use App\Models\Reservation;
 use App\Models\Service;
@@ -114,6 +116,30 @@ class ReservationBookingTest extends TestCase
         $this->assertSame(PaymentMethod::Onsite, $reservation->payment_method);
         $this->assertSame(4, $reservation->resourceSlots()->count());
         $this->assertDatabaseCount('ticket_reservation_usages', 0);
+    }
+
+    public function test_customer_booking_assigns_an_available_booth_and_reserves_its_slots(): void
+    {
+        $customer = Customer::factory()->create();
+        [$service, $staff] = $this->bookableServiceAndStaff();
+        $this->shift($staff);
+        $booth = Booth::factory()->create(['is_active' => true]);
+
+        $this->actingAs($customer->user)->post('/reserve', [
+            'service_id' => $service->id,
+            'staff_id' => $staff->user_id,
+            'starts_at' => '2026-10-01 10:00:00',
+        ])->assertSessionHasNoErrors();
+
+        $reservation = Reservation::query()->sole();
+
+        $this->assertNotNull($reservation->booth_id);
+        $this->assertSame($booth->id, $reservation->booth_id);
+        $this->assertDatabaseHas('reservation_resource_slots', [
+            'reservation_id' => $reservation->id,
+            'resource_type' => ResourceType::Booth->value,
+            'resource_id' => $booth->id,
+        ]);
     }
 
     public function test_customer_can_book_with_a_ticket_and_hold_one_available_use(): void

@@ -100,6 +100,43 @@ final class DashboardTest extends TestCase
                 ->where('next_arrivals.0.staff_name', '担当 スタッフ'));
     }
 
+    public function test_next_arrivals_is_todays_unarrived_reservations_without_a_five_item_cap(): void
+    {
+        $admin = User::factory()->create([
+            'two_factor_confirmed_at' => now(),
+        ]);
+        $admin->assignRole('admin');
+
+        // 過去時刻でも「本日」かつ未来店（Confirmed）なら含める。
+        $pastToday = Reservation::factory()->create([
+            'starts_at' => now()->subHour(),
+            'status' => ReservationStatus::Confirmed,
+        ]);
+        // 5件という上限は撤廃し、本日分は全件返す。
+        $laterToday = Reservation::factory()->count(5)->create([
+            'starts_at' => now()->addHours(2),
+            'status' => ReservationStatus::Confirmed,
+        ]);
+        // 来店完了済みは対象外。
+        Reservation::factory()->create([
+            'starts_at' => now()->addHour(),
+            'status' => ReservationStatus::Completed,
+        ]);
+        // 翌日の予約は対象外。
+        Reservation::factory()->create([
+            'starts_at' => now()->addDay(),
+            'status' => ReservationStatus::Confirmed,
+        ]);
+
+        $this->actingAs($admin)
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Dashboard')
+                ->has('next_arrivals', 6)
+                ->where('next_arrivals.0.id', $pastToday->id));
+    }
+
     public function test_staff_only_receives_sections_allowed_by_permissions(): void
     {
         $staffRole = Role::findByName('staff');

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import { DateField } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -77,10 +79,27 @@ const statusLabels: Record<string, string> = {
     expired: '期限切れ',
 };
 
+/**
+ * 日付が変わったら空き時間を自動で取り直す。「空き時間を見る」ボタンを押させる方式は
+ * 何のためのボタンか分かりにくいため、他の予約フォームと同じく明示操作なしで
+ * 最新の候補を出す（§空き時間の自動取得）。
+ */
+let availabilityTimer: ReturnType<typeof setTimeout> | null = null;
+
 watch(date, () => {
+    if (availabilityTimer !== null) {
+        clearTimeout(availabilityTimer);
+    }
+
     slots.value = [];
     changeForm.starts_at = null;
     availabilityError.value = '';
+
+    if (date.value === '') {
+        return;
+    }
+
+    availabilityTimer = setTimeout(() => void loadAvailability(), 150);
 });
 
 watch(() => props.reservation.version, (version) => {
@@ -142,18 +161,23 @@ async function loadAvailability(): Promise<void> {
         });
 
         if (!response.ok) {
-            throw new Error('空き時間を取得できませんでした。');
+            throw new Error(MESSAGES.availability.loadFailed);
         }
 
         slots.value = (await response.json()) as AvailabilitySlot[];
     } catch (error: unknown) {
         availabilityError.value = error instanceof Error
             ? error.message
-            : '空き時間を取得できませんでした。';
+            : MESSAGES.availability.loadFailed;
     } finally {
         loadingSlots.value = false;
     }
 }
+
+const slotItems = computed(() => slots.value.map((slot) => ({
+    title: timeLabel(slot.starts_at),
+    value: slot.starts_at,
+})));
 
 function reschedule(): void {
     if (changeForm.starts_at === null) {
@@ -269,23 +293,22 @@ function cancelReservation(): void {
     <v-dialog v-model="changeOpen" max-width="560">
         <v-card title="予約日時を変更">
             <v-card-text>
-                <v-text-field
+                <DateField
                     v-model="date"
-                    type="date"
                     label="変更後の日付"
                     :min="today()"
-                />
-                <v-btn
-                    block
-                    color="primary"
-                    variant="outlined"
-                    :disabled="date === ''"
-                    :loading="loadingSlots"
                     class="mb-4"
-                    @click="loadAvailability"
-                >
-                    空き時間を見る
-                </v-btn>
+                />
+                <v-select
+                    v-if="date !== ''"
+                    v-model="changeForm.starts_at"
+                    :items="slotItems"
+                    :loading="loadingSlots"
+                    label="時間"
+                    variant="outlined"
+                    class="mb-4"
+                    :disabled="slotItems.length === 0"
+                />
                 <v-alert
                     v-if="availabilityError"
                     type="error"
@@ -308,19 +331,8 @@ function cancelReservation(): void {
                     variant="tonal"
                     class="mb-4"
                 >
-                    選択日に予約できる時間はありません。
+                    {{ MESSAGES.availability.noneOnDate }}
                 </v-alert>
-                <div v-else class="slot-grid">
-                    <v-btn
-                        v-for="slot in slots"
-                        :key="slot.starts_at"
-                        :variant="changeForm.starts_at === slot.starts_at ? 'flat' : 'outlined'"
-                        color="primary"
-                        @click="changeForm.starts_at = slot.starts_at"
-                    >
-                        {{ timeLabel(slot.starts_at) }}
-                    </v-btn>
-                </div>
                 <div v-if="changeForm.errors.starts_at" class="text-error mt-3">
                     {{ changeForm.errors.starts_at }}
                 </div>
@@ -343,7 +355,7 @@ function cancelReservation(): void {
     <v-dialog v-model="cancelOpen" max-width="480">
         <v-card title="予約をキャンセルしますか？">
             <v-card-text>
-                <p class="mb-4">キャンセルすると、この予約枠は解放されます。</p>
+                <p class="mb-4">{{ MESSAGES.reservation.cancelReleasesSlot }}</p>
                 <v-textarea
                     v-model="cancelForm.reason"
                     label="理由（任意）"
@@ -374,15 +386,4 @@ function cancelReservation(): void {
     border-radius: 999px;
 }
 
-.slot-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.75rem;
-}
-
-@media (max-width: 420px) {
-    .slot-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
 </style>

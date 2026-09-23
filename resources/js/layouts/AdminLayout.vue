@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const navigationGroupTitles = [
+    // 店舗業務のメイン画面。ヘッダー左端（ダッシュボードより前）に単独タブで出す。
+    'ボード',
     'ホーム',
     '予約',
     '顧客',
-    '回数券・会員',
     '支払い',
-    'マスタ',
+    '設定',
     'システム',
 ] as const;
 
@@ -20,6 +21,8 @@ interface NavigationItem {
     disabled: boolean;
     icon: string;
     group: NavigationGroupTitle;
+    /** 「設定」など項目が多いグループ内を責務ごとに束ねる小見出し（任意）。 */
+    subgroup?: string;
 }
 
 interface NavigationGroup {
@@ -28,6 +31,31 @@ interface NavigationGroup {
 }
 
 const page = usePage();
+const mobileNavOpen = ref(false);
+
+const snackbar = ref<{ show: boolean; text: string; color: string }>({
+    show: false,
+    text: '',
+    color: 'success',
+});
+
+watch(
+    () => [page.props.flash.success, page.props.flash.error, page.props.flash.info],
+    ([success, error, info]) => {
+        const message = success ?? error ?? info;
+
+        if (!message) {
+            return;
+        }
+
+        snackbar.value = {
+            show: true,
+            text: message,
+            color: error ? 'error' : success ? 'success' : 'info',
+        };
+    },
+    { immediate: true },
+);
 
 const navigationItems = computed<NavigationItem[]>(() => {
     const can = page.props.auth.can;
@@ -40,169 +68,59 @@ const navigationItems = computed<NavigationItem[]>(() => {
             icon: 'mdi-view-dashboard-outline',
             group: 'ホーム',
         },
-        ...(can.staffManage
-            ? [
-                  {
-                      title: 'スタッフ',
-                      href: '/admin/staff',
-                      disabled: false,
-                      icon: 'mdi-account-group-outline',
-                      group: 'マスタ' as const,
-                  },
-              ]
+        ...(can.reservationsView
+            ? [{ title: 'ブッキングボード', href: '/admin/schedule', disabled: false, icon: 'mdi-calendar-month-outline', group: 'ボード' as const }]
             : []),
-        ...(can.shiftsManage
-            ? [
-                  {
-                      title: '勤務枠',
-                      href: '/admin/staff-shifts',
-                      disabled: false,
-                      icon: 'mdi-calendar-clock-outline',
-                      group: 'マスタ' as const,
-                  },
-              ]
+        ...(can.staffManage
+            ? [{ title: 'スタッフ', href: '/admin/staff', disabled: false, icon: 'mdi-account-group-outline', group: '設定' as const, subgroup: '店舗設定' }]
             : []),
         ...(can.servicesManage
-            ? [
-                  {
-                      title: 'サービス',
-                      href: '/admin/services',
-                      disabled: false,
-                      icon: 'mdi-clipboard-text-outline',
-                      group: 'マスタ' as const,
-                  },
-              ]
+            ? [{ title: 'メニュー', href: '/admin/services', disabled: false, icon: 'mdi-clipboard-text-outline', group: '設定' as const, subgroup: '店舗設定' }]
             : []),
         ...(can.boothsManage
-            ? [
-                  {
-                      title: 'ブース',
-                      href: '/admin/booths',
-                      disabled: false,
-                      icon: 'mdi-door-open',
-                      group: 'マスタ' as const,
-                  },
-              ]
+            ? [{ title: 'ブース', href: '/admin/booths', disabled: false, icon: 'mdi-door-open', group: '設定' as const, subgroup: '店舗設定' }]
             : []),
         ...(can.ticketProductsManage
-            ? [
-                  {
-                      title: '回数券商品',
-                      href: '/admin/ticket-products',
-                      disabled: false,
-                      icon: 'mdi-ticket-confirmation-outline',
-                      group: '回数券・会員' as const,
-                  },
-              ]
+            ? [{ title: '回数券商品', href: '/admin/ticket-products', disabled: false, icon: 'mdi-ticket-confirmation-outline', group: '設定' as const, subgroup: '回数券関連' }]
             : []),
         ...(can.membershipManage
-            ? [
-                  {
-                      title: '会員プラン',
-                      href: '/admin/membership-plans',
-                      disabled: false,
-                      icon: 'mdi-card-account-details-outline',
-                      group: '回数券・会員' as const,
-                  },
-              ]
+            ? [{ title: '月額プラン', href: '/admin/membership-plans', disabled: false, icon: 'mdi-card-account-details-outline', group: '設定' as const, subgroup: '月額プラン（サブスク）関連' }]
             : []),
         ...(can.customersView
-            ? [
-                  {
-                      title: '顧客',
-                      href: '/admin/customers',
-                      disabled: false,
-                      icon: 'mdi-account-multiple-outline',
-                      group: '顧客' as const,
-                  },
-              ]
+            ? [{ title: '顧客', href: '/admin/customers', disabled: false, icon: 'mdi-account-multiple-outline', group: '顧客' as const }]
             : []),
         ...(can.reservationsView
             ? [
-                  {
-                      title: '予約',
-                      href: '/admin/reservations',
-                      disabled: false,
-                      icon: 'mdi-calendar-check-outline',
-                      group: '予約' as const,
-                  },
-                  {
-                      title: '予約台帳',
-                      href: '/admin/schedule',
-                      disabled: false,
-                      icon: 'mdi-calendar-month-outline',
-                      group: '予約' as const,
-                  },
-                  {
-                      title: '決済',
-                      href: '/admin/payments',
-                      disabled: false,
-                      icon: 'mdi-credit-card-outline',
-                      group: '支払い' as const,
-                  },
+                  { title: '予約', href: '/admin/reservations', disabled: false, icon: 'mdi-format-list-bulleted', group: '予約' as const },
+                  { title: '決済', href: '/admin/payments', disabled: false, icon: 'mdi-credit-card-outline', group: '支払い' as const },
               ]
+            : []),
+        ...(can.shiftsManage
+            ? [{ title: '勤務枠', href: '/admin/staff-shifts', disabled: false, icon: 'mdi-calendar-clock-outline', group: '設定' as const, subgroup: '店舗設定' }]
             : []),
         ...(can.failedJobsView
             ? [
-                  {
-                      title: 'システム状態',
-                      href: '/admin/system/status',
-                      disabled: false,
-                      icon: 'mdi-monitor-dashboard',
-                      group: 'システム' as const,
-                  },
-                  {
-                      title: '失敗ジョブ',
-                      href: '/admin/system/failed-jobs',
-                      disabled: false,
-                      icon: 'mdi-alert-circle-outline',
-                      group: 'システム' as const,
-                  },
+                  { title: 'システム状態', href: '/admin/system/status', disabled: false, icon: 'mdi-monitor-dashboard', group: 'システム' as const },
+                  { title: '失敗ジョブ', href: '/admin/system/failed-jobs', disabled: false, icon: 'mdi-alert-circle-outline', group: 'システム' as const },
               ]
             : []),
         ...(can.auditLogsView
-            ? [
-                  {
-                      title: '監査ログ',
-                      href: '/admin/system/audit-logs',
-                      disabled: false,
-                      icon: 'mdi-clipboard-text-clock-outline',
-                      group: 'システム' as const,
-                  },
-              ]
+            ? [{ title: '監査ログ', href: '/admin/system/audit-logs', disabled: false, icon: 'mdi-clipboard-text-clock-outline', group: 'システム' as const }]
             : []),
         ...(can.integrationsView
-            ? [
-                  {
-                      title: '外部予約連携',
-                      href: '/admin/integrations/reservations',
-                      disabled: false,
-                      icon: 'mdi-sync',
-                      group: 'システム' as const,
-                  },
-              ]
+            ? [{ title: '外部予約連携', href: '/admin/integrations/reservations', disabled: false, icon: 'mdi-sync', group: 'システム' as const }]
             : []),
         ...(can.ticketPolicyManage
-            ? [
-                  {
-                      title: '回数券運用設定',
-                      href: '/admin/settings/tickets',
-                      disabled: false,
-                      icon: 'mdi-tune-variant',
-                      group: 'マスタ' as const,
-                  },
-              ]
+            ? [{ title: '回数券運用設定', href: '/admin/settings/tickets', disabled: false, icon: 'mdi-tune-variant', group: '設定' as const, subgroup: '回数券関連' }]
             : []),
         ...(can.settingsManage
-            ? [
-                  {
-                      title: '予約ポリシー',
-                      href: '/admin/settings/reservation',
-                      disabled: false,
-                      icon: 'mdi-calendar-alert-outline',
-                      group: 'マスタ' as const,
-                  },
-              ]
+            ? [{ title: '予約ポリシー', href: '/admin/settings/reservation', disabled: false, icon: 'mdi-calendar-alert-outline', group: '設定' as const, subgroup: '予約設定' }]
+            : []),
+        ...(can.settingsManage
+            ? [{ title: '通知設定', href: '/admin/settings/notifications', disabled: false, icon: 'mdi-bell-ring-outline', group: '設定' as const, subgroup: '予約設定' }]
+            : []),
+        ...(can.rolesManage
+            ? [{ title: 'ロール権限', href: '/admin/settings/roles', disabled: false, icon: 'mdi-shield-account-outline', group: '設定' as const, subgroup: '権限管理' }]
             : []),
     ];
 });
@@ -216,97 +134,434 @@ const navigationGroups = computed<NavigationGroup[]>(() =>
         .filter((group) => group.items.length > 0),
 );
 
-const currentPath = computed(() => page.url.split(/[?#]/, 1)[0] || '/');
+interface NavigationSection {
+    label: string | null;
+    items: NavigationItem[];
+}
 
-const isActive = (item: NavigationItem): boolean => {
-    if (item.href === '/admin') {
-        return currentPath.value === item.href;
+/**
+ * ドロップダウン内の項目を責務ごとの小見出し（subgroup）でまとめる。
+ * subgroup を持たない項目は見出しなしのセクションにまとめる。
+ */
+const groupSections = (items: NavigationItem[]): NavigationSection[] => {
+    const order: (string | null)[] = [];
+    const buckets = new Map<string | null, NavigationItem[]>();
+
+    for (const item of items) {
+        const key = item.subgroup ?? null;
+
+        if (!buckets.has(key)) {
+            buckets.set(key, []);
+            order.push(key);
+        }
+
+        buckets.get(key)!.push(item);
     }
 
-    return (
-        currentPath.value === item.href ||
-        currentPath.value.startsWith(`${item.href}/`)
-    );
+    return order.map((label) => ({ label, items: buckets.get(label)! }));
 };
+
+const currentPath = computed(() => page.url.split(/[?#]/, 1)[0] || '/');
+
+const matchesPath = (href: string): boolean => {
+    if (href === '/admin') {
+        return currentPath.value === href;
+    }
+
+    return currentPath.value === href || currentPath.value.startsWith(`${href}/`);
+};
+
+const isActive = (item: NavigationItem): boolean => {
+    if (!matchesPath(item.href)) {
+        return false;
+    }
+
+    // より具体的（href が長い）な項目が一致していればそちらを優先する。
+    // 例: /admin/system/failed-jobs は「失敗ジョブ」だけをアクティブにする。
+    const moreSpecific = navigationItems.value.some(
+        (other) =>
+            other.href !== item.href &&
+            other.href.length > item.href.length &&
+            matchesPath(other.href),
+    );
+
+    return !moreSpecific;
+};
+
+const activeGroup = computed<NavigationGroupTitle | null>(() => {
+    const hit = navigationItems.value.find((item) => isActive(item));
+
+    return hit?.group ?? null;
+});
 
 const visit = (item: NavigationItem): void => {
     if (!item.disabled) {
         router.visit(item.href);
+        mobileNavOpen.value = false;
     }
 };
 
 const logout = (): void => {
     router.post('/logout');
 };
+
+// 画面右上に現在時刻を表示する（Peak Manager 参考）。
+const now = ref(new Date());
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+
+const currentTimeLabel = computed(() => {
+    const h = String(now.value.getHours()).padStart(2, '0');
+    const m = String(now.value.getMinutes()).padStart(2, '0');
+
+    return `${h}:${m}`;
+});
+
+onMounted(() => {
+    clockTimer = setInterval(() => { now.value = new Date(); }, 1000);
+});
+
+onBeforeUnmount(() => {
+    if (clockTimer !== null) {
+        clearInterval(clockTimer);
+    }
+});
 </script>
 
 <template>
     <v-app>
-        <v-navigation-drawer permanent width="256" color="surface" border="e">
-            <v-list-item class="py-4" :title="page.props.name" subtitle="管理画面" />
-            <v-divider />
-            <v-list nav class="py-3" aria-label="管理メニュー">
+        <!-- 上：主メニュー（ヘッダー） -->
+        <v-app-bar color="surface" flat border="b" height="60">
+            <template #prepend>
+                <v-btn
+                    class="d-md-none"
+                    icon="mdi-menu"
+                    aria-label="メニューを開く"
+                    color="primary"
+                    variant="text"
+                    @click="mobileNavOpen = true"
+                />
+                <span class="ark-topbar__brand">
+                    <span class="ark-topbar__mark" aria-hidden="true">
+                        <svg viewBox="0 0 40 40" width="20" height="20">
+                            <defs>
+                                <linearGradient id="arkTopMark" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0" stop-color="#0087C5" />
+                                    <stop offset="0.55" stop-color="rgb(var(--v-theme-primary))" />
+                                    <stop offset="1" stop-color="rgb(var(--v-theme-primary-darken-1))" />
+                                </linearGradient>
+                            </defs>
+                            <path d="M20 3 L36 37 H27.5 L20 19.5 L12.5 37 H4 Z" fill="url(#arkTopMark)" />
+                        </svg>
+                    </span>
+                    <span class="ark-topbar__name">{{ page.props.name }}</span>
+                </span>
+            </template>
+
+            <nav class="ark-topnav d-none d-md-flex" aria-label="管理メニュー">
                 <template v-for="group in navigationGroups" :key="group.title">
-                    <v-list-subheader class="text-overline">
-                        {{ group.title }}
-                    </v-list-subheader>
-                    <v-list-item
-                        v-for="item in group.items"
-                        :key="item.title"
-                        :title="item.title"
-                        :disabled="item.disabled"
-                        :active="isActive(item)"
-                        :aria-current="isActive(item) ? 'page' : undefined"
-                        color="primary"
-                        rounded="lg"
-                        @click="visit(item)"
+                    <button
+                        v-if="group.items.length === 1"
+                        type="button"
+                        class="ark-topnav__tab"
+                        :class="{ 'ark-topnav__tab--active': activeGroup === group.title }"
+                        :aria-current="activeGroup === group.title ? 'page' : undefined"
+                        @click="visit(group.items[0])"
                     >
-                        <template #prepend>
-                            <v-icon :icon="item.icon" aria-hidden="true" />
+                        {{ group.items[0].title }}
+                    </button>
+
+                    <v-menu
+                        v-else
+                        open-on-hover
+                        :open-delay="0"
+                        :close-delay="120"
+                        location="bottom start"
+                        offset="0"
+                        transition="fade-transition"
+                        content-class="ark-topnav-menu"
+                    >
+                        <template #activator="{ props: menuProps }">
+                            <button
+                                v-bind="menuProps"
+                                type="button"
+                                class="ark-topnav__tab"
+                                :class="{ 'ark-topnav__tab--active': activeGroup === group.title }"
+                                :aria-current="activeGroup === group.title ? 'page' : undefined"
+                            >
+                                <span>{{ group.title }}</span>
+                                <v-icon icon="mdi-chevron-down" size="14" class="ark-topnav__caret" />
+                            </button>
                         </template>
-                    </v-list-item>
+                        <v-list density="compact" nav slim>
+                            <template v-for="section in groupSections(group.items)" :key="section.label ?? '_'">
+                                <!-- 責務ごとの小見出し（例: 店舗設定）はクリック／フォーカスで
+                                     横（右側）にフライアウトするサブメニューにする。
+                                     項目が1つしかないカテゴリはネストする意味がないため素の項目として出す。 -->
+                                <v-menu
+                                    v-if="section.label && section.items.length > 1"
+                                    submenu
+                                    location="end top"
+                                    open-on-hover
+                                    :open-delay="0"
+                                    :close-delay="120"
+                                    content-class="ark-topnav-menu"
+                                >
+                                    <template #activator="{ props: subProps }">
+                                        <v-list-item
+                                            v-bind="subProps"
+                                            :title="section.label"
+                                            class="ark-topnav-menu__group-activator"
+                                            @click.stop
+                                        >
+                                            <template #append>
+                                                <v-icon icon="mdi-chevron-right" size="16" />
+                                            </template>
+                                        </v-list-item>
+                                    </template>
+                                    <v-list density="compact" nav slim>
+                                        <v-list-item
+                                            v-for="item in section.items"
+                                            :key="item.href"
+                                            :title="item.title"
+                                            :active="isActive(item)"
+                                            color="primary"
+                                            @click="visit(item)"
+                                        >
+                                            <template #prepend>
+                                                <v-icon :icon="item.icon" size="18" />
+                                            </template>
+                                        </v-list-item>
+                                    </v-list>
+                                </v-menu>
+                                <v-list-item
+                                    v-for="item in section.items"
+                                    v-else
+                                    :key="item.href"
+                                    :title="item.title"
+                                    :active="isActive(item)"
+                                    color="primary"
+                                    @click="visit(item)"
+                                >
+                                    <template #prepend>
+                                        <v-icon :icon="item.icon" size="18" />
+                                    </template>
+                                </v-list-item>
+                            </template>
+                        </v-list>
+                    </v-menu>
+                </template>
+            </nav>
+
+            <template #append>
+                <span class="ark-topbar__clock" aria-label="現在時刻">
+                    <v-icon icon="mdi-clock-outline" size="18" />
+                    {{ currentTimeLabel }}
+                </span>
+                <v-divider vertical inset class="mx-3 d-none d-lg-flex" />
+                <span
+                    v-if="page.props.auth.user"
+                    class="text-medium-emphasis d-none d-lg-inline ark-topbar__user"
+                >
+                    {{ page.props.auth.user.name }}
+                </span>
+                <v-divider v-if="page.props.auth.user" vertical inset class="mx-3 d-none d-lg-flex" />
+                <v-btn
+                    variant="tonal"
+                    size="small"
+                    color="primary"
+                    prepend-icon="mdi-logout"
+                    class="mr-1"
+                    @click="logout"
+                >
+                    ログアウト
+                </v-btn>
+            </template>
+        </v-app-bar>
+
+        <!-- 狭い画面：全項目のドロワー -->
+        <v-navigation-drawer v-model="mobileNavOpen" temporary width="272">
+            <v-list-item class="py-3" :title="page.props.name" subtitle="管理画面" />
+            <v-divider />
+            <v-list nav aria-label="管理メニュー">
+                <template v-for="group in navigationGroups" :key="group.title">
+                    <v-list-subheader class="text-overline">{{ group.title }}</v-list-subheader>
+                    <template v-for="section in groupSections(group.items)" :key="section.label ?? '_'">
+                        <v-list-subheader
+                            v-if="section.label && section.items.length > 1"
+                            class="ark-mobilenav__subheader"
+                        >
+                            {{ section.label }}
+                        </v-list-subheader>
+                        <v-list-item
+                            v-for="item in section.items"
+                            :key="item.href"
+                            :title="item.title"
+                            :active="isActive(item)"
+                            :aria-current="isActive(item) ? 'page' : undefined"
+                            color="primary"
+                            rounded="lg"
+                            @click="visit(item)"
+                        >
+                            <template #prepend>
+                                <v-icon :icon="item.icon" />
+                            </template>
+                        </v-list-item>
+                    </template>
                 </template>
             </v-list>
         </v-navigation-drawer>
 
-        <v-app-bar color="surface" border="b">
-            <v-app-bar-title class="text-primary font-weight-bold">
-                {{ page.props.name }}
-            </v-app-bar-title>
-            <template #append>
-                <span v-if="page.props.auth.user" class="mr-4">
-                    {{ page.props.auth.user.name }}
-                </span>
-                <v-btn variant="text" @click="logout">ログアウト</v-btn>
-            </template>
-        </v-app-bar>
-
         <v-main class="bg-background">
             <v-container fluid class="pa-6">
-                <v-alert
-                    v-if="page.props.flash.success"
-                    type="success"
-                    class="mb-4"
-                >
-                    {{ page.props.flash.success }}
-                </v-alert>
-                <v-alert
-                    v-if="page.props.flash.error"
-                    type="error"
-                    class="mb-4"
-                >
-                    {{ page.props.flash.error }}
-                </v-alert>
-                <v-alert
-                    v-if="page.props.flash.info"
-                    type="info"
-                    class="mb-4"
-                >
-                    {{ page.props.flash.info }}
-                </v-alert>
-
                 <slot />
             </v-container>
         </v-main>
+
+        <!-- 保存などの結果を、スクロール位置に関わらず必ず目に入る場所（画面下部）に出す。
+             §フラッシュメッセージがページ最上部の v-alert だと、長いページの下の方で
+             操作した直後は画面外になり気づけないため snackbar に統一。 -->
+        <v-snackbar
+            v-model="snackbar.show"
+            :color="snackbar.color"
+            location="bottom"
+            timeout="4000"
+        >
+            {{ snackbar.text }}
+        </v-snackbar>
     </v-app>
 </template>
+
+<style scoped>
+/* ── トップバーのブランド ── */
+.ark-topbar__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ark-space-2);
+    margin-inline: var(--ark-space-2) var(--ark-space-4);
+}
+
+.ark-topbar__mark {
+    display: inline-flex;
+}
+
+.ark-topbar__name {
+    font-weight: 700;
+    color: rgb(var(--v-theme-primary));
+    white-space: nowrap;
+}
+
+.ark-topbar__user {
+    white-space: nowrap;
+}
+
+.ark-topbar__clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: rgba(var(--v-theme-on-surface), 0.7);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* ── トップメニュー（タブ） ── */
+.ark-topnav {
+    display: flex;
+    align-items: stretch;
+    gap: var(--ark-space-1);
+    height: 60px;
+    margin-left: var(--ark-space-2);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.ark-topnav::-webkit-scrollbar {
+    display: none;
+}
+
+.ark-topnav__tab {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 60px;
+    padding-inline: var(--ark-space-4);
+    border: 0;
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    color: rgb(var(--v-theme-on-surface));
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+
+.ark-topnav__tab:hover {
+    background: rgb(var(--v-theme-brand-soft));
+}
+
+.ark-topnav__tab--active {
+    color: rgb(var(--v-theme-primary));
+    border-bottom-color: rgb(var(--v-theme-primary));
+}
+
+.ark-topnav__caret {
+    flex: 0 0 14px;
+    opacity: 0.55;
+}
+
+.ark-topnav__tab:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: -2px;
+}
+</style>
+
+<!-- v-menu の内容は body 直下へ teleport されるため scoped では届かない -->
+<style>
+.ark-topnav-menu .v-list {
+    min-width: 220px;
+    padding-block: 4px;
+    border: 1px solid #d9dee5;
+    border-radius: var(--ark-radius);
+    box-shadow: 0 8px 24px rgb(18 25 60 / 14%);
+}
+
+.ark-topnav-menu .v-list-subheader {
+    min-height: 26px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    opacity: 0.6;
+}
+
+.ark-topnav-menu__group-activator .v-list-item-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    opacity: 0.85;
+}
+
+.ark-topnav-menu .v-list-item {
+    min-height: 34px !important;
+    padding-inline: 12px !important;
+}
+
+.ark-topnav-menu .v-list-item-title {
+    font-size: 0.85rem;
+}
+
+.ark-topnav-menu .v-list-item__prepend {
+    width: 26px;
+    margin-inline-end: 6px !important;
+}
+
+.ark-mobilenav__subheader {
+    min-height: 24px;
+    padding-inline-start: 28px !important;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    opacity: 0.6;
+}
+</style>

@@ -39,7 +39,8 @@ class HomeRoutingTest extends TestCase
                 ->has('attention'));
     }
 
-    public function test_staff_with_confirmed_two_factor_is_redirected_to_admin(): void
+    /** 店舗スタッフが一番使うのはブッキングボードなので、ログイン直後はそこへ着地させる。 */
+    public function test_staff_with_confirmed_two_factor_is_redirected_to_booking_board(): void
     {
         $staff = User::factory()->create([
             'email_verified_at' => now(),
@@ -48,6 +49,24 @@ class HomeRoutingTest extends TestCase
         $staff->assignRole('staff');
 
         $this->actingAs($staff)
+            ->get('/')
+            ->assertRedirect('/admin/schedule');
+    }
+
+    /** 予約を見られない権限しか持たない管理ユーザーは、従来どおりダッシュボードへ。 */
+    public function test_admin_user_without_reservation_view_is_redirected_to_dashboard(): void
+    {
+        $user = User::factory()->create([
+            'email_verified_at' => now(),
+            'two_factor_confirmed_at' => now(),
+        ]);
+        $user->assignRole('staff');
+        $user->revokePermissionTo('reservations.view');
+        setPermissionsTeamId(null);
+        $user->roles()->first()?->revokePermissionTo('reservations.view');
+        $user->forgetCachedPermissions();
+
+        $this->actingAs($user)
             ->get('/')
             ->assertRedirect('/admin');
     }

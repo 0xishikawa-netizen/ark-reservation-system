@@ -141,6 +141,23 @@ final class ScheduleViewsTest extends TestCase
                 ->where('axis', 'booth'));
     }
 
+    public function test_controller_exposes_menu_options_for_the_availability_preview(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $actor = $this->reservationViewer();
+        $service = Service::factory()->create(['is_active' => true, 'name' => 'テスト施術']);
+
+        $this->actingAs($actor)
+            ->get('/admin/schedule?date=2026-10-01')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Schedule/Index')
+                ->has('menu_options')
+                ->where('menu_options.0.id', $service->id)
+                ->has('menu_options.0.duration_min')
+                ->has('menu_options.0.requires_staff'));
+    }
+
     public function test_controller_rejects_invalid_view_and_axis_values(): void
     {
         $this->seed(RolePermissionSeeder::class);

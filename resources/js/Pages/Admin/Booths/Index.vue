@@ -26,7 +26,7 @@ const headers = [
     { title: 'ブース名', key: 'name' },
     { title: '表示順', key: 'sort_order' },
     { title: '有効', key: 'is_active', sortable: false },
-    { title: '', key: 'actions', sortable: false },
+    { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
 const search = ref<string | null>(props.filters.search);
@@ -100,7 +100,9 @@ const toggleActive = (booth: BoothListItem): void => {
             <template #item.actions="{ item }">
                 <v-btn
                     size="small"
-                    variant="text"
+                    variant="tonal"
+                    color="primary"
+                    prepend-icon="mdi-pencil-outline"
                     :href="`/admin/booths/${item.id}/edit`"
                 >
                     編集

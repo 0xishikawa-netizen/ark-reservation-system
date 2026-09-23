@@ -50,7 +50,7 @@ class BoothController extends Controller
         $createBooth->execute($request->validated(), $request->user());
 
         return redirect()->route('admin.booths.index')
-            ->with('success', 'ブースを作成しました。');
+            ->with('success', __('messages.booth.created'));
     }
 
     public function edit(Booth $booth): Response
@@ -73,7 +73,7 @@ class BoothController extends Controller
         $updateBooth->execute($booth, $request->validated(), $request->user());
 
         return redirect()->route('admin.booths.index')
-            ->with('success', 'ブースを更新しました。');
+            ->with('success', __('messages.booth.updated'));
     }
 
     public function setActive(

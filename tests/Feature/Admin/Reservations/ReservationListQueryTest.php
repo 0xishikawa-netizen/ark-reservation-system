@@ -60,4 +60,22 @@ final class ReservationListQueryTest extends TestCase
         $this->assertSame('confirmed', $row['status']);
         $this->assertSame('ADMIN', $row['source']);
     }
+
+    public function test_it_filters_by_customer_id(): void
+    {
+        $customerA = Customer::factory()->create();
+        $customerB = Customer::factory()->create();
+        $target = Reservation::factory()->create(['customer_id' => $customerA->user_id]);
+        Reservation::factory()->create(['customer_id' => $customerB->user_id]);
+
+        $result = app(ReservationListQuery::class)->paginate(
+            null,
+            null,
+            null,
+            customerId: (int) $customerA->user_id,
+        );
+
+        $this->assertSame(1, $result->total());
+        $this->assertSame($target->id, $result->items()[0]['id']);
+    }
 }

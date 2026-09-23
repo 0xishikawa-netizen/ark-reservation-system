@@ -17,6 +17,7 @@ use App\Enums\Reservation\PaymentStatus;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Reservation\ResourceType;
 use App\Enums\Reservation\SyncStatus;
+use App\Events\OnlineReservationCreated;
 use App\Exceptions\NonBoundaryStartException;
 use App\Exceptions\Reservation\SlotUnavailableException;
 use App\Exceptions\Reservation\StaleReservationException;
@@ -49,13 +50,16 @@ final class ReservationService
         private readonly ReservationOutboxRecorder $outbox,
         private readonly CancellationPolicy $cancellationPolicy,
         private readonly PaymentService $payments,
+        private readonly BookingWindow $bookingWindow,
     ) {}
 
     /** @throws ValidationException|SlotUnavailableException */
     public function create(ReservationInput $in): Reservation
     {
         $service = Service::query()->findOrFail($in->serviceId);
-        $endsAt = $in->startsAt->addMinutes($service->duration_min);
+        // 着替え・片付けの余白（バッファ）も枠として押さえるため ends_at に含める。
+        // こうすることで重複チェック・空き枠計算は既存ロジックのままバッファを考慮できる。
+        $endsAt = $in->startsAt->addMinutes($service->duration_min + $in->bufferMin);
 
         $this->validateReservationDetails(
             service: $service,
@@ -78,9 +82,11 @@ final class ReservationService
                     'customer_id' => $in->customerId,
                     'service_id' => $in->serviceId,
                     'staff_id' => $in->staffId,
+                    'is_staff_requested' => $in->staffId !== null && $in->isStaffRequested,
                     'booth_id' => $in->boothId,
                     'starts_at' => $in->startsAt,
                     'ends_at' => $endsAt,
+                    'buffer_min' => $in->bufferMin,
                     'source' => $in->source,
                     'payment_method' => $in->paymentMethod,
                     'payment_status' => $isCard
@@ -127,6 +133,11 @@ final class ReservationService
             $this->actor($in->actorUserId),
         );
 
+        // オンライン予約通知のリアルタイム配信（§9-12）。管理画面からの手入力は
+        // OnlineReservationCreated::broadcastWhen() が判定して送信しない。
+        // トランザクションのコミット後（＝確実に永続化された後）だけ発行する。
+        OnlineReservationCreated::dispatch($reservation->id);
+
         return $reservation;
     }
 
@@ -145,11 +156,11 @@ final class ReservationService
                 }
 
                 if ($reservation->status !== ReservationStatus::Confirmed) {
-                    $this->throwValidation('status', '確定済みの予約のみ変更できます。');
+                    $this->throwValidation('status', __('messages.reservation.only_confirmed_editable'));
                 }
 
                 if (! $in->adminContext && ! $reservation->starts_at->isFuture()) {
-                    $this->throwValidation('starts_at', '開始済みの予約は変更できません。');
+                    $this->throwValidation('starts_at', __('messages.reservation.started_not_editable'));
                 }
 
                 $service = $reservation->service()->firstOrFail();
@@ -189,6 +200,13 @@ final class ReservationService
                     $changes['notes'] = $in->notes;
                 }
 
+                if ($in->isStaffRequested !== null) {
+                    $changes['is_staff_requested'] = $in->staffId !== null && $in->isStaffRequested;
+                } elseif ($in->staffId === null) {
+                    // スタッフ割当が外れた場合、指名フラグも意味を持たないため一緒に落とす。
+                    $changes['is_staff_requested'] = false;
+                }
+
                 $reservation->update($changes);
 
                 $this->outbox->record($reservation, SyncOperation::Update);
@@ -214,21 +232,57 @@ final class ReservationService
         Reservation $reservation,
         ?string $reason,
         ?Authenticatable $actor,
+        bool $customerContext = false,
     ): Reservation {
-        $customerContext = $actor instanceof User && $actor->customer !== null;
+        $customerContext = $customerContext
+            || ($actor instanceof User && $actor->customer !== null);
+
+        $persisted = Reservation::query()->findOrFail($reservation->getKey());
+
+        if ($persisted->status === ReservationStatus::PendingPayment) {
+            $unfinishedPayment = $persisted->payments()
+                ->where('kind', PaymentKind::Single->value)
+                ->whereIn('status', [
+                    CardPaymentStatus::Pending->value,
+                    CardPaymentStatus::Authorized->value,
+                ])
+                ->latest('id')
+                ->first();
+
+            // 与信取消は予約更新の transaction 外で完了させ、結果不明のまま枠を解放しない。
+            if ($unfinishedPayment !== null) {
+                $this->payments->cancel($unfinishedPayment);
+            }
+        }
 
         $reservation = DB::transaction(function () use ($reservation, $reason, $customerContext, $actor): Reservation {
             $reservation = $this->lockReservation($reservation);
 
-            if ($customerContext && ! $reservation->starts_at->isFuture()) {
-                $this->throwValidation('starts_at', '開始済みの予約はキャンセルできません。');
+            if ($customerContext
+                && $reservation->status !== ReservationStatus::PendingPayment
+                && ! $reservation->starts_at->isFuture()) {
+                $this->throwValidation('starts_at', __('messages.reservation.started_not_cancelable'));
             }
 
+            $wasPendingPayment = $reservation->status === ReservationStatus::PendingPayment;
+
             $this->applyStatus($reservation, ReservationStatus::Canceled);
+
+            if ($wasPendingPayment && in_array($reservation->payment_status, [
+                PaymentStatus::PendingPayment,
+                PaymentStatus::Authorized,
+            ], true)) {
+                (new ReservationPaymentStateMachine)->apply(
+                    $reservation,
+                    'payment_status',
+                    PaymentStatus::Voided->value,
+                );
+            }
 
             $reservation->forceFill([
                 'canceled_at' => now(),
                 'cancel_reason' => $reason,
+                'payment_expires_at' => $wasPendingPayment ? null : $reservation->payment_expires_at,
             ])->save();
 
             ReservationResourceSlot::query()
@@ -392,19 +446,19 @@ final class ReservationService
         bool $adminContext,
     ): void {
         if (! $service->is_active) {
-            $this->throwValidation('service_id', 'このサービスは現在利用できません。');
+            $this->throwValidation('service_id', __('messages.reservation.service_unavailable'));
         }
 
         if (! $adminContext && ! $service->is_online_bookable) {
-            $this->throwValidation('service_id', 'このサービスはオンライン予約できません。');
+            $this->throwValidation('service_id', __('messages.reservation.service_not_online_bookable'));
         }
 
         if ($service->requires_staff && $staffId === null) {
-            $this->throwValidation('staff_id', 'このサービスには担当スタッフの指定が必要です。');
+            $this->throwValidation('staff_id', __('messages.reservation.staff_required_for_service'));
         }
 
         if ($staffId === null && $boothId === null) {
-            $this->throwValidation('resources', '担当スタッフまたはブースを指定してください。');
+            $this->throwValidation('resources', __('messages.reservation.resource_required'));
         }
 
         if ($staffId !== null) {
@@ -414,13 +468,13 @@ final class ReservationService
                 ->exists();
 
             if (! $isAssigned) {
-                $this->throwValidation('staff_id', 'このスタッフはサービスを担当できません。');
+                $this->throwValidation('staff_id', __('messages.reservation.staff_not_assigned'));
             }
 
             $staff = Staff::query()->find($staffId);
 
             if ($staff === null || ! $staff->is_bookable) {
-                $this->throwValidation('staff_id', 'このスタッフは現在予約できません。');
+                $this->throwValidation('staff_id', __('messages.reservation.staff_not_bookable'));
             }
 
             $withinShift = $startsAt->isSameDay($endsAt)
@@ -432,7 +486,11 @@ final class ReservationService
                     ->exists();
 
             if (! $withinShift) {
-                $this->throwValidation('starts_at', '指定時間はスタッフの勤務時間外です。');
+                $this->throwValidation('starts_at', __('messages.reservation.outside_shift'));
+            }
+
+            if ($this->hasScheduleBlockOverlap('staff_id', $staffId, $startsAt, $endsAt)) {
+                $this->throwValidation('staff_id', __('messages.reservation.staff_block_overlap'));
             }
         }
 
@@ -440,13 +498,52 @@ final class ReservationService
             $booth = Booth::query()->find($boothId);
 
             if ($booth === null || ! $booth->is_active) {
-                $this->throwValidation('booth_id', 'このブースは現在利用できません。');
+                $this->throwValidation('booth_id', __('messages.reservation.booth_unavailable'));
+            }
+
+            if ($this->hasScheduleBlockOverlap('booth_id', $boothId, $startsAt, $endsAt)) {
+                $this->throwValidation('booth_id', __('messages.reservation.booth_block_overlap'));
             }
         }
 
         if (! $adminContext && ! $startsAt->isFuture()) {
-            $this->throwValidation('starts_at', '過去の日時は予約できません。');
+            $this->throwValidation('starts_at', __('messages.reservation.past_datetime'));
         }
+
+        // 店舗休業日は物理的に不可能な予約として、管理者手動も含め一律で拒否する（#11）。
+        if ($this->bookingWindow->isClosedDate($startsAt)) {
+            $this->throwValidation('starts_at', __('messages.reservation.closed_date'));
+        }
+
+        // 予約受付期間・直前締切は「顧客の予約」にのみ効かせる（管理者手動は従来どおり）。
+        if (! $adminContext) {
+            $reason = $this->bookingWindow->customerRejectionReason($startsAt);
+
+            if ($reason !== null) {
+                $this->throwValidation('starts_at', $reason);
+            }
+        }
+    }
+
+    /**
+     * 予定ブロック（休憩・ミーティング等）との重複判定。メニュー所要時間全体で判定する（§35）。
+     */
+    private function hasScheduleBlockOverlap(
+        string $column,
+        int $resourceId,
+        CarbonImmutable $startsAt,
+        CarbonImmutable $endsAt,
+    ): bool {
+        if (! $startsAt->isSameDay($endsAt)) {
+            return false;
+        }
+
+        return DB::table('staff_schedule_blocks')
+            ->where($column, $resourceId)
+            ->whereDate('work_date', $startsAt->toDateString())
+            ->whereTime('start_at', '<', $endsAt->format('H:i:s'))
+            ->whereTime('end_at', '>', $startsAt->format('H:i:s'))
+            ->exists();
     }
 
     /** @return list<CarbonImmutable> */
@@ -461,7 +558,7 @@ final class ReservationService
         try {
             return SlotKey::fromSettings()->occupiedSlots($startsAt, $endsAt, $adminFreeTime);
         } catch (NonBoundaryStartException) {
-            $this->throwValidation('starts_at', '開始時刻を予約枠の境界に合わせてください。');
+            $this->throwValidation('starts_at', __('messages.reservation.non_boundary_start'));
         }
     }
 
@@ -509,7 +606,7 @@ final class ReservationService
         try {
             (new ReservationStateMachine)->apply($reservation, 'status', $status->value);
         } catch (InvalidStateTransitionException) {
-            $this->throwValidation('status', 'この予約はその操作を実行できません。');
+            $this->throwValidation('status', __('messages.reservation.invalid_transition'));
         }
     }
 

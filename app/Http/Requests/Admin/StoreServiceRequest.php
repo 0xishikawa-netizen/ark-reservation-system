@@ -42,7 +42,7 @@ class StoreServiceRequest extends FormRequest
             if ($requiresStaff && (! is_array($staffIds) || $staffIds === [])) {
                 $validator->errors()->add(
                     'staff_ids',
-                    'スタッフが必要なサービスには、施術可能スタッフを1名以上指定してください。',
+                    __('messages.service.staff_required'),
                 );
             }
         });

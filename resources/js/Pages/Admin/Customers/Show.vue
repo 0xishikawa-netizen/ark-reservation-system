@@ -3,6 +3,7 @@ import { Head, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -91,8 +92,10 @@ const nextReservation = computed<RecentReservation | null>(() => {
     return (
         props.overview.recent_reservations
             .filter(
+                // starts_at はUTCの素の日時文字列。'Z' を付けないとブラウザのローカル
+                // タイムゾーンとして誤解釈され、JST環境では実時刻比較が最大9時間ズレる。
                 (reservation) =>
-                    new Date(reservation.starts_at.replace(' ', 'T')).getTime() >= now,
+                    new Date(`${reservation.starts_at.replace(' ', 'T')}Z`).getTime() >= now,
             )
             .sort((left, right) => left.starts_at.localeCompare(right.starts_at))[0] ?? null
     );
@@ -122,6 +125,15 @@ const createdViaLabel = (value: string): string => {
 
 const formatAmount = (amount: number, currency: string): string =>
     `${amount.toLocaleString('ja-JP')} ${currency.toUpperCase()}`;
+
+// starts_at はタイムゾーンなしの素の日時文字列（DBの値をそのまま整形）のため、
+// Date を経由せず文字列操作だけで組み立てる（他画面の timeLabel と同じ方針）。
+function formatShortDateTime(value: string): string {
+    const [datePart, timePart] = value.split(' ');
+    const [, month, day] = datePart.split('-');
+
+    return `${Number(month)}/${Number(day)} ${timePart.slice(0, 5)}`;
+}
 </script>
 
 <template>
@@ -130,20 +142,10 @@ const formatAmount = (amount: number, currency: string): string =>
     <PageHeader title="顧客詳細" :subtitle="customer.name">
         <template #actions>
             <v-btn
-                variant="tonal"
-                :href="`/admin/customers/${customer.user_id}/tickets`"
-            >
-                回数券
-            </v-btn>
-            <v-btn
-                variant="tonal"
-                :href="`/admin/customers/${customer.user_id}/membership`"
-            >
-                会員
-            </v-btn>
-            <v-btn
                 v-if="page.props.auth.can.customersManage"
                 color="primary"
+                variant="flat"
+                prepend-icon="mdi-pencil-outline"
                 :href="`/admin/customers/${customer.user_id}/edit`"
             >
                 編集
@@ -200,36 +202,42 @@ const formatAmount = (amount: number, currency: string): string =>
         </dl>
     </SectionCard>
 
-    <div class="overview-grid">
+    <div class="overview-grid" :class="{ 'overview-grid--single': !nextReservation }">
         <SectionCard
-            title="次回予約"
-            :subtitle="`予約 ${overview.reservation_totals.total} 件 / 今後 ${overview.reservation_totals.upcoming} 件`"
+            v-if="nextReservation"
+            title="次回の予約"
             class="next-reservation-card"
         >
-            <template v-if="nextReservation">
-                <div class="next-reservation-date text-h5 text-primary">
-                    {{ nextReservation.starts_at }}
+            <div class="next-reservation-row">
+                <div class="next-reservation-body">
+                    <div class="next-reservation-date text-subtitle-1 font-weight-bold text-primary">
+                        {{ formatShortDateTime(nextReservation.starts_at) }}
+                    </div>
+                    <div class="text-body-2 mt-1">{{ nextReservation.service_name }}</div>
+                    <div class="text-caption text-medium-emphasis">
+                        担当: {{ nextReservation.staff_name ?? '未割当' }}
+                    </div>
+                    <StatusChip
+                        :status="nextReservation.status"
+                        :label="nextReservation.status_label"
+                        class="mt-2"
+                    />
                 </div>
-                <div class="text-h6 mt-2">{{ nextReservation.service_name }}</div>
-                <div class="text-body-2 text-medium-emphasis mt-1">
-                    担当: {{ nextReservation.staff_name ?? '未割当' }}
-                </div>
-                <StatusChip
-                    :status="nextReservation.status"
-                    :label="nextReservation.status_label"
-                    class="mt-4"
-                />
-            </template>
-            <EmptyState
-                v-else
-                icon="mdi-calendar-blank-outline"
-                title="今後の予約はありません。"
-                class="compact-empty-state"
-            />
+                <v-btn
+                    variant="tonal"
+                    color="primary"
+                    size="small"
+                    prepend-icon="mdi-calendar-month-outline"
+                    class="next-reservation-link"
+                    :href="`/admin/schedule?date=${nextReservation.starts_at.slice(0, 10)}&reservation=${nextReservation.id}`"
+                >
+                    予約を見る
+                </v-btn>
+            </div>
         </SectionCard>
 
         <div class="overview-secondary">
-            <SectionCard title="会員" class="summary-card">
+            <SectionCard title="月額プラン" class="summary-card">
                 <template #append>
                     <StatusChip
                         v-if="overview.membership !== null"
@@ -263,15 +271,17 @@ const formatAmount = (amount: number, currency: string): string =>
                         </div>
                     </div>
                     <v-btn
-                        variant="text"
+                        variant="tonal"
+                        color="primary"
+                        prepend-icon="mdi-card-account-details-outline"
                         class="summary-link"
                         :href="`/admin/customers/${customer.user_id}/membership`"
                     >
-                        会員情報を確認
+                        月額プラン
                     </v-btn>
                 </template>
                 <p v-else class="text-body-2 text-medium-emphasis mb-0">
-                    会員登録なし
+                    加入なし
                 </p>
             </SectionCard>
 
@@ -292,12 +302,18 @@ const formatAmount = (amount: number, currency: string): string =>
                     </div>
                 </div>
                 <v-btn
-                    variant="text"
+                    v-if="overview.tickets.active_wallet_count > 0"
+                    variant="tonal"
+                    color="primary"
+                    prepend-icon="mdi-ticket-confirmation-outline"
                     class="summary-link"
                     :href="`/admin/customers/${customer.user_id}/tickets`"
                 >
-                    回数券を確認
+                    回数券
                 </v-btn>
+                <p v-else class="text-body-2 text-medium-emphasis mb-0 mt-2">
+                    保有なし
+                </p>
             </SectionCard>
         </div>
     </div>
@@ -308,7 +324,7 @@ const formatAmount = (amount: number, currency: string): string =>
         class="history-card"
     >
         <template #append>
-            <v-btn variant="text" href="/admin/reservations">予約一覧へ</v-btn>
+            <v-btn variant="text" :href="`/admin/reservations?customer_id=${customer.user_id}`">予約一覧へ</v-btn>
         </template>
 
         <v-list v-if="overview.recent_reservations.length > 0" lines="two" class="history-list">
@@ -348,11 +364,11 @@ const formatAmount = (amount: number, currency: string): string =>
         class="history-card"
     >
         <template v-if="overview.payments !== null" #append>
-            <v-btn variant="text" href="/admin/payments">支払い一覧へ</v-btn>
+            <v-btn variant="text" :href="`/admin/payments?customer_id=${customer.user_id}`">支払い一覧へ</v-btn>
         </template>
 
         <p v-if="overview.payments === null" class="text-body-2 text-medium-emphasis mb-0">
-            支払い情報の閲覧権限がありません。
+            {{ MESSAGES.customer.paymentViewForbidden }}
         </p>
         <v-list
             v-else-if="overview.payments.recent.length > 0"
@@ -419,8 +435,10 @@ const formatAmount = (amount: number, currency: string): string =>
 }
 
 .customer-profile-item dt {
-    color: rgb(var(--v-theme-on-surface-variant));
-    font-size: 0.75rem;
+    color: rgba(var(--v-theme-on-surface), 0.72);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
     line-height: 1.4;
 }
 
@@ -443,16 +461,23 @@ const formatAmount = (amount: number, currency: string): string =>
 }
 
 .next-reservation-card {
-    height: 100%;
     border-top: 3px solid rgb(var(--v-theme-primary));
 }
 
-.next-reservation-date {
-    font-weight: 700;
+.next-reservation-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ark-space-4);
+    flex-wrap: wrap;
 }
 
-.compact-empty-state {
-    padding-block: var(--ark-space-5) !important;
+.next-reservation-body {
+    min-width: 0;
+}
+
+.next-reservation-link {
+    flex: 0 0 auto;
 }
 
 .summary-card {
@@ -508,6 +533,14 @@ const formatAmount = (amount: number, currency: string): string =>
 
     .overview-grid {
         grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+    }
+
+    .overview-grid--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .overview-grid--single .overview-secondary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

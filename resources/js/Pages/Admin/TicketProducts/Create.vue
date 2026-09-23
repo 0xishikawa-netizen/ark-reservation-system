@@ -21,7 +21,8 @@ const submit = (): void => {
 <template>
     <Head title="回数券商品作成" />
 
-    <v-card max-width="760" title="回数券商品作成">
+    <div class="ark-form-page">
+    <v-card title="回数券商品作成">
         <v-card-text>
             <v-form @submit.prevent="submit">
                 <v-text-field
@@ -83,4 +84,12 @@ const submit = (): void => {
             </v-form>
         </v-card-text>
     </v-card>
+    </div>
 </template>
+
+<style scoped>
+.ark-form-page {
+    max-width: 720px;
+    margin-inline: auto;
+}
+</style>

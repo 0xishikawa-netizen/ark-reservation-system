@@ -71,12 +71,16 @@ class SecurityHeaders
             ? "connect-src 'self' ws: http://localhost:5173{$connectStripe}"
             : "connect-src 'self'{$connectStripe}";
 
+        // dev（Vite HMR）では CSS / webfont が http://localhost:5173 から配信されるため許可する。
+        // 本番はビルド済み資産を 'self' から配信するので緩めない。
+        $viteDev = $local ? ' http://localhost:5173' : '';
+
         return implode('; ', [
             "default-src 'self'",
             $script,
-            "style-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline'{$viteDev}",
             "img-src 'self' data: blob:{$imgStripe}",
-            "font-src 'self' data:",
+            "font-src 'self' data:{$viteDev}",
             $connect,
             "frame-src {$frameSrc}",
             // 他サイトからの埋め込みは常に禁止（Stripe の iframe とは無関係。緩めない）。

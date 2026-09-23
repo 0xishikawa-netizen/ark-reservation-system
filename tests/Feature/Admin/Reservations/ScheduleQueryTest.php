@@ -92,4 +92,51 @@ final class ScheduleQueryTest extends TestCase
         $this->assertSame('19:00', $result['business_hours']['close']);
         $this->assertSame(15, $result['business_hours']['slot_minutes']);
     }
+
+    public function test_it_flags_new_customers_and_exposes_gender_on_reservations(): void
+    {
+        $service = Service::factory()->create();
+        $staff = Staff::factory()->create(['is_bookable' => true]);
+
+        $firstTimer = Customer::factory()->create(['gender' => 'female']);
+        $returning = Customer::factory()->create(['gender' => 'male']);
+
+        // 常連客は台帳表示日より前に来店実績がある。
+        Reservation::factory()->create([
+            'customer_id' => $returning->user_id,
+            'service_id' => $service->id,
+            'staff_id' => $staff->user_id,
+            'starts_at' => '2026-09-20 10:00:00',
+            'ends_at' => '2026-09-20 11:00:00',
+            'status' => ReservationStatus::Completed,
+        ]);
+
+        $newBooking = Reservation::factory()->create([
+            'customer_id' => $firstTimer->user_id,
+            'service_id' => $service->id,
+            'staff_id' => $staff->user_id,
+            'starts_at' => '2026-10-01 10:00:00',
+            'ends_at' => '2026-10-01 11:00:00',
+            'status' => ReservationStatus::Confirmed,
+        ]);
+        $returningBooking = Reservation::factory()->create([
+            'customer_id' => $returning->user_id,
+            'service_id' => $service->id,
+            'staff_id' => $staff->user_id,
+            'starts_at' => '2026-10-01 12:00:00',
+            'ends_at' => '2026-10-01 13:00:00',
+            'status' => ReservationStatus::Confirmed,
+        ]);
+
+        $result = app(ScheduleQuery::class)->get(CarbonImmutable::parse('2026-10-01'));
+
+        $byId = collect($result['reservations'])->keyBy('id');
+
+        $this->assertTrue($byId[$newBooking->id]['is_new_customer']);
+        $this->assertSame('female', $byId[$newBooking->id]['customer_gender']);
+        $this->assertSame($firstTimer->user_id, $byId[$newBooking->id]['customer_id']);
+
+        $this->assertFalse($byId[$returningBooking->id]['is_new_customer']);
+        $this->assertSame('male', $byId[$returningBooking->id]['customer_gender']);
+    }
 }

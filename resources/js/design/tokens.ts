@@ -65,3 +65,63 @@ export function statusColor(status: string | null | undefined): string {
 
     return STATUS_COLOR[status] ?? 'grey';
 }
+
+/**
+ * 予約ステータス（App\Enums\Reservation\ReservationStatus）→ 日本語表示。
+ * バックエンドの ReservationPanelQuery::statusLabel() と同じ文言に揃える。
+ * ここが未知のステータスを返すと生の英語値がそのまま画面に出てしまうため、
+ * enum の全ケースを必ず網羅すること。
+ */
+const RESERVATION_STATUS_LABEL: Record<string, string> = {
+    pending_payment: '支払い待ち',
+    pending_external_sync: '外部連携待ち',
+    confirmed: '予約確定',
+    completed: '来店完了',
+    no_show: '無断キャンセル',
+    canceled: 'キャンセル',
+    expired: '期限切れ',
+};
+
+export function reservationStatusLabel(status: string | null | undefined): string {
+    if (!status) {
+        return '';
+    }
+
+    return RESERVATION_STATUS_LABEL[status] ?? status;
+}
+
+/**
+ * 予約「経路」（App\Enums\Reservation\ReservationSource）→ 日本語/表示名。
+ * ステータスではなくデータ区分なので statusColor とは別系統の色を Index/Edit 側で割り当てる。
+ */
+const RESERVATION_SOURCE_LABEL: Record<string, string> = {
+    ARK_WEB: 'ARK Web',
+    ADMIN: '管理',
+    HOTPEPPER: 'Hot Pepper',
+    EPARK: 'EPARK',
+    PEAK_MANAGER: 'Peak Manager',
+};
+
+export function reservationSourceLabel(source: string | null | undefined): string {
+    if (!source) {
+        return '';
+    }
+
+    return RESERVATION_SOURCE_LABEL[source] ?? source;
+}
+
+const RESERVATION_SOURCE_COLOR: Record<string, string> = {
+    ARK_WEB: 'primary',
+    ADMIN: 'secondary',
+    HOTPEPPER: 'pink-darken-1',
+    EPARK: 'cyan-darken-2',
+    PEAK_MANAGER: 'indigo',
+};
+
+export function reservationSourceColor(source: string | null | undefined): string {
+    if (!source) {
+        return 'grey';
+    }
+
+    return RESERVATION_SOURCE_COLOR[source] ?? 'grey';
+}

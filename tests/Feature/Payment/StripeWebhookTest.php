@@ -157,6 +157,25 @@ class StripeWebhookTest extends TestCase
         $this->assertSame(PaymentStatus::Succeeded, $payment->refresh()->status);
     }
 
+    public function test_succeeded_webhook_advances_a_guest_reservation(): void
+    {
+        $payment = $this->cardPayment();
+        $payment->customer->user->forceFill(['password' => null])->save();
+        $this->assertNull($payment->customer->user->refresh()->password);
+        $this->gateway->setPaymentIntent($this->intent($payment, 'succeeded', received: 5000));
+
+        $this->postEvent($this->event('evt_guest_succeeded', 'payment_intent.succeeded', $payment))
+            ->assertOk();
+
+        $this->assertSame(PaymentStatus::Succeeded, $payment->refresh()->status);
+        $this->assertSame(ReservationStatus::Confirmed, $payment->reservation->refresh()->status);
+        $this->assertSame(ReservationPaymentStatus::Paid, $payment->reservation->payment_status);
+        $this->assertSame(
+            WebhookEventStatus::Processed,
+            WebhookEvent::query()->where('stripe_event_id', 'evt_guest_succeeded')->sole()->status,
+        );
+    }
+
     // ---------- その他 ----------
 
     public function test_addon_succeeded_webhook_captures_addon_idempotently(): void

@@ -3,6 +3,7 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -161,7 +162,7 @@ function syncMembership(): void {
 
     <template v-else>
         <v-alert v-if="membership.needs_attention" type="error" variant="tonal" class="mb-4">
-            Stripe との状態確認が必要です。同期または運用手順に沿った確認を行ってください。
+            {{ MESSAGES.membership.stripeCheckRequired }}
         </v-alert>
 
         <div class="ark-page__sections">
@@ -200,7 +201,7 @@ function syncMembership(): void {
                                 title="要確認"
                                 :subtitle="membership.needs_attention ? '要対応' : 'なし'"
                             />
-                            <v-list-item title="Stripe Price ID" :subtitle="membership.plan.stripe_price_id" />
+                            <v-list-item title="Stripe 価格ID" :subtitle="membership.plan.stripe_price_id" />
                         </v-list>
                     </v-col>
                 </v-row>
@@ -259,7 +260,7 @@ function syncMembership(): void {
         <v-card title="利用権残数を調整">
             <v-card-text>
                 <v-alert type="warning" variant="tonal" class="mb-4">
-                    この操作は再認証と監査記録の対象です。
+                    {{ MESSAGES.common.reauthAudited }}
                 </v-alert>
                 <v-text-field
                     v-model.number="adjustForm.delta"
@@ -292,7 +293,7 @@ function syncMembership(): void {
         <v-card title="利用権を即時解約しますか？">
             <v-card-text>
                 <v-alert type="error" variant="tonal" class="mb-4">
-                    即時解約すると現在の利用権は直ちに予約不可になります。この操作は再認証と監査記録の対象です。
+                    {{ MESSAGES.membership.cancelNowWarning }}
                 </v-alert>
                 <v-textarea
                     v-model="cancelForm.reason"

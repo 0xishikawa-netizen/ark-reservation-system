@@ -179,6 +179,79 @@ class StaffMasterTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_disable_staff_login_with_audit_log(): void
+    {
+        $admin = $this->admin();
+        $target = $this->staff('ログイン無効化対象', 'staff');
+
+        $this->actingAs($admin)
+            ->withSession(['auth.password_confirmed_at' => now()->timestamp])
+            ->put("/admin/staff/{$target->user_id}", [
+                ...$this->updatePayload('ログイン無効化対象', 'staff'),
+                'is_active' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertFalse($target->user->refresh()->is_active);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'staff.login_access_changed',
+            'entity_id' => (string) $target->user_id,
+        ]);
+    }
+
+    public function test_admin_cannot_disable_their_own_login(): void
+    {
+        $admin = $this->admin(withStaff: true);
+
+        $this->actingAs($admin)
+            ->withSession(['auth.password_confirmed_at' => now()->timestamp])
+            ->putJson("/admin/staff/{$admin->id}", [
+                ...$this->updatePayload('管理者', 'admin'),
+                'is_active' => false,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('is_active');
+
+        $this->assertTrue($admin->refresh()->is_active);
+    }
+
+    public function test_last_active_admin_login_cannot_be_disabled(): void
+    {
+        $lastAdmin = $this->admin(withStaff: true);
+
+        // staff.manage は通常 admin 専用だが、ロール権限管理画面で manager 等にも
+        // 付与され得るため、admin ではない操作者でも起こり得るケースとして検証する。
+        $actor = User::factory()->create(['two_factor_confirmed_at' => now()]);
+        $actor->givePermissionTo(['admin.access', 'staff.manage']);
+
+        $this->actingAs($actor)
+            ->withSession(['auth.password_confirmed_at' => now()->timestamp])
+            ->putJson("/admin/staff/{$lastAdmin->id}", [
+                ...$this->updatePayload('管理者', 'admin'),
+                'is_active' => false,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('is_active');
+
+        $this->assertTrue($lastAdmin->refresh()->is_active);
+    }
+
+    public function test_admin_login_can_be_disabled_when_another_active_admin_remains(): void
+    {
+        $actor = $this->admin();
+        $otherAdmin = $this->admin(withStaff: true);
+
+        $this->actingAs($actor)
+            ->withSession(['auth.password_confirmed_at' => now()->timestamp])
+            ->put("/admin/staff/{$otherAdmin->id}", [
+                ...$this->updatePayload('管理者', 'admin'),
+                'is_active' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertFalse($otherAdmin->refresh()->is_active);
+    }
+
     /** @return array<string, mixed> */
     private function updatePayload(string $displayName, string $role): array
     {

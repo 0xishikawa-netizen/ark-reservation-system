@@ -52,7 +52,7 @@ class PaymentController extends Controller
             // 生の Stripe エラーは画面に出さない。再試行できることだけ伝える。
             return redirect()
                 ->route('mypage.reservations.show', $reservation)
-                ->with('error', 'ただいま決済を開始できませんでした。時間をおいて再度お試しください。');
+                ->with('error', __('messages.common.retry_later_payment_start'));
         }
 
         return Inertia::render('Customer/Payments/Checkout', [
@@ -107,12 +107,12 @@ class PaymentController extends Controller
         } catch (PaymentGatewayDeclinedException) {
             return redirect()
                 ->route('mypage.reservations.show', $reservation)
-                ->with('error', 'カードの承認が得られませんでした。別のお支払い方法をお試しください。');
+                ->with('error', __('messages.payment.card_declined'));
         } catch (PaymentGatewayException) {
             // 結果不明。失敗と断定しない（needs_attention が立ち reconcile 対象になる）。
             return redirect()
                 ->route('mypage.reservations.show', $reservation)
-                ->with('info', 'お支払いの確認に時間がかかっています。確定次第ご予約に反映されます。');
+                ->with('info', __('messages.payment.confirmation_delayed'));
         }
 
         $reservation->refresh();
@@ -120,7 +120,7 @@ class PaymentController extends Controller
         return redirect()
             ->route('mypage.reservations.show', $reservation)
             ->with('success', $reservation->status === ReservationStatus::Confirmed
-                ? 'お支払いが完了し、ご予約が確定しました。'
-                : 'ご予約を確保しました。決済の確定処理を行っています。');
+                ? __('messages.payment.completed_reservation_confirmed')
+                : __('messages.payment.reservation_held_processing'));
     }
 }

@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Reservation;
 
+use App\Domain\Reservation\RescheduleInput;
 use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
-use App\Domain\Reservation\RescheduleInput;
 use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Reservation\ResourceType;
@@ -331,6 +331,7 @@ final class ReservationConcurrencyTest extends TestCase
 
     /**
      * @template TValue
+     *
      * @param  Closure(): TValue  $callback
      * @return TValue
      */

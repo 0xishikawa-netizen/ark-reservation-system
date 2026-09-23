@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Listeners;
 
+use App\Domain\Auth\TrustedDeviceService;
+use App\Models\User;
 use App\Support\Audit\AuditLogger;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
@@ -13,11 +15,15 @@ use Illuminate\Auth\Events\Verified;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Events\Dispatcher;
 use Laravel\Fortify\Events\TwoFactorAuthenticationConfirmed;
+use Laravel\Fortify\Events\TwoFactorAuthenticationDisabled;
 use Laravel\Fortify\Events\TwoFactorAuthenticationEnabled;
 
 class AuditAuthEvents
 {
-    public function __construct(private readonly AuditLogger $auditLogger) {}
+    public function __construct(
+        private readonly AuditLogger $auditLogger,
+        private readonly TrustedDeviceService $trustedDevices,
+    ) {}
 
     /** @return array<class-string, string> */
     public function subscribe(Dispatcher $events): array
@@ -30,6 +36,7 @@ class AuditAuthEvents
             Verified::class => 'onVerified',
             TwoFactorAuthenticationEnabled::class => 'onTwoFactorAuthenticationEnabled',
             TwoFactorAuthenticationConfirmed::class => 'onTwoFactorAuthenticationConfirmed',
+            TwoFactorAuthenticationDisabled::class => 'onTwoFactorAuthenticationDisabled',
         ];
     }
 
@@ -58,6 +65,31 @@ class AuditAuthEvents
                 actor: $user,
             );
         }
+
+        // 秘密鍵が変わった以上、以前の信頼済み端末は無効化し、必ず新しい秘密鍵で
+        // 再確認させる（古い端末に無条件で信頼を残さない）。
+        if ($user instanceof User) {
+            $this->trustedDevices->forgetAll($user);
+        }
+    }
+
+    /**
+     * TOTP を無効化したら、信頼済み端末による省略も一緒に無効化する
+     * （TOTP が無い状態で「以前信頼した端末だから」とチャレンジを省略させない）。
+     */
+    public function onTwoFactorAuthenticationDisabled(TwoFactorAuthenticationDisabled $event): void
+    {
+        $user = $event->user;
+
+        if ($user instanceof User) {
+            $this->trustedDevices->forgetAll($user);
+        }
+
+        $this->auditLogger->log(
+            'auth.two_factor_disabled',
+            summary: '二要素認証を無効化: '.$this->email($user),
+            actor: $user,
+        );
     }
 
     public function onLogin(Login $event): void

@@ -6,11 +6,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Customer\UpdateCustomerProfile;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\UpdateCustomerNoteRequest;
 use App\Http\Requests\Admin\UpdateCustomerProfileRequest;
 use App\Models\Customer;
 use App\Queries\CustomerListQuery;
 use App\Queries\CustomerOverviewQuery;
 use App\Queries\CustomerProfileQuery;
+use App\Queries\ReservationPanelQuery;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -52,6 +55,79 @@ class CustomerController extends Controller
         ]);
     }
 
+    /**
+     * 予約台帳などから顧客カードを開いたときに表示する軽量サマリー（JSON）。
+     * 画面遷移せず、右サイドパネルへ顧客情報・直近の予約を差し込むために使う。
+     */
+    public function summary(
+        Request $request,
+        Customer $customer,
+        CustomerProfileQuery $query,
+        CustomerOverviewQuery $overviewQuery,
+    ): JsonResponse {
+        $this->authorize('view', $customer);
+
+        $profile = $this->profileData($query->get($customer));
+
+        return response()->json([
+            'profile' => [
+                'user_id' => $profile['user_id'],
+                'name' => $profile['name'],
+                'kana' => $profile['kana'],
+                'phone' => $profile['phone'],
+                'gender' => $profile['gender'],
+                'note' => $profile['note'],
+                'created_at' => $profile['created_at'],
+            ],
+            'overview' => $overviewQuery->for(
+                $customer->user_id,
+                (bool) $request->user()?->can('reservations.view'),
+            ),
+        ]);
+    }
+
+    /**
+     * 予約台帳サイドパネルの「顧客検索から選んだ顧客」表示用（§15-16）。
+     * 特定の予約に紐づかない顧客プロフィール版。閲覧は台帳と同じ can:reservations.view、
+     * 顧客 PII は can:customers.view を持つ場合のみ（§19）。
+     */
+    public function boardPanel(
+        Request $request,
+        Customer $customer,
+        ReservationPanelQuery $query,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'date' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+        $user = $request->user();
+
+        return response()->json($query->getForCustomer(
+            (int) $customer->user_id,
+            canManage: $user?->can('reservations.manage') === true,
+            canViewCustomer: $user?->can('customers.view') === true,
+            referenceDate: $validated['date'] ?? null,
+        ));
+    }
+
+    /**
+     * 予約台帳の顧客・予約詳細パネルから、メモだけを素早く追加・編集する（§8）。
+     * 他のプロフィール項目はフル編集画面（edit/update）で扱う。他の予約アクション
+     * （complete/cancel等）と同じく back() で戻し、パネル側は自前の fetch で再取得する。
+     */
+    public function updateNote(
+        UpdateCustomerNoteRequest $request,
+        Customer $customer,
+        UpdateCustomerProfile $updateCustomerProfile,
+    ): RedirectResponse {
+        $updateCustomerProfile->execute(
+            $customer,
+            ['note' => $request->validated('note')],
+            $request->user(),
+        );
+
+        return back()->with('success', __('messages.customer.note_updated'));
+    }
+
     public function edit(Customer $customer, CustomerProfileQuery $query): Response
     {
         $this->authorize('update', $customer);
@@ -71,7 +147,7 @@ class CustomerController extends Controller
         $updateCustomerProfile->execute($customer, $request->validated(), $request->user());
 
         return redirect()->route('admin.customers.show', $customer)
-            ->with('success', '顧客プロフィールを更新しました。');
+            ->with('success', __('messages.customer.profile_updated'));
     }
 
     /** @return array<string, mixed> */

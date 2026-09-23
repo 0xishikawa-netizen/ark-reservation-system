@@ -3,10 +3,15 @@ import { ref } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
 
+const props = defineProps<{
+    trustedDeviceTtlDays: number;
+}>();
+
 const useRecoveryCode = ref(false);
 const form = useForm({
     code: '',
     recovery_code: '',
+    trust_device: true,
 });
 
 const submit = (): void => {
@@ -43,6 +48,13 @@ const submit = (): void => {
                 autocomplete="one-time-code"
                 :error-messages="form.errors.recovery_code"
                 autofocus
+            />
+            <v-checkbox
+                v-model="form.trust_device"
+                :label="`この端末を${props.trustedDeviceTtlDays}日間信頼する（次回から2段階認証を省略）`"
+                density="compact"
+                hide-details
+                class="mb-2"
             />
             <v-btn
                 type="submit"

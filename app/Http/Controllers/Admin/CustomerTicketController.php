@@ -66,7 +66,7 @@ class CustomerTicketController extends Controller
             $request->user(),
         );
 
-        return back()->with('success', '回数券を付与しました。');
+        return back()->with('success', __('messages.ticket.granted'));
     }
 
     public function revoke(
@@ -82,7 +82,7 @@ class CustomerTicketController extends Controller
             $request->user(),
         );
 
-        return back()->with('success', '回数券を取り消しました。');
+        return back()->with('success', __('messages.ticket.revoked'));
     }
 
     public function adjust(
@@ -98,6 +98,6 @@ class CustomerTicketController extends Controller
             $request->user(),
         );
 
-        return back()->with('success', '回数券残数を調整しました。');
+        return back()->with('success', __('messages.ticket.adjusted'));
     }
 }

@@ -34,7 +34,7 @@ class UpdateMembershipPlan
             $this->auditLogger->log(
                 'membership_plan.updated',
                 $plan,
-                "会員プラン「{$plan->name}」を更新",
+                "月額プラン「{$plan->name}」を更新",
                 $actor,
             );
 

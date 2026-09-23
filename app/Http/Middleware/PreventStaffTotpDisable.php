@@ -38,8 +38,8 @@ class PreventStaffTotpDisable
 
         if ($user !== null && $this->mfaPolicy->isRequiredFor($user)) {
             throw ValidationException::withMessages([
-                'two_factor' => '業務用アカウントは二段階認証を無効化できません。'
-                    .'端末を変更する場合は、認証アプリで新しい QR コードを読み込んで再設定してください。',
+                'two_factor' => __('messages.auth.staff_totp_required')
+                    .__('messages.auth.staff_totp_reset_hint'),
             ]);
         }
 

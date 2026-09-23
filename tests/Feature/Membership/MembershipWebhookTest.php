@@ -6,7 +6,6 @@ namespace Tests\Feature\Membership;
 
 use App\Domain\Membership\Gateway\Dto\SubscriptionResult;
 use App\Domain\Membership\Gateway\FakeMembershipStripeGateway;
-use App\Domain\Membership\MembershipSubscriptionService;
 use App\Enums\Membership\MembershipStatus;
 use App\Enums\Payment\WebhookEventStatus;
 use App\Models\Customer;

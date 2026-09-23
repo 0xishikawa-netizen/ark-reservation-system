@@ -1,4 +1,5 @@
 <?php
+
 /**
  * ARK 予約システム — お名前.com レンタルサーバー能力プローブ (read-only)
  * -----------------------------------------------------------------------------
@@ -11,15 +12,19 @@
  *
  * 何も書き込まない・何も送信しない。環境情報を表示するだけ。
  */
+function line(string $k, $v): void
+{
+    printf("%-26s : %s\n", $k, is_bool($v) ? ($v ? 'yes' : 'no') : (string) $v);
+}
+function has(string $cmd): string
+{
+    $out = @shell_exec('command -v '.escapeshellarg($cmd).' 2>/dev/null');
 
-function line(string $k, $v): void { printf("%-26s : %s\n", $k, is_bool($v) ? ($v ? 'yes' : 'no') : (string) $v); }
-function has(string $cmd): string {
-    $out = @shell_exec('command -v ' . escapeshellarg($cmd) . ' 2>/dev/null');
     return $out ? trim($out) : '(not found / shell_exec disabled)';
 }
 
 echo "=== ARK server probe ===\n";
-echo 'generated_at              : ' . date('c') . "\n\n";
+echo 'generated_at              : '.date('c')."\n\n";
 
 echo "--- PHP ---\n";
 line('php_version', PHP_VERSION);
@@ -36,7 +41,7 @@ line('allow_url_fopen', (bool) ini_get('allow_url_fopen'));
 
 echo "\n--- Required PHP extensions (Laravel 13) ---\n";
 $required = ['pdo', 'pdo_mysql', 'mbstring', 'openssl', 'tokenizer', 'xml', 'ctype', 'json',
-            'bcmath', 'fileinfo', 'curl', 'intl', 'gd', 'zip', 'filter', 'session'];
+    'bcmath', 'fileinfo', 'curl', 'intl', 'gd', 'zip', 'filter', 'session'];
 foreach ($required as $ext) {
     line("ext:$ext", extension_loaded($ext));
 }
@@ -44,11 +49,11 @@ line('ext:redis (optional)', extension_loaded('redis'));
 line('ext:pcntl (queue optional)', extension_loaded('pcntl'));
 
 echo "\n--- Shell / build toolchain (best effort) ---\n";
-$shellExec = function_exists('shell_exec') && !in_array('shell_exec', array_map('trim', explode(',', (string) ini_get('disable_functions'))), true);
+$shellExec = function_exists('shell_exec') && ! in_array('shell_exec', array_map('trim', explode(',', (string) ini_get('disable_functions'))), true);
 line('shell_exec usable', $shellExec);
 if ($shellExec) {
     foreach (['bash', 'sh', 'git', 'composer', 'php', 'node', 'npm', 'mysql', 'mysqldump',
-              'supervisord', 'supervisorctl', 'crontab', 'rsync', 'unzip', 'gzip'] as $c) {
+        'supervisord', 'supervisorctl', 'crontab', 'rsync', 'unzip', 'gzip'] as $c) {
         line("which:$c", has($c));
     }
     line('composer --version', trim((string) @shell_exec('composer --version 2>&1')) ?: '(n/a)');

@@ -21,5 +21,8 @@ final readonly class ReservationInput
         public ?string $notes,
         public bool $adminContext,
         public PaymentMethod $paymentMethod = PaymentMethod::Onsite,
+        public bool $isStaffRequested = false,
+        /** 施術後に確保する余白（分）。ends_at はこれを含めて算出する。 */
+        public int $bufferMin = 0,
     ) {}
 }

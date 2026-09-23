@@ -66,7 +66,7 @@ final class TicketLedgerService
                     }
 
                     throw ValidationException::withMessages([
-                        'ticket' => '残数を超える操作です。',
+                        'ticket' => __('messages.ticket.insufficient_balance'),
                     ]);
                 }
 
@@ -169,7 +169,7 @@ final class TicketLedgerService
 
         if ($grantCount <= 0) {
             throw ValidationException::withMessages([
-                'count' => '付与回数は1以上で指定してください。',
+                'count' => __('messages.ticket.grant_positive'),
             ]);
         }
 
@@ -229,7 +229,7 @@ final class TicketLedgerService
 
         if ($count <= 0) {
             throw ValidationException::withMessages([
-                'count' => '取消回数は1以上で指定してください。',
+                'count' => __('messages.ticket.revoke_positive'),
             ]);
         }
 
@@ -265,7 +265,7 @@ final class TicketLedgerService
 
         if ($delta === 0) {
             throw ValidationException::withMessages([
-                'delta' => '調整数は0以外で指定してください。',
+                'delta' => __('messages.ticket.adjust_nonzero'),
             ]);
         }
 
@@ -313,7 +313,7 @@ final class TicketLedgerService
     {
         if ($reason === null || trim($reason) === '') {
             throw ValidationException::withMessages([
-                'reason' => '理由は必須です。',
+                'reason' => __('messages.common.reason_required'),
             ]);
         }
     }

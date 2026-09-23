@@ -77,7 +77,7 @@ final class ReservationAdjustmentService
     ): array {
         if ($finalAmount < 0) {
             throw ValidationException::withMessages([
-                'final_amount' => '最終施術金額は0円以上で入力してください。',
+                'final_amount' => __('messages.payment.final_amount_non_negative'),
             ]);
         }
 
@@ -139,7 +139,7 @@ final class ReservationAdjustmentService
                 ReservationStatus::Completed,
             ], true)) {
                 throw ValidationException::withMessages([
-                    'final_amount' => '確定または完了済みの予約だけが差額支払いを発行できます。',
+                    'final_amount' => __('messages.payment.addon_only_confirmed_or_completed'),
                 ]);
             }
 

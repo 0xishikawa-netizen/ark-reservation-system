@@ -25,10 +25,13 @@ class Reservation extends Model
         'customer_id',
         'service_id',
         'staff_id',
+        'is_staff_requested',
         'booth_id',
         'starts_at',
         'ends_at',
+        'buffer_min',
         'source',
+        'inflow_channel',
         'payment_method',
         'payment_status',
         'final_amount',
@@ -90,6 +93,12 @@ class Reservation extends Model
         return $this->hasMany(ReservationProviderMapping::class);
     }
 
+    /** @return HasMany<ReservationGuestToken, $this> */
+    public function guestTokens(): HasMany
+    {
+        return $this->hasMany(ReservationGuestToken::class);
+    }
+
     /** @param  Builder<Reservation>  $query */
     public function scopeForDate(Builder $query, CarbonInterface $date): void
     {
@@ -118,6 +127,7 @@ class Reservation extends Model
         return [
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
+            'buffer_min' => 'integer',
             'attended_at' => 'datetime',
             'canceled_at' => 'datetime',
             'payment_expires_at' => 'datetime',
@@ -129,6 +139,7 @@ class Reservation extends Model
             'payment_status' => PaymentStatus::class,
             'sync_status' => SyncStatus::class,
             'version' => 'integer',
+            'is_staff_requested' => 'boolean',
         ];
     }
 }

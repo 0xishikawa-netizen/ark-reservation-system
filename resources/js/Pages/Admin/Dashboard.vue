@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
+import CustomerPeekDrawer from '@/components/admin/CustomerPeekDrawer.vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -9,6 +10,7 @@ defineOptions({ layout: AdminLayout });
 interface NextArrival {
     id: number;
     starts_at: string;
+    customer_id: number;
     customer_name: string;
     service_name: string;
     staff_name: string | null;
@@ -36,7 +38,7 @@ interface MetricCard {
     title: string;
     value: number;
     href: string | null;
-    color: string;
+    color: 'primary' | 'warning' | 'error';
 }
 
 interface NullableMetricCard extends Omit<MetricCard, 'value'> {
@@ -105,12 +107,17 @@ const metrics = computed<MetricCard[]>(() => {
 
 const formatArrival = (startsAt: string): string =>
     new Intl.DateTimeFormat('ja-JP', {
-        month: 'numeric',
-        day: 'numeric',
-        weekday: 'short',
         hour: '2-digit',
         minute: '2-digit',
     }).format(new Date(startsAt.replace(' ', 'T')));
+
+const peekOpen = ref(false);
+const peekCustomerId = ref<number | null>(null);
+
+function openCustomerPeek(customerId: number): void {
+    peekCustomerId.value = customerId;
+    peekOpen.value = true;
+}
 </script>
 
 <template>
@@ -129,11 +136,19 @@ const formatArrival = (startsAt: string): string =>
         >
             <SectionCard
                 variant="outlined"
+                color="surface"
+                rounded="lg"
                 height="100%"
                 :href="metric.value > 0 && metric.href ? metric.href : undefined"
-                :class="{ 'metric-card-link': metric.value > 0 && metric.href }"
+                :class="[
+                    'ark-kpi-card',
+                    { 'metric-card-link': metric.value > 0 && metric.href },
+                ]"
+                :style="{
+                    borderTopColor: `rgb(var(--v-theme-${metric.color}))`,
+                }"
             >
-                <div class="text-body-2 text-medium-emphasis mb-2">
+                <div class="ark-kpi-card__title text-body-2 text-medium-emphasis mb-2">
                     {{ metric.title }}
                 </div>
                 <div class="d-flex align-end ga-2">
@@ -146,10 +161,19 @@ const formatArrival = (startsAt: string): string =>
         </v-col>
     </v-row>
 
-    <SectionCard v-if="next_arrivals !== null" title="次の来店" variant="outlined">
+    <SectionCard
+        v-if="next_arrivals !== null"
+        title="本日の予約"
+        subtitle="本日の予約のうち、まだ来店（完了）していない方を開始時刻の早い順に表示します。"
+        variant="outlined"
+    >
         <v-list v-if="next_arrivals.length > 0" lines="two">
             <template v-for="(arrival, index) in next_arrivals" :key="arrival.id">
-                <v-list-item>
+                <v-list-item
+                    link
+                    class="arrival-row"
+                    @click="openCustomerPeek(arrival.customer_id)"
+                >
                     <template #prepend>
                         <div class="arrival-time text-primary font-weight-medium mr-5">
                             {{ formatArrival(arrival.starts_at) }}
@@ -163,6 +187,9 @@ const formatArrival = (startsAt: string): string =>
                         <span class="mx-1">・</span>
                         {{ arrival.staff_name ?? '担当なし' }}
                     </v-list-item-subtitle>
+                    <template #append>
+                        <v-icon icon="mdi-chevron-right" class="text-medium-emphasis" />
+                    </template>
                 </v-list-item>
                 <v-divider v-if="index < next_arrivals.length - 1" />
             </template>
@@ -171,15 +198,29 @@ const formatArrival = (startsAt: string): string =>
         <EmptyState
             v-else
             icon="mdi-calendar-clock-outline"
-            title="今後の来店予定はありません"
-            description="新しい来店予定が入ると、こちらに次の予約が表示されます。"
+            title="本日の未対応の予約はありません"
+            description="来店前の予約が入ると、こちらに表示されます。"
         />
     </SectionCard>
+
+    <CustomerPeekDrawer v-model="peekOpen" :customer-id="peekCustomerId" />
 </template>
 
 <style scoped>
 .v-row {
     row-gap: var(--ark-space-2);
+}
+
+.ark-kpi-card {
+    border: 1px solid #D9DEE5;
+    border-top-width: 3px;
+    border-top-style: solid;
+    border-radius: var(--ark-radius-lg);
+    box-shadow: var(--ark-shadow-1);
+}
+
+.ark-kpi-card__title {
+    letter-spacing: 0.02em;
 }
 
 .metric-card-link {
@@ -190,17 +231,18 @@ const formatArrival = (startsAt: string): string =>
 
 .metric-card-link:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
+    box-shadow: 0 6px 16px rgb(18 25 60 / 12%);
 }
 
 .arrival-time {
-    min-width: 9rem;
+    min-width: 3.5rem;
 }
 
 @media (max-width: 600px) {
     .arrival-time {
-        min-width: 7rem;
+        min-width: 3rem;
         font-size: 0.875rem;
     }
 }
+
 </style>

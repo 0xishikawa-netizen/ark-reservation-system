@@ -31,6 +31,7 @@ class StaffController extends Controller
                 'is_bookable' => $staffMember->is_bookable,
                 'sort_order' => $staffMember->sort_order,
                 'role' => $staffMember->user->getRoleNames()->first(),
+                'is_active' => $staffMember->user->is_active,
             ]);
 
         return Inertia::render('Admin/Staff/Index', [
@@ -48,7 +49,7 @@ class StaffController extends Controller
         $createStaff->create($request->validated());
 
         return redirect()->route('admin.staff.index')
-            ->with('success', 'スタッフを作成し、パスワード設定メールを送信しました。');
+            ->with('success', __('messages.staff.created'));
     }
 
     public function edit(Staff $staff, StaffListQuery $query): Response
@@ -65,6 +66,7 @@ class StaffController extends Controller
                 'is_bookable' => $staff->is_bookable,
                 'sort_order' => $staff->sort_order,
                 'role' => $staff->user->getRoleNames()->first(),
+                'is_active' => $staff->user->is_active,
             ],
             'roles' => [
                 ['title' => 'スタッフ', 'value' => 'staff'],
@@ -82,7 +84,7 @@ class StaffController extends Controller
         $updateStaff->execute($staff, $request->validated(), $request->user());
 
         return redirect()->route('admin.staff.index')
-            ->with('success', 'スタッフを更新しました。');
+            ->with('success', __('messages.staff.updated'));
     }
 
     public function deactivate(
@@ -93,6 +95,6 @@ class StaffController extends Controller
         $deactivateStaff->execute($staff, $request->user());
 
         return redirect()->route('admin.staff.index')
-            ->with('success', 'スタッフを予約受付不可にしました。');
+            ->with('success', __('messages.staff.unbookable'));
     }
 }

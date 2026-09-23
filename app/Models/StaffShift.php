@@ -18,7 +18,12 @@ class StaffShift extends Model
         'work_date',
         'start_at',
         'end_at',
+        'origin',
     ];
+
+    public const ORIGIN_MANUAL = 'manual';
+
+    public const ORIGIN_TEMPLATE = 'template';
 
     /** @return BelongsTo<Staff, $this> */
     public function staff(): BelongsTo

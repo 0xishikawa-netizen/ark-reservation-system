@@ -37,7 +37,7 @@ class MembershipPlanController extends Controller
     ): RedirectResponse {
         $createMembershipPlan->execute($request->validated(), $request->user());
 
-        return back()->with('success', '会員プランを作成しました。');
+        return back()->with('success', __('messages.membership.plan_created'));
     }
 
     public function edit(MembershipPlan $membershipPlan): Response
@@ -63,7 +63,7 @@ class MembershipPlanController extends Controller
     ): RedirectResponse {
         $updateMembershipPlan->execute($membershipPlan, $request->validated(), $request->user());
 
-        return back()->with('success', '会員プランを更新しました。');
+        return back()->with('success', __('messages.membership.plan_updated'));
     }
 
     public function setActive(
@@ -78,7 +78,7 @@ class MembershipPlanController extends Controller
 
         return back()->with(
             'success',
-            $active ? '会員プランを有効化しました。' : '会員プランを無効化しました。',
+            $active ? '月額プランを有効化しました。' : '月額プランを無効化しました。',
         );
     }
 }

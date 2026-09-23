@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Customer;
 use Laravel\Cashier\Console\WebhookCommand;
 use Laravel\Cashier\Invoices\DompdfInvoiceRenderer;
 
@@ -20,7 +21,7 @@ return [
     |
     */
 
-    'model' => env('CASHIER_MODEL', App\Models\Customer::class),
+    'model' => env('CASHIER_MODEL', Customer::class),
 
     /*
     |--------------------------------------------------------------------------

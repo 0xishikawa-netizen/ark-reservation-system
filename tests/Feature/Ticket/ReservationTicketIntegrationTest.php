@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Ticket;
 
+use App\Domain\Reservation\RescheduleInput;
 use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
-use App\Domain\Reservation\RescheduleInput;
 use App\Domain\Ticket\TicketLedgerService;
 use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\ReservationSource;

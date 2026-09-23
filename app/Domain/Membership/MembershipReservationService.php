@@ -48,7 +48,7 @@ final class MembershipReservationService
                 ->first();
 
             if ($membership === null) {
-                throw new InsufficientMembershipBalanceException('利用可能な利用権がありません');
+                throw new InsufficientMembershipBalanceException(__('messages.membership.none_available'));
             }
 
             // canceling（当期末で終了予定）は current_period_end までしか使えない。
@@ -56,7 +56,7 @@ final class MembershipReservationService
             if ($membership->status === MembershipStatus::Canceling
                 && $membership->current_period_end !== null
                 && $membership->current_period_end->toDateString() < now()->toDateString()) {
-                throw new InsufficientMembershipBalanceException('利用権の有効期間が終了しています');
+                throw new InsufficientMembershipBalanceException(__('messages.membership.expired'));
             }
 
             $period = $this->ledger->currentPeriod($membership);

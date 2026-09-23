@@ -33,7 +33,11 @@ class HomeController extends Controller
         }
 
         if ($user->hasAnyRole(['staff', 'manager', 'admin'])) {
-            return redirect()->route('admin.dashboard');
+            // 店舗スタッフが一番長く使うのはブッキングボード。ログイン直後はそこへ着地させ、
+            // 予約を見られない権限のユーザーだけダッシュボードへ戻す。
+            return $user->can('reservations.view')
+                ? redirect()->route('admin.schedule.index')
+                : redirect()->route('admin.dashboard');
         }
 
         abort(403);

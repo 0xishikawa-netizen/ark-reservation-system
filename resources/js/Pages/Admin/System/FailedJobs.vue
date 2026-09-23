@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -60,8 +61,8 @@ const currentPage = computed<number>({
                 <thead>
                     <tr>
                         <th>UUID</th>
-                        <th>Connection</th>
-                        <th>Queue</th>
+                        <th>接続先</th>
+                        <th>キュー</th>
                         <th>失敗日時</th>
                         <th>例外（1行目）</th>
                     </tr>
@@ -81,7 +82,7 @@ const currentPage = computed<number>({
                     </tr>
                     <tr v-if="jobs.data.length === 0">
                         <td colspan="5" class="text-center text-medium-emphasis py-8">
-                            失敗ジョブはありません。
+                            {{ MESSAGES.system.noFailedJobs }}
                         </td>
                     </tr>
                 </tbody>

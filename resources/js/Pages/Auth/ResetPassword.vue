@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useForm } from '@inertiajs/vue3';
-import AuthCard from '@/components/auth/AuthCard.vue';
+import { useForm } from "@inertiajs/vue3";
+import AuthCard from "@/components/auth/AuthCard.vue";
 
 const props = defineProps<{
     token: string;
@@ -10,19 +10,22 @@ const props = defineProps<{
 const form = useForm({
     token: props.token,
     email: props.email,
-    password: '',
-    password_confirmation: '',
+    password: "",
+    password_confirmation: "",
 });
 
 const submit = (): void => {
-    form.post('/reset-password', {
-        onFinish: () => form.reset('password', 'password_confirmation'),
+    form.post("/reset-password", {
+        onFinish: () => form.reset("password", "password_confirmation"),
     });
 };
 </script>
 
 <template>
-    <AuthCard title="新しいパスワード" subtitle="新しいパスワードを設定してください。">
+    <AuthCard
+        title="新しいパスワード"
+        subtitle="新しいパスワードを設定してください。"
+    >
         <v-form @submit.prevent="submit">
             <v-text-field
                 v-model="form.email"

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Membership;
 
+use App\Models\Customer;
 use App\Models\Membership;
 use App\Models\MembershipReservationUsage;
 use App\Models\MembershipUsageTransaction;
+use App\Models\Payment;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -42,8 +44,8 @@ final class MembershipSchemaTest extends TestCase
     public function test_payment_operation_id_is_widened_to_64(): void
     {
         // 64 字ちょうどの operation id を持つ payment が作れる（char(36) では不可）。
-        $customer = \App\Models\Customer::factory()->create();
-        (new \App\Models\Payment)->forceFill([
+        $customer = Customer::factory()->create();
+        (new Payment)->forceFill([
             'customer_id' => $customer->user_id,
             'reservation_id' => null,
             'kind' => 'membership_invoice',

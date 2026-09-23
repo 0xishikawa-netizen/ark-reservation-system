@@ -77,7 +77,7 @@ class MfaController extends Controller
         // 検証が終わるまで確定させない。平文はセッションにのみ一時保持する。
         $request->session()->put('mfa.phone.pending', encrypt($phone));
 
-        return back()->with('success', '認証コードを送信しました。');
+        return back()->with('success', __('messages.otp.sent'));
     }
 
     /**
@@ -92,7 +92,7 @@ class MfaController extends Controller
         $pending = $request->session()->get('mfa.phone.pending');
 
         if (! is_string($pending)) {
-            return back()->withErrors(['code' => '確認中の電話番号がありません。もう一度お試しください。']);
+            return back()->withErrors(['code' => __('messages.otp.no_pending_phone')]);
         }
 
         $phone = (string) decrypt($pending);
@@ -102,7 +102,7 @@ class MfaController extends Controller
         $staff = $user->staff;
 
         if ($staff === null) {
-            return back()->withErrors(['phone' => 'スタッフ情報が見つかりません。']);
+            return back()->withErrors(['phone' => __('messages.otp.staff_not_found')]);
         }
 
         $staff->forceFill([
@@ -120,7 +120,7 @@ class MfaController extends Controller
             $user,
         );
 
-        return back()->with('success', '電話番号を確認しました。SMS を予備の認証手段として利用できます。');
+        return back()->with('success', __('messages.otp.phone_verified'));
     }
 
     private function maskedPhone(User $user): ?string

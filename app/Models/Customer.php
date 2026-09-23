@@ -30,6 +30,7 @@ class Customer extends Model
     /** @var list<string> */
     protected $fillable = [
         'user_id',
+        'member_no',
         'kana',
         'phone',
         'birthday',
@@ -48,6 +49,20 @@ class Customer extends Model
 
             $customer->phone_hmac = PiiHasher::phoneHmac($customer->phone);
         });
+
+        // 会員番号は DB内部ID（user_id）とは別の正式な項目として、作成時に一度だけ発番する。
+        // user_id は既に一意性が保証された値（users の AUTO_INCREMENT）なので、同時登録でも安全。
+        // 一度発番した番号は変更しない（明示的に渡された場合はそれを尊重する）。
+        static::creating(function (Customer $customer): void {
+            if ($customer->member_no === null && $customer->user_id !== null) {
+                $customer->member_no = self::formatMemberNo((int) $customer->user_id);
+            }
+        });
+    }
+
+    public static function formatMemberNo(int $userId): string
+    {
+        return 'ARK'.str_pad((string) $userId, 6, '0', STR_PAD_LEFT);
     }
 
     public function user(): BelongsTo

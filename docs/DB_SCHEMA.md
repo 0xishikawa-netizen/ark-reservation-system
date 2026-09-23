@@ -55,7 +55,12 @@ MySQL（実バージョンは Phase 0 実測 → PHASE0_REPORT.md）。InnoDB / 
 - `type` カラムは持たない。顧客/スタッフ判別は spatie role（`customer` / `staff` / `manager` / `admin`）。
 
 **customers**（users と 1:1、role=customer）
-| user_id PK/FK | kana varchar(100) | phone **text** null `encrypted` | phone_hmac char(64) index | birthday **text** null `encrypted`(get で Carbon) | gender varchar(10) null | note varchar(1000) null | stripe_customer_id varchar(40) null index | created_via varchar(20) | timestamps |
+| user_id PK/FK | **member_no char(10) NOT NULL UNIQUE** | kana varchar(100) | phone **text** null `encrypted` | phone_hmac char(64) index | birthday **text** null `encrypted`(get で Carbon) | gender varchar(10) null | note varchar(1000) null | stripe_customer_id varchar(40) null index | created_via varchar(20) | timestamps |
+
+- `member_no`：会員番号。`ARK` + 顧客ID（`user_id`）を6桁ゼロ詰めした形式（例：`ARK000164`）。
+  DB内部ID（`user_id`）とは別に持たせた正式な業務項目で、`Customer` モデルの `creating` フックで
+  一度だけ発番し、以後変更しない。`user_id` は既に一意性が保証された AUTO_INCREMENT 値から生成する
+  ため、追加の採番テーブルなしに同時登録でも安全に一意。既存顧客は migration で一括 backfill 済み。
 
 - `phone_hmac` = `hash_hmac('sha256', 正規化電話（数字のみ）, config('security.pii_lookup_key'))`。等価検索用。平文の検索コピーは持たない。
   HMAC キーは `APP_KEY` とは独立した `PII_LOOKUP_KEY` を使用する。キーのローテーション時は全 `customers` 行の
@@ -69,8 +74,18 @@ MySQL（実バージョンは Phase 0 実測 → PHASE0_REPORT.md）。InnoDB / 
 | user_id PK/FK | display_name varchar(50) | color varchar(7) | is_bookable bool | sort_order smallint | timestamps |
 
 **staff_shifts**
-| id | staff_id FK | work_date date | start_at time | end_at time | timestamps |
-index: `(staff_id, work_date)`
+| id | staff_id FK | work_date date | start_at time | end_at time | origin varchar(16) default `manual` | timestamps |
+index: `(staff_id, work_date)`, `(work_date, origin)`
+`origin`: `manual`（管理者が直接作成・例外日の枠。自動生成は絶対に触らない）/ `template`（基本シフトから自動生成）。既存行はすべて `manual` 既定なので、migration 適用だけで既存の枠・予約に影響なし。
+
+**staff_shift_templates**（基本シフト = 曜日ごとの通常勤務時間。#11）
+| id | staff_id FK | weekday tinyint（0=日〜6=土） | start_at time | end_at time | is_active bool | timestamps |
+index: `(staff_id, weekday)`。同一曜日に複数行 = 複数時間帯。
+
+**staff_shift_exceptions**（例外日。#11）
+| id | staff_id FK | exception_date date | is_off bool | note varchar(200) | timestamps |
+unique: `(staff_id, exception_date)`。
+`is_off=true` = その日は休み（自動生成しない・生成済み template 枠は削除）。`is_off=false` = 時間変更（実枠は staff_shifts/origin=manual）。例外日がある (staff, date) は自動生成の対象外。
 
 ### メニュー・リソース
 
@@ -120,6 +135,7 @@ index: `(ticket_wallet_id, id)`, `(reservation_id)`
 | customer_id | FK | |
 | service_id | FK | |
 | staff_id | FK null | |
+| **is_staff_requested** | **bool default false** | **顧客がそのスタッフを明示的に指名したか（§5）。staff_idの割当理由（指名／自動割当）をstaff_idだけでは区別できないため追加** |
 | booth_id | FK null | |
 | starts_at | datetime | |
 | ends_at | datetime | |
@@ -157,6 +173,46 @@ index: `(starts_at)`, `(staff_id, starts_at)`, `(customer_id, starts_at)`, `(sta
 - **容量**：1 店舗・稼働リソース 10・営業 12h・15 分・90 日先保持で数万行オーダー。
   1 行あたりの実バイト数（InnoDB 行 + セカンダリ index overhead 込み）は **Phase 3 で実測**し、
   実測値と将来予測（1 年後 / 3 年後）を本ファイルの「容量実測」節に追記する。固定バイト見積りは置かない。
+
+**reservation_notification_dismissals**（予約台帳のオンライン予約通知・既読管理。管理者ごと）
+| 列 | 型 | 備考 |
+|---|---|---|
+| id | bigint PK | |
+| user_id | FK users | 既読にした管理者 |
+| reservation_id | FK reservations | |
+| dismissed_at | datetime | |
+
+**UNIQUE(user_id, reservation_id)**（`rnd_user_reservation_unique` として明示命名。自動生成名は
+MySQL の識別子長 64 文字制限を超えるため）。`timestamps` は持たない（`dismissed_at` のみ）。
+`localStorage` ではなく DB で既読を持つことで、別ブラウザ・別端末からログインしても再表示されない。
+
+**staff_schedule_blocks**（予約以外でスタッフ／ブースの時間を埋める「予定ブロック」。§27-46）
+| 列 | 型 | 備考 |
+|---|---|---|
+| id | bigint PK | |
+| staff_id | FK staff null | どちらか一方必須（両方指定も可） |
+| booth_id | FK booths null | |
+| work_date | date | |
+| start_at | time | |
+| end_at | time | |
+| type | varchar(20) | enum(BREAK,MEETING,ADMIN,CLEANING,TRAINING,OUT,OTHER) |
+| title | varchar(100) null | `type=OTHER` のときのみ入力必須（アプリ層で検証） |
+| note | varchar(500) null | |
+| created_by | FK users null | |
+| timestamps | | |
+
+index: `(staff_id, work_date)`, `(booth_id, work_date)`
+
+- `Reservation` を顧客なしで無理やり流用せず、独立したテーブルとして管理する（§28）。
+- staff_id / booth_id が「どちらか一方必須」であることは DB の CHECK 制約ではなく
+  `ScheduleBlockService` のアプリ層バリデーションで担保する（DB 横断のポータビリティを優先）。
+- 予約との二重予約防止は `reservation_resource_slots` のような unique 制約ベースの仕組みを
+  流用せず、`ScheduleBlockService` が書き込み時に予約テーブル・他ブロックとの時間帯重複を
+  明示的にクエリで検証する（既存の勤務時間・メニュー対応可否チェックと同じ「クエリ検証」方式）。
+- `AvailabilityService::openStartTimes()` は、`reservation_resource_slots` による占有チェックに加えて
+  同じ日付ぶんのブロックを1クエリでまとめて取得し、時間帯が重なる候補開始時刻を除外する（N+1禁止）。
+- 顧客予約ではないため、作成・変更・削除は顧客へのメール・SMS・Stripe・回数券・月額プランを
+  一切動かさない（§46）。作成・変更・削除は既存監査ログ（`AuditLogger`）に記録する。
 
 ### 決済（Stripe 課金）
 
@@ -242,6 +298,10 @@ index: `(payment_id)`
 
 - `webhook_events` / `sync_logs` / `audit_logs` / `db_size_snapshots`：§2 の表のとおり。
 - `settings`：`key varchar(80) PK` / `value varchar(255)` / `type varchar(20)`（営業時間・スロット粒度・キャンセル規定・仮予約 HOLD 時間）。
+  - 予約受付（#11・キー未設定なら「制限なし」＝後方互換）：
+    `booking.horizon_mode`（`none`|`monthly`|`rolling`）/ `booking.release_day_of_month`（1–28、推奨 20）/
+    `booking.horizon_days`（rolling 用）/ `booking.min_lead_minutes`（直前締切）/ `booking.closed_dates`（json 配列 `YYYY-MM-DD`。全スタッフ・管理者手動を含め予約不可）。
+    正本は `App\Domain\Reservation\BookingWindow`。`SettingsSeeder` にはあえて含めず、管理画面「勤務枠 › 予約受付」で保存した時点から有効化される。
 - Laravel 基盤：`password_reset_tokens` / `sessions` / `jobs` / `job_batches` / `failed_jobs` / `cache` / `cache_locks`。
 
 ### 外部予約連携（Phase 9・`app/Domain/Integration`）

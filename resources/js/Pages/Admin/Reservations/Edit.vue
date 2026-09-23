@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
-import { SectionCard, StatusChip } from '@/components/ark';
+import { computed, onMounted, ref, watch } from 'vue';
+import { DateField, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import {
+    reservationSourceColor,
+    reservationSourceLabel,
+    reservationStatusLabel,
+} from '@/design/tokens';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -100,6 +106,9 @@ const availabilityError = ref('');
 const dialog = ref<'cancel' | 'complete' | 'no-show' | null>(null);
 const actionProcessing = ref(false);
 const cancelReason = ref('');
+// 保存直後だけ「確認」ボタンを出す（保存前から出しておくと、まだ保存していない
+// 変更を確認しに行けると誤解されるため）。担当・ブース・日付を変えたら消す。
+const justSaved = ref(false);
 const adjustmentForm = useForm({
     final_amount: props.payment_summary.final_amount ?? props.payment_summary.original_amount,
 });
@@ -133,34 +142,44 @@ const autoAssignedStaffName = computed(() => {
     return props.staff.find((staff) => staff.user_id === assignedStaffId)?.display_name ?? null;
 });
 
-const statusLabels: Record<string, string> = {
-    confirmed: '予約確定',
-    completed: '完了',
-    no_show: 'No-show',
-    canceled: 'キャンセル',
-    pending_payment: '支払い待ち',
-    pending_external_sync: '外部連携待ち',
-    expired: '期限切れ',
-};
+// 担当スタッフ・変更前の予約時刻を、空き時間の取り直し後も可能なら維持する
+// （desiredStartsAt。§NewReservationPanel と同じ考え方）。
+const desiredStartsAt = ref<string | null>(props.reservation.starts_at);
 
-watch(selectedStaffId, clearResourceAvailability);
-watch(selectedBoothId, clearResourceAvailability);
-watch(date, clearDateAvailability);
+/**
+ * 担当・ブース・日付のどれかが変わったら空き時間を自動で取り直す。
+ * 「空き時間を見る」ボタンを押させる方式は何のためのボタンか分かりにくいため、
+ * NewReservationPanel と同じく明示操作なしで最新の候補を出す（§空き時間の自動取得）。
+ */
+let availabilityTimer: ReturnType<typeof setTimeout> | null = null;
 
-function clearResourceAvailability(): void {
-    slots.value = [];
+watch([selectedStaffId, selectedBoothId, date], () => {
+    if (availabilityTimer !== null) {
+        clearTimeout(availabilityTimer);
+    }
+
     form.staff_id = selectedStaffId.value;
     form.booth_id = selectedBoothId.value;
-    availabilityError.value = '';
-    availabilityLoaded.value = false;
-}
-
-function clearDateAvailability(): void {
-    slots.value = [];
+    // ユーザーが担当・ブース・日付を実際に変えたときだけ、選択中の時間を白紙に戻す
+    // （初回表示時は今の予約時刻をそのまま残す。§loadAvailability 内では消さない）。
     form.starts_at = null;
-    availabilityError.value = '';
-    availabilityLoaded.value = false;
-}
+    justSaved.value = false;
+
+    if (date.value === '') {
+        slots.value = [];
+        availabilityLoaded.value = false;
+
+        return;
+    }
+
+    availabilityTimer = setTimeout(() => void loadAvailability(), 150);
+});
+
+onMounted(() => {
+    if (date.value !== '') {
+        void loadAvailability();
+    }
+});
 
 async function loadAvailability(): Promise<void> {
     if (date.value === '') {
@@ -190,30 +209,61 @@ async function loadAvailability(): Promise<void> {
         });
 
         if (!response.ok) {
-            throw new Error('空き時間を取得できませんでした。');
+            throw new Error(MESSAGES.availability.loadFailed);
         }
 
         slots.value = (await response.json()) as AvailabilitySlot[];
         availabilityLoaded.value = true;
+
+        const match = desiredStartsAt.value === null
+            ? undefined
+            : slots.value.find((slot) => timeLabel(slot.starts_at) === timeLabel(desiredStartsAt.value!));
+
+        if (match) {
+            selectSlot(match);
+        }
     } catch (error: unknown) {
         availabilityError.value = error instanceof Error
             ? error.message
-            : '空き時間を取得できませんでした。';
+            : MESSAGES.availability.loadFailed;
     } finally {
         loadingSlots.value = false;
     }
 }
 
 function selectSlot(slot: AvailabilitySlot): void {
+    desiredStartsAt.value = slot.starts_at;
     form.starts_at = slot.starts_at;
     form.staff_id = selectedStaffId.value ?? slot.available_staff_ids[0] ?? null;
     form.booth_id = selectedBoothId.value;
 }
 
+const slotItems = computed(() => slots.value.map((slot) => ({
+    title: timeLabel(slot.starts_at),
+    value: timeLabel(slot.starts_at),
+})));
+
+// slots は毎回サーバーから取り直すため区切り文字が reservation.starts_at と
+// 揃っている保証がない。時刻部分（HH:MM）だけで突き合わせる。
+const selectedSlotValue = computed<string | null>({
+    get: () => (form.starts_at ? timeLabel(form.starts_at) : null),
+    set: (value) => {
+        const slot = value === null ? undefined : slots.value.find((item) => timeLabel(item.starts_at) === value);
+
+        if (slot) {
+            selectSlot(slot);
+        }
+    },
+});
+
 function submit(): void {
+    justSaved.value = false;
     form.put(`/admin/reservations/${props.reservation.id}`, {
         errorBag: 'reservation',
         preserveScroll: true,
+        onSuccess: () => {
+            justSaved.value = true;
+        },
     });
 }
 
@@ -242,7 +292,7 @@ function actionTitle(): string {
     return {
         cancel: '予約をキャンセル',
         complete: '来店済み（完了）に変更',
-        'no-show': 'No-showに変更',
+        'no-show': '無断キャンセルに変更',
     }[dialog.value ?? 'cancel'];
 }
 
@@ -277,172 +327,220 @@ function submitAdjustment(): void {
 </script>
 
 <template>
-    <Head title="予約編集" />
+    <Head :title="`予約 #${reservation.id}`" />
 
-    <div class="d-flex align-center justify-space-between mb-6 flex-wrap ga-3">
-        <div>
-            <h1 class="text-h4">予約編集 #{{ reservation.id }}</h1>
-            <div class="text-medium-emphasis mt-1">
-                {{ reservation.customer_name }}・{{ reservation.service_name }}
+    <PageHeader :title="`予約 #${reservation.id}`" :subtitle="formatDateTime(reservation.starts_at)">
+        <template #actions>
+            <v-btn
+                variant="text"
+                prepend-icon="mdi-account-outline"
+                :href="`/admin/customers/${reservation.customer_id}`"
+            >
+                顧客詳細へ
+            </v-btn>
+            <v-btn
+                variant="outlined"
+                prepend-icon="mdi-calendar-month-outline"
+                :href="`/admin/schedule?date=${reservation.starts_at.slice(0, 10)}&reservation=${reservation.id}`"
+            >
+                ブッキングボードで確認
+            </v-btn>
+        </template>
+    </PageHeader>
+
+    <div class="reservation-page">
+    <SectionCard class="reservation-hero mb-6">
+        <div class="reservation-hero__row">
+            <div class="reservation-hero__icon">
+                <v-icon icon="mdi-calendar-check-outline" size="26" />
+            </div>
+            <div class="reservation-hero__body">
+                <div class="reservation-hero__customer">
+                    {{ reservation.customer_name }}
+                </div>
+                <div class="reservation-hero__service">
+                    {{ reservation.service_name }}
+                </div>
+            </div>
+            <div class="reservation-hero__chips">
+                <StatusChip :status="reservation.status" :label="reservationStatusLabel(reservation.status)" />
+                <v-chip :color="reservationSourceColor(reservation.source)" size="small" variant="tonal">
+                    {{ reservationSourceLabel(reservation.source) }}
+                </v-chip>
             </div>
         </div>
-        <v-btn variant="text" :href="`/admin/schedule?date=${reservation.starts_at.slice(0, 10)}`">
-            予約台帳へ
-        </v-btn>
-    </div>
 
-    <v-row>
-        <v-col cols="12" lg="8">
-            <v-card title="日時・リソース・備考">
-                <v-card-text>
-                    <v-list density="compact" class="mb-4">
-                        <v-list-item title="現在の日時" :subtitle="formatDateTime(reservation.starts_at)" />
-                        <v-list-item title="状態" :subtitle="statusLabels[reservation.status] ?? reservation.status" />
-                        <v-list-item title="予約元" :subtitle="reservation.source" />
-                    </v-list>
+        <v-divider class="my-4" />
 
-                    <v-form @submit.prevent="submit">
-                        <div class="field-grid">
-                            <v-select
-                                v-model="selectedStaffId"
-                                :items="eligibleStaff"
-                                item-title="display_name"
-                                item-value="user_id"
-                                label="担当スタッフ"
-                                clearable
-                                :disabled="!isConfirmed"
-                                :error-messages="form.errors.staff_id"
-                            />
-                            <v-select
-                                v-model="selectedBoothId"
-                                :items="booths"
-                                item-title="name"
-                                item-value="id"
-                                label="ブース（任意）"
-                                clearable
-                                :disabled="!isConfirmed"
-                                :error-messages="form.errors.booth_id"
-                            />
-                        </div>
+        <div class="reservation-hero__facts">
+            <div class="reservation-hero__fact">
+                <div class="text-caption text-medium-emphasis">日時</div>
+                <div class="font-weight-medium">{{ formatDateTime(reservation.starts_at) }}</div>
+            </div>
+            <div class="reservation-hero__fact">
+                <div class="text-caption text-medium-emphasis">担当</div>
+                <div class="font-weight-medium">{{ reservation.staff_name ?? '担当なし' }}</div>
+            </div>
+            <div class="reservation-hero__fact">
+                <div class="text-caption text-medium-emphasis">ブース</div>
+                <div class="font-weight-medium">{{ reservation.booth_name ?? '—' }}</div>
+            </div>
+        </div>
+    </SectionCard>
 
-                        <div class="d-flex ga-3 align-start flex-wrap">
-                            <v-text-field
-                                v-model="date"
-                                type="date"
-                                label="変更日"
-                                class="flex-grow-1"
-                                :disabled="!isConfirmed"
-                                :error-messages="form.errors.starts_at"
-                            />
-                            <v-btn
-                                color="primary"
-                                variant="outlined"
-                                height="56"
-                                :disabled="!isConfirmed || date === ''"
-                                :loading="loadingSlots"
-                                @click="loadAvailability"
-                            >
-                                空き時間を見る
-                            </v-btn>
-                        </div>
+    <SectionCard title="日時・担当の変更" subtitle="確定済みの予約のみ変更できます。" class="mb-6">
+        <v-alert v-if="!isConfirmed" type="info" variant="tonal" class="mb-5">
+            {{ MESSAGES.reservation.notConfirmedNotEditable }}
+        </v-alert>
 
-                        <v-alert v-if="availabilityError" type="error" variant="tonal" class="mb-4">
-                            {{ availabilityError }}
-                        </v-alert>
-                        <v-alert
-                            v-else-if="availabilityLoaded && slots.length === 0"
-                            type="info"
-                            variant="tonal"
-                            class="mb-4"
-                        >
-                            選択日に予約できる時間はありません。
-                        </v-alert>
-                        <div v-if="slots.length > 0" class="slot-grid mb-4">
-                            <v-btn
-                                v-for="slot in slots"
-                                :key="slot.starts_at"
-                                :variant="form.starts_at === slot.starts_at ? 'flat' : 'outlined'"
-                                color="primary"
-                                @click="selectSlot(slot)"
-                            >
-                                {{ timeLabel(slot.starts_at) }}
-                            </v-btn>
-                        </div>
-                        <v-alert
-                            v-if="autoAssignedStaffName"
-                            type="info"
-                            variant="tonal"
-                            class="mb-4"
-                        >
-                            担当は {{ autoAssignedStaffName }} に自動割当されます。
-                        </v-alert>
+        <v-form @submit.prevent="submit">
+            <div class="field-grid">
+                <v-select
+                    v-model="selectedStaffId"
+                    :items="eligibleStaff"
+                    item-title="display_name"
+                    item-value="user_id"
+                    label="担当スタッフ"
+                    variant="outlined"
+                    density="comfortable"
+                    clearable
+                    hide-details="auto"
+                    :disabled="!isConfirmed"
+                    :error-messages="form.errors.staff_id"
+                />
+                <v-select
+                    v-model="selectedBoothId"
+                    :items="booths"
+                    item-title="name"
+                    item-value="id"
+                    label="ブース（任意）"
+                    variant="outlined"
+                    density="comfortable"
+                    clearable
+                    hide-details="auto"
+                    :disabled="!isConfirmed"
+                    :error-messages="form.errors.booth_id"
+                />
+            </div>
 
-                        <v-textarea
-                            v-model="form.notes"
-                            label="備考"
-                            maxlength="1000"
-                            counter
-                            rows="4"
-                            :error-messages="form.errors.notes"
-                        />
+            <div class="d-flex ga-3 align-start flex-wrap mt-4">
+                <div class="date-field">
+                    <DateField
+                        v-model="date"
+                        label="変更日"
+                        density="comfortable"
+                        hide-details="auto"
+                        :disabled="!isConfirmed"
+                    />
+                </div>
+                <div v-if="date !== ''" class="date-field">
+                    <v-select
+                        v-model="selectedSlotValue"
+                        :items="slotItems"
+                        :loading="loadingSlots"
+                        label="時間"
+                        variant="outlined"
+                        density="comfortable"
+                        hide-details="auto"
+                        :disabled="!isConfirmed || slotItems.length === 0"
+                        :error-messages="form.errors.starts_at"
+                    />
+                </div>
+            </div>
 
-                        <v-alert
-                            v-if="form.errors.reservation"
-                            type="error"
-                            variant="tonal"
-                            class="mb-4"
-                        >
-                            {{ form.errors.reservation }}
-                            <v-btn
-                                v-if="hasConflict"
-                                class="ml-3"
-                                size="small"
-                                variant="outlined"
-                                @click="router.reload()"
-                            >
-                                再読込
-                            </v-btn>
-                        </v-alert>
+            <v-alert v-if="availabilityError" type="error" variant="tonal" class="mt-4">
+                {{ availabilityError }}
+            </v-alert>
+            <v-alert
+                v-else-if="availabilityLoaded && slots.length === 0"
+                type="info"
+                variant="tonal"
+                class="mt-4"
+            >
+                {{ MESSAGES.availability.noneOnDate }}
+            </v-alert>
+            <v-alert
+                v-if="autoAssignedStaffName"
+                type="info"
+                variant="tonal"
+                class="mt-4"
+            >
+                担当は {{ autoAssignedStaffName }} に自動割当されます。
+            </v-alert>
 
-                        <v-btn
-                            type="submit"
-                            color="primary"
-                            :loading="form.processing"
-                            :disabled="!isConfirmed"
-                        >
-                            更新
-                        </v-btn>
-                    </v-form>
-                </v-card-text>
-            </v-card>
-        </v-col>
+            <v-divider class="my-5" />
 
-        <v-col cols="12" lg="4">
-            <v-card title="予約ステータス">
-                <v-card-text>
-                    <v-alert v-if="!isConfirmed" type="info" variant="tonal" class="mb-4">
-                        この予約は確定状態ではないため、変更操作はできません。
-                    </v-alert>
-                    <div class="d-flex flex-column ga-3">
-                        <v-btn color="success" :disabled="!isConfirmed" @click="dialog = 'complete'">
-                            来店（完了）
-                        </v-btn>
-                        <v-btn color="warning" variant="outlined" :disabled="!isConfirmed" @click="dialog = 'no-show'">
-                            No-show
-                        </v-btn>
-                        <v-btn color="error" variant="outlined" :disabled="!isConfirmed" @click="dialog = 'cancel'">
-                            キャンセル
-                        </v-btn>
-                    </div>
-                </v-card-text>
-            </v-card>
-        </v-col>
-    </v-row>
+            <v-textarea
+                v-model="form.notes"
+                label="備考"
+                variant="outlined"
+                maxlength="1000"
+                counter
+                rows="4"
+                hide-details="auto"
+                :error-messages="form.errors.notes"
+            />
+
+            <v-alert
+                v-if="form.errors.reservation"
+                type="error"
+                variant="tonal"
+                class="mt-4"
+            >
+                {{ form.errors.reservation }}
+                <v-btn
+                    v-if="hasConflict"
+                    class="ml-3"
+                    size="small"
+                    variant="outlined"
+                    @click="router.reload()"
+                >
+                    再読込
+                </v-btn>
+            </v-alert>
+
+            <div class="d-flex ga-3 mt-5">
+                <v-btn
+                    type="submit"
+                    color="primary"
+                    :loading="form.processing"
+                    :disabled="!isConfirmed"
+                >
+                    保存
+                </v-btn>
+                <v-btn
+                    v-if="justSaved"
+                    variant="outlined"
+                    prepend-icon="mdi-calendar-month-outline"
+                    :href="`/admin/schedule?date=${reservation.starts_at.slice(0, 10)}&reservation=${reservation.id}`"
+                >
+                    確認
+                </v-btn>
+            </div>
+        </v-form>
+    </SectionCard>
+
+    <SectionCard title="ステータス操作" class="mb-6">
+        <v-alert v-if="!isConfirmed" type="info" variant="tonal" class="mb-4">
+            {{ MESSAGES.reservation.notConfirmedNotEditable }}
+        </v-alert>
+        <div class="d-flex ga-3 flex-wrap">
+            <v-btn color="success" variant="flat" :disabled="!isConfirmed" @click="dialog = 'complete'">
+                来店（完了）
+            </v-btn>
+            <v-btn color="warning" variant="outlined" :disabled="!isConfirmed" @click="dialog = 'no-show'">
+                無断キャンセル
+            </v-btn>
+            <v-btn color="error" variant="outlined" :disabled="!isConfirmed" @click="dialog = 'cancel'">
+                キャンセル
+            </v-btn>
+        </div>
+    </SectionCard>
 
     <SectionCard
         title="決済サマリ"
         subtitle="最終施術金額と実質受領額の差額を追加決済または返金で調整します。"
-        class="mt-6 ark-table-section"
+        class="ark-table-section"
     >
         <v-alert
             v-if="payment_summary.in_flight_addon"
@@ -456,7 +554,7 @@ function submitAdjustment(): void {
 
         <v-row dense class="mb-2">
             <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">当初金額</div><div>{{ formatMoney(payment_summary.original_amount) }}</div></v-col>
-            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">capture総額</div><div>{{ formatMoney(payment_summary.captured_total) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">決済確定額</div><div>{{ formatMoney(payment_summary.captured_total) }}</div></v-col>
             <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">返金総額</div><div>{{ formatMoney(payment_summary.refunded_total) }}</div></v-col>
             <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">実質受領額</div><div class="font-weight-bold">{{ formatMoney(payment_summary.net_received) }}</div></v-col>
             <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">最終施術金額</div><div>{{ payment_summary.final_amount === null ? '未設定' : formatMoney(payment_summary.final_amount) }}</div></v-col>
@@ -487,7 +585,7 @@ function submitAdjustment(): void {
             <thead>
                 <tr>
                     <th>種類</th><th class="text-right">金額</th><th>状態</th>
-                    <th>PaymentIntent</th><th>Charge</th><th class="text-right">返金済み</th>
+                    <th>決済ID</th><th>請求ID</th><th class="text-right">返金済み</th>
                 </tr>
             </thead>
             <tbody>
@@ -511,16 +609,17 @@ function submitAdjustment(): void {
                     </tr>
                 </template>
                 <tr v-if="payment_summary.payments.length === 0">
-                    <td colspan="6" class="text-center text-medium-emphasis py-6">決済履歴はありません。</td>
+                    <td colspan="6" class="text-center text-medium-emphasis py-6">{{ MESSAGES.payment.noHistory }}</td>
                 </tr>
             </tbody>
         </v-table>
     </SectionCard>
+    </div>
 
     <v-dialog :model-value="dialog !== null" max-width="520" @update:model-value="value => { if (!value) dialog = null; }">
         <v-card :title="actionTitle()">
             <v-card-text>
-                <p>この操作を実行してよろしいですか？</p>
+                <p>{{ MESSAGES.common.confirmAction }}</p>
                 <v-textarea
                     v-if="dialog === 'cancel'"
                     v-model="cancelReason"
@@ -546,25 +645,90 @@ function submitAdjustment(): void {
 </template>
 
 <style scoped>
+/* でかいモニターでも1カラムのまま最大幅を制限し、カードが横に間延びしないようにする。
+   左寄せだと大画面で右側が余って見づらいため、中央寄せにする。 */
+.reservation-page {
+    max-width: 880px;
+    margin-inline: auto;
+}
+
+.date-field {
+    width: 260px;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 600px) {
+    .date-field {
+        width: 100%;
+    }
+}
+
+.reservation-hero__row {
+    display: flex;
+    align-items: center;
+    gap: var(--ark-space-4);
+}
+
+.reservation-hero__icon {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    background: rgba(var(--v-theme-primary), 0.1);
+    color: rgb(var(--v-theme-primary));
+}
+
+.reservation-hero__body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.reservation-hero__customer {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.reservation-hero__service {
+    color: rgba(var(--v-theme-on-surface), 0.68);
+    margin-top: 2px;
+}
+
+.reservation-hero__chips {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--ark-space-2);
+}
+
+.reservation-hero__facts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--ark-space-4);
+}
+
+@media (max-width: 720px) {
+    .reservation-hero__row {
+        flex-wrap: wrap;
+    }
+
+    .reservation-hero__facts {
+        grid-template-columns: 1fr;
+    }
+}
+
 .field-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
 }
 
-.slot-grid {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 0.65rem;
-}
-
 @media (max-width: 720px) {
     .field-grid {
         grid-template-columns: 1fr;
-    }
-
-    .slot-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 </style>

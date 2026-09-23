@@ -190,6 +190,56 @@ class AvailabilityServiceTest extends TestCase
         $this->assertContains('2026-10-01 11:00:00', $starts);
     }
 
+    public function test_with_booths_excludes_times_when_every_booth_is_taken_and_lists_free_booths(): void
+    {
+        $service = Service::factory()->create([
+            'duration_min' => 60,
+            'requires_staff' => false,
+            'is_active' => true,
+        ]);
+        $boothA = Booth::factory()->create(['is_active' => true, 'sort_order' => 1]);
+        $boothB = Booth::factory()->create(['is_active' => true, 'sort_order' => 2]);
+        // 10:00-11:00 は両ブースとも埋まり、11:00-12:00 はAだけ埋まる。
+        $this->occupy($service, ResourceType::Booth, (int) $boothA->id, '2026-10-01 10:00:00', '2026-10-01 12:00:00');
+        $this->occupy($service, ResourceType::Booth, (int) $boothB->id, '2026-10-01 10:00:00', '2026-10-01 11:00:00');
+
+        $slots = app(AvailabilityService::class)->openStartTimes(
+            (int) $service->id,
+            null,
+            null,
+            $this->date,
+            withBooths: true,
+        );
+        $byStart = array_column($slots, 'available_booth_ids', 'starts_at');
+
+        $this->assertArrayNotHasKey('2026-10-01 10:00:00', $byStart);
+        $this->assertArrayNotHasKey('2026-10-01 10:45:00', $byStart);
+        $this->assertSame([(int) $boothB->id], $byStart['2026-10-01 11:00:00']);
+        $this->assertSame([(int) $boothA->id, (int) $boothB->id], $byStart['2026-10-01 12:00:00']);
+
+        // 従来の呼び出し（withBooths なし）はブースを考慮しない。
+        $legacy = array_column($this->openStartTimes($service), 'starts_at');
+        $this->assertContains('2026-10-01 10:00:00', $legacy);
+    }
+
+    public function test_with_booths_requires_at_least_one_active_booth(): void
+    {
+        $service = Service::factory()->create([
+            'duration_min' => 60,
+            'requires_staff' => false,
+            'is_active' => true,
+        ]);
+
+        $this->assertSame([], app(AvailabilityService::class)->openStartTimes(
+            (int) $service->id,
+            null,
+            null,
+            $this->date,
+            withBooths: true,
+        ));
+        $this->assertNotEmpty($this->openStartTimes($service));
+    }
+
     public function test_shift_shorter_than_service_duration_has_no_candidates(): void
     {
         [$service, $staff] = $this->bookableServiceAndStaff(durationMinutes: 90);

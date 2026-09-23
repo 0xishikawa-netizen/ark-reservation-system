@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -46,7 +47,7 @@ const verifyCode = (): void => {
         <v-alert v-if="!mfa.satisfied" type="warning" variant="tonal" class="mb-4">
             <div class="font-weight-medium">認証アプリの登録が必要です</div>
             <div class="text-body-2">
-                管理画面を利用するには、認証アプリ（TOTP）で6桁コードを設定してください。
+                {{ MESSAGES.auth.twoFactorRequired }}
             </div>
         </v-alert>
         <v-alert v-else type="success" variant="tonal" class="mb-4">

@@ -24,7 +24,7 @@ class ToggleMembershipPlanActive
             $this->auditLogger->log(
                 $active ? 'membership_plan.activated' : 'membership_plan.deactivated',
                 $plan,
-                sprintf('会員プラン「%s」を%s', $plan->name, $active ? '有効化' : '無効化'),
+                sprintf('月額プラン「%s」を%s', $plan->name, $active ? '有効化' : '無効化'),
                 $actor,
             );
 

@@ -37,7 +37,7 @@ class TicketProductController extends Controller
     ): RedirectResponse {
         $createTicketProduct->execute($request->validated(), $request->user());
 
-        return back()->with('success', '回数券商品を作成しました。');
+        return back()->with('success', __('messages.ticket.product_created'));
     }
 
     public function edit(TicketProduct $ticketProduct): Response
@@ -62,7 +62,7 @@ class TicketProductController extends Controller
     ): RedirectResponse {
         $updateTicketProduct->execute($ticketProduct, $request->validated(), $request->user());
 
-        return back()->with('success', '回数券商品を更新しました。');
+        return back()->with('success', __('messages.ticket.product_updated'));
     }
 
     public function setActive(

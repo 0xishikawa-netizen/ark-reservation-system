@@ -203,8 +203,7 @@ final class FakeStripeGateway implements StripeGateway
         string $operation,
         PaymentIntentResult|RefundResult $result,
         ?PaymentGatewayTimeoutException $exception = null,
-    ): void
-    {
+    ): void {
         $this->responses[$operation][] = new AmbiguousFakeStripeResponse(
             $result,
             $exception ?? new PaymentGatewayTimeoutException('Stripeとの通信結果を確認できませんでした。'),
@@ -270,8 +269,7 @@ final class FakeStripeGateway implements StripeGateway
         string $operation,
         mixed $default,
         ?string $idempotencyKey = null,
-    ): mixed
-    {
+    ): mixed {
         if (! isset($this->responses[$operation]) || $this->responses[$operation] === []) {
             $response = $default;
         } else {

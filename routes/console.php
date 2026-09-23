@@ -14,6 +14,12 @@ Schedule::command('reservations:prune-slots')
     ->dailyAt('03:30')
     ->withoutOverlapping();
 
+// 基本シフトから予約受付期間分の勤務枠を生成する（#11・冪等）。
+// monthly 方式なら開放日を迎えた朝に翌月分がまとめて作られる。
+Schedule::command('shifts:generate')
+    ->dailyAt('06:00')
+    ->withoutOverlapping();
+
 Schedule::command('tickets:expire')->dailyAt('03:00')->withoutOverlapping();
 
 Schedule::command('tickets:reconcile')->dailyAt('03:15')->withoutOverlapping();

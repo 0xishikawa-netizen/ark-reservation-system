@@ -80,7 +80,7 @@ cp .env.example .env
 | `RESERVATION_AUTHORITY` | `local` | 予約の System of Record（`local` / `peak_manager` / `salon_board`） |
 | `EXTERNAL_RESERVATION_GATEWAY` | `null` | 外部予約ゲートウェイ実装（`null` / `peak_manager` / `salon_board`） |
 | `STRIPE_KEY` / `STRIPE_SECRET` | Test キー | **Live キー禁止**。`APP_ENV=local` で Live キーを検出したら起動時に例外 |
-| `RESERVATION_SLOT_MINUTES` | `15` | 予約スロット粒度（`docs/OPEN_QUESTIONS.md` #9） |
+| `RESERVATION_SLOT_MINUTES` | `5` | 予約スロット粒度（`docs/OPEN_QUESTIONS.md` #9） |
 | `RESERVATION_HOLD_MINUTES` | `10` | 仮予約（pending_payment）の枠 HOLD 時間 |
 
 ---
@@ -97,6 +97,22 @@ make probe       # お名前.com サーバー能力プローブの使い方を�
 ```
 
 `make` を使わない場合は `./vendor/bin/sail ...` を直接叩く。
+
+### フロントエンドの自動テスト（Vitest）
+
+```bash
+./vendor/bin/sail npm run test        # 1回実行（CI向け）
+./vendor/bin/sail npm run test:watch  # 監視モード
+```
+
+### 予約台帳のリアルタイム通知（Laravel Reverb）
+
+`.env` の `BROADCAST_CONNECTION=reverb` を有効にした状態で、別ターミナルで以下を起動しておくと、
+予約台帳のオンライン予約通知が即時pushされる（未起動でも低頻度ポーリングへ自動フォールバックする）。
+
+```bash
+./vendor/bin/sail artisan reverb:start
+```
 
 ---
 

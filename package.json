@@ -4,18 +4,31 @@
     "type": "module",
     "scripts": {
         "build": "vue-tsc --noEmit && vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "test": "vitest run",
+        "test:unit": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage"
     },
     "devDependencies": {
         "@inertiajs/vue3": "^2.0.0",
         "@types/node": "^24.0.0",
         "@vitejs/plugin-vue": "^6.0.0",
+        "@vitest/coverage-v8": "^5.0.0",
+        "@vue/test-utils": "^2.5.0",
+        "jsdom": "^30.0.1",
         "laravel-vite-plugin": "^3.1",
         "typescript": "^5.9.0",
         "vite": "^8.0.0",
         "vite-plugin-vuetify": "^2.1.3",
+        "vitest": "^5.0.0",
         "vue": "^3.5.0",
         "vue-tsc": "^3.1.0",
         "vuetify": "^3.0.0"
+    },
+    "dependencies": {
+        "@mdi/font": "^7.4.47",
+        "laravel-echo": "^2.5.0",
+        "pusher-js": "^8.6.0"
     }
 }

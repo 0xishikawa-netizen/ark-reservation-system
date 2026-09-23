@@ -96,10 +96,10 @@ class GoogleAuthController extends Controller
         try {
             $googleUser = Socialite::driver('google')->user();
         } catch (InvalidStateException) {
-            return $this->fail('セッションの有効期限が切れました。もう一度お試しください。');
+            return $this->fail(__('messages.common.session_expired'));
         } catch (Throwable) {
             // 内部情報（例外詳細）は表示しない。
-            return $this->fail('Google ログインに失敗しました。時間をおいて再度お試しください。');
+            return $this->fail(__('messages.google.login_failed'));
         }
 
         $providerId = (string) $googleUser->getId();
@@ -111,11 +111,11 @@ class GoogleAuthController extends Controller
         );
 
         if ($providerId === '' || $email === '') {
-            return $this->fail('Google アカウント情報を取得できませんでした。');
+            return $this->fail(__('messages.google.profile_unavailable'));
         }
 
         if (! $emailVerified) {
-            return $this->fail('Google 側でメールアドレスが未確認のため利用できません。');
+            return $this->fail(__('messages.google.email_unverified'));
         }
 
         if ($intent === 'link') {
@@ -149,7 +149,7 @@ class GoogleAuthController extends Controller
         $pending = $this->pending($request);
 
         if ($pending === null) {
-            return $this->fail('連携手続きの有効期限が切れました。最初からやり直してください。');
+            return $this->fail(__('messages.google.link_expired'));
         }
 
         $validated = $request->validate([
@@ -162,7 +162,7 @@ class GoogleAuthController extends Controller
         // pending の email（Google が返した検証済みメール）と一致することを要求する。
         if (! hash_equals($pending['email'], $email)) {
             throw ValidationException::withMessages([
-                'email' => 'Google アカウントのメールアドレスと一致しません。',
+                'email' => __('messages.google.email_mismatch'),
             ]);
         }
 
@@ -170,7 +170,7 @@ class GoogleAuthController extends Controller
 
         if ($user === null || ! Hash::check($validated['password'], (string) $user->password)) {
             throw ValidationException::withMessages([
-                'password' => 'メールアドレスまたはパスワードが正しくありません。',
+                'password' => __('messages.auth.invalid_credentials'),
             ]);
         }
 
@@ -178,7 +178,7 @@ class GoogleAuthController extends Controller
         if ($user->hasAnyRole(MfaPolicy::REQUIRED_ROLES)) {
             $request->session()->forget('google_oauth.pending');
 
-            return $this->fail('このアカウントでは、ログイン後に設定画面から Google 連携を行ってください。');
+            return $this->fail(__('messages.google.link_after_login'));
         }
 
         $this->attachSocialAccount($user, $pending['provider_user_id'], $email);
@@ -213,13 +213,13 @@ class GoogleAuthController extends Controller
             ->get();
 
         if ($accounts->isEmpty()) {
-            return back()->with('info', 'Google 連携はされていません。');
+            return back()->with('info', __('messages.google.not_linked'));
         }
 
         if (blank($user->password)) {
             throw ValidationException::withMessages([
-                'google' => 'パスワードが未設定のため Google 連携を解除できません。'
-                    .'先にパスワードを設定してください。',
+                'google' => __('messages.google.cannot_unlink_without_password')
+                    .__('messages.google.set_password_first'),
             ]);
         }
 
@@ -235,7 +235,7 @@ class GoogleAuthController extends Controller
             $user,
         );
 
-        return back()->with('success', 'Google 連携を解除しました。');
+        return back()->with('success', __('messages.google.unlinked'));
     }
 
     // ---------- 内部 ----------
@@ -285,8 +285,8 @@ class GoogleAuthController extends Controller
                 );
 
                 return $this->fail(
-                    'このメールアドレスは管理者アカウントに使用されています。'
-                    .'ID とパスワードでログインし、設定画面から Google 連携を行ってください。',
+                    __('messages.google.email_used_by_admin')
+                    .__('messages.google.link_from_settings'),
                 );
             }
 
@@ -335,7 +335,7 @@ class GoogleAuthController extends Controller
                 return $this->loginAndContinue($request, $race->user);
             }
 
-            return $this->fail('ログイン処理が混み合っています。もう一度お試しください。');
+            return $this->fail(__('messages.google.login_busy'));
         }
 
         $this->auditLogger->log(
@@ -361,7 +361,7 @@ class GoogleAuthController extends Controller
             : route('mypage.security.show', absolute: false);
 
         if ($user === null || $user->getKey() !== $linkUserId) {
-            return $this->fail('連携セッションが無効です。もう一度お試しください。');
+            return $this->fail(__('messages.google.link_session_invalid'));
         }
 
         $existing = UserSocialAccount::query()
@@ -371,19 +371,19 @@ class GoogleAuthController extends Controller
 
         if ($existing !== null) {
             if ((int) $existing->user_id === (int) $user->getKey()) {
-                return redirect()->to($back)->with('info', 'この Google アカウントは既に連携済みです。');
+                return redirect()->to($back)->with('info', __('messages.google.already_linked'));
             }
 
             return redirect()->to($back)
-                ->withErrors(['google' => 'この Google アカウントは別の ARK アカウントに連携済みです。']);
+                ->withErrors(['google' => __('messages.google.linked_to_other_account')]);
         }
 
         // 1 ユーザー 1 Google 連携まで。別の Google が既に連携済みなら、
         // まず解除してもらう（連携解除漏れによる不正な残存連携を防ぐ）。
         if ($user->socialAccounts()->where('provider', UserSocialAccount::PROVIDER_GOOGLE)->exists()) {
             return redirect()->to($back)->withErrors([
-                'google' => '既に別の Google アカウントが連携されています。'
-                    .'先に現在の連携を解除してください。',
+                'google' => __('messages.google.other_google_linked')
+                    .__('messages.google.unlink_current_first'),
             ]);
         }
 
@@ -396,7 +396,7 @@ class GoogleAuthController extends Controller
             $user,
         );
 
-        return redirect()->to($back)->with('success', 'Google アカウントを連携しました。');
+        return redirect()->to($back)->with('success', __('messages.google.linked'));
     }
 
     private function attachSocialAccount(User $user, string $providerId, string $email): void
@@ -419,6 +419,10 @@ class GoogleAuthController extends Controller
      */
     private function loginAndContinue(Request $request, User $user): RedirectResponse
     {
+        if ($user->is_active === false) {
+            return $this->fail(__('messages.auth.account_disabled'));
+        }
+
         $mfaPolicy = app(MfaPolicy::class);
 
         if ($mfaPolicy->isRequiredFor($user) && $mfaPolicy->hasConfirmedTotp($user)) {

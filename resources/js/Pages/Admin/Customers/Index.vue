@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -35,7 +37,7 @@ const headers = [
     { title: '認証済', key: 'email_verified_at', sortable: false },
     { title: '登録経路', key: 'created_via' },
     { title: '登録日', key: 'created_at' },
-    { title: '', key: 'actions', sortable: false },
+    { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
 const search = ref<string | null>(props.filters.q);
@@ -70,13 +72,10 @@ const createdViaLabel = (value: string): string => {
 <template>
     <Head title="顧客" />
 
-    <div class="d-flex align-center justify-space-between mb-6">
-        <h1 class="text-h4">顧客</h1>
-        <span class="text-body-2 text-medium-emphasis">全 {{ customers.total }} 件</span>
-    </div>
+    <PageHeader title="顧客" :subtitle="`全 ${customers.total} 件`" />
 
-    <v-card>
-        <v-card-text>
+    <SectionCard title="顧客一覧" class="ark-table-section">
+        <div class="ark-table-section__filters">
             <v-form class="d-flex align-center ga-4" @submit.prevent="visitIndex()">
                 <v-text-field
                     v-model="search"
@@ -84,14 +83,14 @@ const createdViaLabel = (value: string): string => {
                     placeholder="氏名・カナ・メール（部分一致）／電話（完全一致）"
                     clearable
                     hide-details
-                    max-width="640"
+                    class="filter-grid__search"
                 />
                 <v-btn type="submit" variant="tonal">検索</v-btn>
             </v-form>
             <p class="text-caption text-medium-emphasis mt-3 mb-0">
-                電話番号はハイフンの有無を問わず完全一致で検索します。部分一致には対応していません。
+                {{ MESSAGES.customer.phoneExactMatch }}
             </p>
-        </v-card-text>
+        </div>
 
         <v-divider />
 
@@ -130,7 +129,9 @@ const createdViaLabel = (value: string): string => {
             <template #item.actions="{ item }">
                 <v-btn
                     size="small"
-                    variant="text"
+                    variant="tonal"
+                    color="primary"
+                    append-icon="mdi-chevron-right"
                     :href="`/admin/customers/${item.user_id}`"
                 >
                     詳細
@@ -138,12 +139,39 @@ const createdViaLabel = (value: string): string => {
             </template>
         </v-data-table>
 
-        <v-card-actions v-if="customers.last_page > 1" class="justify-center pa-4">
-            <v-pagination
-                :model-value="customers.current_page"
-                :length="customers.last_page"
-                @update:model-value="visitIndex"
-            />
-        </v-card-actions>
-    </v-card>
+        <template v-if="customers.last_page > 1">
+            <v-divider />
+            <div class="d-flex justify-center pa-4">
+                <v-pagination
+                    :model-value="customers.current_page"
+                    :length="customers.last_page"
+                    :total-visible="7"
+                    density="comfortable"
+                    rounded="circle"
+                    @update:model-value="visitIndex"
+                />
+            </div>
+        </template>
+    </SectionCard>
 </template>
+
+<style scoped>
+.ark-table-section :deep(.v-card-text) {
+    padding: 0;
+}
+
+.ark-table-section__filters {
+    padding: var(--ark-space-4);
+}
+
+.filter-grid__search {
+    width: 360px;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 600px) {
+    .filter-grid__search {
+        width: 100%;
+    }
+}
+</style>

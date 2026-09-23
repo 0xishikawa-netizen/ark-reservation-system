@@ -145,6 +145,31 @@ class CustomerManagementTest extends TestCase
         $this->assertSame('080-3333-4444', $customer->fresh()?->phone);
     }
 
+    public function test_admin_can_update_only_the_note_without_other_profile_fields(): void
+    {
+        $admin = $this->staffUser('admin');
+        $customer = $this->customer('メモ 顧客', 'メモ コキャク', '090-1234-5678');
+        $customer->update(['kana' => '既存 カナ']);
+
+        $this->actingAs($admin)
+            ->patch("/admin/customers/{$customer->user_id}/note", ['note' => '着替え持参'])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertSame('着替え持参', $customer->fresh()?->note);
+        $this->assertSame('既存 カナ', $customer->fresh()?->kana);
+    }
+
+    public function test_staff_cannot_update_customer_note(): void
+    {
+        $staff = $this->staffUser('staff');
+        $customer = $this->customer('メモ 顧客2', 'メモ コキャク2');
+
+        $this->actingAs($staff)
+            ->patch("/admin/customers/{$customer->user_id}/note", ['note' => '不正な更新'])
+            ->assertForbidden();
+    }
+
     private function assertAdminCanUpdateCustomer(): void
     {
         $actor = $this->staffUser('admin');

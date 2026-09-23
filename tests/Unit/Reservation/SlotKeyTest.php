@@ -119,7 +119,8 @@ class SlotKeyTest extends TestCase
     {
         $this->seed(SettingsSeeder::class);
 
-        $this->assertSame(15, SlotKey::fromSettings()->slotMinutes());
+        // 予約枠は5分単位（§5分刻み）。
+        $this->assertSame(5, SlotKey::fromSettings()->slotMinutes());
     }
 
     private function time(string $time): CarbonImmutable

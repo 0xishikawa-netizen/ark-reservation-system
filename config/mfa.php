@@ -37,4 +37,20 @@ return [
         'retention_days' => (int) env('MFA_SMS_RETENTION_DAYS', 7),
     ],
 
+    /*
+    |----------------------------------------------------------------------
+    | 信頼済み端末（Remember this device）
+    |----------------------------------------------------------------------
+    | 一度 TOTP チャレンジを通過した端末を一定期間「信頼済み」として記憶し、
+    | 次回以降のログインでは TOTP チャレンジを省略する（毎回のコード入力の手間を減らす）。
+    | あくまで「端末単位・期限付き」の緩和であり、パスワードだけで管理画面に入れる
+    | わけではない（初回は必ず TOTP を通す）。TOTP を無効化・再生成した場合は
+    | 既存の信頼済み端末をすべて無効化する（AuditAuthEvents）。
+    */
+    'trusted_device' => [
+        'enabled' => (bool) env('MFA_TRUSTED_DEVICE_ENABLED', true),
+        'cookie' => env('MFA_TRUSTED_DEVICE_COOKIE', 'ark_trusted_device'),
+        'ttl_days' => (int) env('MFA_TRUSTED_DEVICE_TTL_DAYS', 365),
+    ],
+
 ];

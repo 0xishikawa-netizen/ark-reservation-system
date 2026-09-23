@@ -1,5 +1,6 @@
 import 'vuetify/styles';
 import { createVuetify } from 'vuetify';
+import { ja } from 'vuetify/locale';
 
 /**
  * ARK Design System — Vuetify テーマ（配色の実装上の正本）。
@@ -50,6 +51,12 @@ const ark = {
 } as const;
 
 export default createVuetify({
+    // Vuetify 標準 UI 文言（「Items per page:」等）を日本語化する。
+    locale: {
+        locale: 'ja',
+        fallback: 'en',
+        messages: { ja },
+    },
     theme: {
         defaultTheme: 'ark',
         themes: { ark },

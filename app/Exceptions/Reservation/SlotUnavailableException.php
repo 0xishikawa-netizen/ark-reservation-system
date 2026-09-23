@@ -11,6 +11,6 @@ final class SlotUnavailableException extends RuntimeException
 {
     public function __construct(?Throwable $previous = null)
     {
-        parent::__construct('指定の時間帯は既に予約されています', 0, $previous);
+        parent::__construct(__('messages.reservation.slot_taken'), 0, $previous);
     }
 }

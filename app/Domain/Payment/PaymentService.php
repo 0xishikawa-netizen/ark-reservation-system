@@ -63,7 +63,7 @@ final class PaymentService
 
             if ($persisted->status !== PaymentStatus::Pending) {
                 throw ValidationException::withMessages([
-                    'payment' => 'pending 状態の決済だけが PaymentIntent を作成できます。',
+                    'payment' => __('messages.payment.only_pending_can_create_intent'),
                 ]);
             }
 
@@ -145,7 +145,7 @@ final class PaymentService
 
         if ($persisted->status !== PaymentStatus::Authorized) {
             throw ValidationException::withMessages([
-                'payment' => 'authorized 状態の決済だけを capture できます。',
+                'payment' => __('messages.payment.only_authorized_can_capture'),
             ]);
         }
 
@@ -186,8 +186,30 @@ final class PaymentService
 
         if (! in_array($persisted->status, [PaymentStatus::Pending, PaymentStatus::Authorized], true)) {
             throw ValidationException::withMessages([
-                'payment' => 'pending または authorized 状態の決済だけを取消できます。',
+                'payment' => __('messages.payment.only_pending_or_authorized_can_void'),
             ]);
+        }
+
+        // Stripe 側の Intent 作成前なら、外部通信なしでローカル試行だけを閉じる。
+        if ($persisted->stripe_payment_intent_id === null) {
+            return DB::transaction(function () use ($persisted): Payment {
+                $locked = $this->lockPayment($persisted);
+
+                if ($locked->status === PaymentStatus::Voided) {
+                    return $locked;
+                }
+
+                $this->stateMachine->apply($locked, 'status', PaymentStatus::Voided->value);
+                $locked->forceFill(['voided_at' => now()])->save();
+
+                $this->auditLogger->log(
+                    'payment.voided',
+                    $locked,
+                    $this->summary($locked, '未開始の決済を取消'),
+                );
+
+                return $locked;
+            });
         }
 
         $paymentIntentId = $this->paymentIntentId($persisted);
@@ -222,8 +244,7 @@ final class PaymentService
         int $amount,
         string $reason,
         Authenticatable $actor,
-    ): PaymentRefund
-    {
+    ): PaymentRefund {
         $reason = trim($reason);
         $this->validateRefundInput($amount, $reason);
         $actorId = $actor->getAuthIdentifier();
@@ -240,7 +261,7 @@ final class PaymentService
                 PaymentStatus::PartiallyRefunded,
             ], true)) {
                 throw ValidationException::withMessages([
-                    'payment' => 'capture 済みの決済だけを返金できます。',
+                    'payment' => __('messages.payment.only_captured_refundable'),
                 ]);
             }
 
@@ -252,7 +273,7 @@ final class PaymentService
 
             if ($reservedAmount + $amount > (int) $locked->amount) {
                 throw ValidationException::withMessages([
-                    'amount' => '決済金額を超える返金はできません。',
+                    'amount' => __('messages.payment.refund_exceeds_amount'),
                 ]);
             }
 
@@ -316,11 +337,10 @@ final class PaymentService
         Payment $payment,
         string $reason,
         Authenticatable $actor,
-    ): void
-    {
+    ): void {
         if (trim($reason) === '') {
             throw ValidationException::withMessages([
-                'reason' => '取消または返金の理由は必須です。',
+                'reason' => __('messages.payment.void_reason_required'),
             ]);
         }
 
@@ -348,7 +368,7 @@ final class PaymentService
         }
 
         throw ValidationException::withMessages([
-            'payment' => 'この決済状態では取消または返金を実行できません。',
+            'payment' => __('messages.payment.cannot_void_or_refund'),
         ]);
     }
 
@@ -383,8 +403,7 @@ final class PaymentService
         Payment $payment,
         PaymentIntentResult $result,
         bool $updateLastSyncedAt,
-    ): Payment
-    {
+    ): Payment {
         $persisted = $this->persistedPayment($payment);
 
         if ($persisted->stripe_payment_intent_id !== null
@@ -508,8 +527,7 @@ final class PaymentService
         Payment $payment,
         PaymentStatus $status,
         PaymentIntentResult $result,
-    ): void
-    {
+    ): void {
         $changes = match ($status) {
             PaymentStatus::Authorized => ['authorized_at' => $payment->authorized_at ?? now()],
             PaymentStatus::Succeeded => [
@@ -547,8 +565,7 @@ final class PaymentService
         PaymentRefund $refund,
         Payment $payment,
         RefundResult $result,
-    ): PaymentRefund
-    {
+    ): PaymentRefund {
         if ($result->status !== 'succeeded') {
             if ($result->status === 'failed') {
                 $exception = new PaymentGatewayDeclinedException(
@@ -660,8 +677,7 @@ final class PaymentService
     private function markPaymentDeclined(
         Payment $payment,
         PaymentGatewayDeclinedException $exception,
-    ): void
-    {
+    ): void {
         DB::transaction(function () use ($payment, $exception): void {
             $locked = $this->lockPayment($payment);
 
@@ -707,8 +723,7 @@ final class PaymentService
         PaymentRefund $refund,
         Payment $payment,
         PaymentGatewayDeclinedException $exception,
-    ): void
-    {
+    ): void {
         DB::transaction(function () use ($refund, $payment, $exception): void {
             $lockedPayment = $this->lockPayment($payment);
             $lockedRefund = PaymentRefund::query()->whereKey($refund->getKey())->lockForUpdate()->firstOrFail();
@@ -734,8 +749,7 @@ final class PaymentService
         PaymentRefund $refund,
         Payment $payment,
         string $code = 'refund_pending',
-    ): void
-    {
+    ): void {
         DB::transaction(function () use ($refund, $payment, $code): void {
             $lockedPayment = $this->lockPayment($payment);
             $lockedRefund = PaymentRefund::query()->whereKey($refund->getKey())->lockForUpdate()->firstOrFail();
@@ -773,7 +787,7 @@ final class PaymentService
     {
         if (! is_string($payment->stripe_payment_intent_id) || $payment->stripe_payment_intent_id === '') {
             throw ValidationException::withMessages([
-                'payment' => 'Stripe PaymentIntent がまだ作成されていません。',
+                'payment' => __('messages.payment.intent_not_created'),
             ]);
         }
 

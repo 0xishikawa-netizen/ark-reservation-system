@@ -15,7 +15,7 @@ class StaffListQuery
         return Staff::query()
             ->select(['user_id', 'display_name', 'color', 'is_bookable', 'sort_order'])
             ->with([
-                'user:id,name,email',
+                'user:id,name,email,is_active',
                 'user.roles:id,name',
             ])
             ->orderBy('sort_order')
@@ -25,6 +25,6 @@ class StaffListQuery
 
     public function forEdit(Staff $staff): Staff
     {
-        return $staff->load(['user:id,name,email', 'user.roles:id,name']);
+        return $staff->load(['user:id,name,email,is_active', 'user.roles:id,name']);
     }
 }

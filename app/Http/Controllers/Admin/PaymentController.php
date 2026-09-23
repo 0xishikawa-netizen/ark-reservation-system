@@ -12,6 +12,7 @@ use App\Exceptions\Payment\PaymentGatewayException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\RefundPaymentRequest;
 use App\Models\Payment;
+use App\Queries\CustomerLookupQuery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -22,8 +23,13 @@ use Inertia\Response;
  */
 class PaymentController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, CustomerLookupQuery $customerLookup): Response
     {
+        $validated = $request->validate([
+            'customer_id' => ['nullable', 'integer', 'exists:customers,user_id'],
+        ]);
+        $customerId = isset($validated['customer_id']) ? (int) $validated['customer_id'] : null;
+
         $payments = Payment::query()
             ->with(['reservation:id,starts_at,status', 'customer.user:id,name'])
             ->when($request->string('status')->toString() !== '', function ($query) use ($request): void {
@@ -31,6 +37,9 @@ class PaymentController extends Controller
             })
             ->when($request->boolean('needs_attention'), function ($query): void {
                 $query->where('needs_attention', true);
+            })
+            ->when($customerId !== null, function ($query) use ($customerId): void {
+                $query->where('customer_id', $customerId);
             })
             ->orderByDesc('id')
             ->paginate(30)
@@ -42,7 +51,9 @@ class PaymentController extends Controller
             'filters' => [
                 'status' => $request->string('status')->toString(),
                 'needs_attention' => $request->boolean('needs_attention'),
+                'customer_id' => $customerId,
             ],
+            'filtered_customer' => $customerId === null ? null : $customerLookup->find($customerId),
             'statuses' => array_map(
                 static fn (PaymentStatus $status): string => $status->value,
                 PaymentStatus::cases(),
@@ -106,7 +117,7 @@ class PaymentController extends Controller
         try {
             $payments->refund($payment, $amount, $reason, $request->user());
         } catch (PaymentGatewayDeclinedException) {
-            return back()->with('error', '返金がStripeで承認されませんでした。');
+            return back()->with('error', __('messages.payment.refund_declined'));
         } catch (PaymentGatewayException) {
             return back()->with(
                 'error',
@@ -114,7 +125,7 @@ class PaymentController extends Controller
             );
         }
 
-        return back()->with('success', '返金を実行しました。');
+        return back()->with('success', __('messages.payment.refunded'));
     }
 
     /**
@@ -127,10 +138,10 @@ class PaymentController extends Controller
         try {
             $saga->syncAndAdvance($payment);
         } catch (PaymentGatewayException) {
-            return back()->with('error', 'Stripeと同期できませんでした。時間をおいて再度お試しください。');
+            return back()->with('error', __('messages.payment.sync_failed'));
         }
 
-        return back()->with('success', 'Stripeの現在状態と同期しました。');
+        return back()->with('success', __('messages.payment.synced'));
     }
 
     /** @return array<string, mixed> */

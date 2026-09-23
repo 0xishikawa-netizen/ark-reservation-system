@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature\Membership;
 
 use App\Domain\Membership\MembershipLedgerService;
+use App\Domain\Reservation\RescheduleInput;
 use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
-use App\Domain\Reservation\RescheduleInput;
 use App\Enums\Membership\MembershipReservationUsageStatus;
 use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\ReservationSource;
@@ -22,6 +22,8 @@ use App\Models\Reservation;
 use App\Models\Service;
 use App\Models\Staff;
 use App\Models\StaffShift;
+use App\Models\TicketTransaction;
+use App\Support\Settings\Settings;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -123,7 +125,7 @@ final class ReservationMembershipIntegrationTest extends TestCase
         $this->assertSame(3, app(MembershipLedgerService::class)->available($membership));
         $this->assertSame(1, app(MembershipLedgerService::class)->held($membership));
         $this->assertSame(4, $r->resourceSlots()->count());
-        $this->assertSame(0, \App\Models\TicketTransaction::query()->count(), 'membership 予約は ticket 台帳に触れない');
+        $this->assertSame(0, TicketTransaction::query()->count(), 'membership 予約は ticket 台帳に触れない');
     }
 
     public function test_membership_create_without_entitlement_rolls_back_everything(): void
@@ -181,13 +183,13 @@ final class ReservationMembershipIntegrationTest extends TestCase
 
     public function test_no_show_follows_snapshot_policy(): void
     {
-        app(\App\Support\Settings\Settings::class)->set('membership.no_show_policy', 'consume');
+        app(Settings::class)->set('membership.no_show_policy', 'consume');
         [$c, $s, $st] = $this->masters();
         $membership = $this->grantMembership($c, 4);
 
         $r = $this->svc()->create($this->input($c, $s, $st, PaymentMethod::Membership));
         // 予約後にポリシー変更しても遡及しない。
-        app(\App\Support\Settings\Settings::class)->set('membership.no_show_policy', 'restore');
+        app(Settings::class)->set('membership.no_show_policy', 'restore');
         $this->svc()->markNoShow($r, null);
 
         $this->assertSame(3, app(MembershipLedgerService::class)->available($membership));

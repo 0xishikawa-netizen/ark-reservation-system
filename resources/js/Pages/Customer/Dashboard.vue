@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -137,11 +138,11 @@ const go = (href: string): void => {
                     v-if="props.membership.cancel_at_period_end"
                     class="text-body-2 text-warning mt-1"
                 >
-                    当期末で解約予定です。
+                    {{ MESSAGES.membership.cancelScheduled }}
                 </div>
             </template>
             <template v-else>
-                <p class="text-body-2 text-medium-emphasis mb-0">利用権は未加入です。</p>
+                <p class="text-body-2 text-medium-emphasis mb-0">{{ MESSAGES.membership.notSubscribed }}</p>
             </template>
             <v-btn variant="text" color="primary" class="mt-2" @click="go('/mypage/membership')">
                 会員ページへ
@@ -159,7 +160,7 @@ const go = (href: string): void => {
                 </div>
             </template>
             <template v-else>
-                <p class="text-body-2 text-medium-emphasis mb-0">利用できる回数券はありません。</p>
+                <p class="text-body-2 text-medium-emphasis mb-0">{{ MESSAGES.ticket.noneUsable }}</p>
             </template>
             <v-btn variant="text" color="primary" class="mt-2" @click="go('/mypage/tickets')">
                 回数券ページへ
@@ -177,7 +178,7 @@ const go = (href: string): void => {
                 </div>
             </template>
             <template v-else>
-                <p class="text-body-2 text-medium-emphasis mb-0">お支払い履歴はありません。</p>
+                <p class="text-body-2 text-medium-emphasis mb-0">{{ MESSAGES.payment.noPaymentHistory }}</p>
             </template>
             <v-btn variant="text" color="primary" class="mt-2" @click="go('/mypage/payments')">
                 支払い履歴へ

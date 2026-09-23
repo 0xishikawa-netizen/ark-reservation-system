@@ -3,6 +3,7 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -48,12 +49,27 @@ const props = defineProps<{
 
 const statusLabels: Record<string, string> = {
     pending: '手続き中',
-    authorized: '与信済み（未確定）',
+    authorized: '仮押さえ済',
     succeeded: '支払い済み',
-    voided: '与信取消',
+    voided: '仮押さえ取消',
     failed: '失敗',
-    partially_refunded: '一部返金',
-    refunded: '返金済み',
+    partially_refunded: '一部返金済み',
+    refunded: '全額返金済み',
+};
+
+const captureMethodLabels: Record<string, string> = {
+    automatic: '即時請求',
+    manual: '後日請求',
+};
+
+const reservationStatusLabels: Record<string, string> = {
+    pending_payment: '支払い待ち',
+    pending_external_sync: '外部連携待ち',
+    confirmed: '予約確定',
+    completed: '完了（来店・施術済み）',
+    no_show: '無断キャンセル',
+    canceled: 'キャンセル',
+    expired: '期限切れ',
 };
 
 const refundDialog = ref(false);
@@ -79,20 +95,20 @@ const syncFromStripe = (): void => {
 </script>
 
 <template>
-    <Head :title="`決済 #${payment.id}`" />
+    <Head :title="`決済詳細 #${payment.id}`" />
 
     <v-container fluid class="ark-page py-4" style="max-width: 960px">
         <PageHeader
-            :title="`決済 #${payment.id}`"
-            subtitle="決済内容と Stripe 同期状況を確認します。"
+            :title="`決済詳細 #${payment.id}`"
+            subtitle="決済内容を確認できます。"
         >
             <template #actions>
                 <StatusChip
                     :status="payment.status"
                     :label="statusLabels[payment.status] ?? payment.status"
                 />
-                <v-btn variant="text" size="small" @click="syncFromStripe">
-                    Stripeと同期
+                <v-btn variant="text" size="small" prepend-icon="mdi-sync" @click="syncFromStripe">
+                    同期
                 </v-btn>
             </template>
         </PageHeader>
@@ -107,31 +123,31 @@ const syncFromStripe = (): void => {
                 <div class="font-weight-medium">要対応</div>
                 <div class="text-body-2">
                     Stripe との結果が確定していない可能性があります（{{ payment.failure_code ?? '—' }}）。
-                    「Stripeと同期」または <code>payments:reconcile</code> で現在状態を確認してください。
-                    <strong>結果が不明な状態で二重に操作しないでください。</strong>
+                    「同期」ボタンで現在の状態を取り込んでから対応してください。
+                    <strong>{{ MESSAGES.payment.doNotRetryUnknown }}</strong>
                 </div>
             </v-alert>
 
             <v-row>
             <v-col cols="12" md="6">
-                <SectionCard title="決済" variant="outlined" height="100%" class="ark-table-section">
+                <SectionCard title="決済情報" variant="outlined" height="100%" class="ark-table-section">
                     <v-table density="compact">
                         <tbody>
-                            <tr><td>金額</td><td class="text-right">{{ payment.amount.toLocaleString() }} 円</td></tr>
-                            <tr><td>返金済み</td><td class="text-right">{{ payment.refunded_amount.toLocaleString() }} 円</td></tr>
+                            <tr><td>決済額</td><td class="text-right">{{ payment.amount.toLocaleString() }} 円</td></tr>
+                            <tr><td>返金済額</td><td class="text-right">{{ payment.refunded_amount.toLocaleString() }} 円</td></tr>
                             <tr><td>返金可能額</td><td class="text-right">{{ payment.refundable_amount.toLocaleString() }} 円</td></tr>
-                            <tr><td>capture 方式</td><td class="text-right">{{ payment.capture_method }}</td></tr>
-                            <tr><td>与信日時</td><td class="text-right">{{ payment.authorized_at ?? '—' }}</td></tr>
-                            <tr><td>確定日時</td><td class="text-right">{{ payment.paid_at ?? '—' }}</td></tr>
+                            <tr><td>請求方法</td><td class="text-right">{{ captureMethodLabels[payment.capture_method] ?? payment.capture_method }}</td></tr>
+                            <tr><td>仮押さえ日時</td><td class="text-right">{{ payment.authorized_at ?? '—' }}</td></tr>
+                            <tr><td>請求日時</td><td class="text-right">{{ payment.paid_at ?? '—' }}</td></tr>
                             <tr><td>取消日時</td><td class="text-right">{{ payment.voided_at ?? '—' }}</td></tr>
-                            <tr><td>最終同期</td><td class="text-right">{{ payment.last_synced_at ?? '—' }}</td></tr>
+                            <tr><td>最終同期日時</td><td class="text-right">{{ payment.last_synced_at ?? '—' }}</td></tr>
                         </tbody>
                     </v-table>
                 </SectionCard>
             </v-col>
 
             <v-col cols="12" md="6">
-                <SectionCard title="予約・顧客" variant="outlined" height="100%" class="ark-table-section">
+                <SectionCard title="予約情報" variant="outlined" height="100%" class="ark-table-section">
                     <v-table density="compact">
                         <tbody>
                             <tr><td>顧客</td><td class="text-right">{{ payment.customer_name ?? '—' }}</td></tr>
@@ -144,9 +160,15 @@ const syncFromStripe = (): void => {
                                     <span v-else>—</span>
                                 </td>
                             </tr>
-                            <tr><td>予約状態</td><td class="text-right">{{ payment.reservation_status ?? '—' }}</td></tr>
-                            <tr><td>PaymentIntent</td><td class="text-right text-caption">{{ payment.stripe_payment_intent_id ?? '—' }}</td></tr>
-                            <tr><td>Charge</td><td class="text-right text-caption">{{ payment.stripe_charge_id ?? '—' }}</td></tr>
+                            <tr><td>予約状況</td><td class="text-right">{{ reservationStatusLabels[payment.reservation_status ?? ''] ?? payment.reservation_status ?? '—' }}</td></tr>
+                            <tr>
+                                <td>決済ID<br><span class="text-caption text-medium-emphasis">照会用</span></td>
+                                <td class="text-right text-caption">{{ payment.stripe_payment_intent_id ?? '—' }}</td>
+                            </tr>
+                            <tr>
+                                <td>請求ID<br><span class="text-caption text-medium-emphasis">返金対象</span></td>
+                                <td class="text-right text-caption">{{ payment.stripe_charge_id ?? '—' }}</td>
+                            </tr>
                         </tbody>
                     </v-table>
                 </SectionCard>
@@ -168,8 +190,8 @@ const syncFromStripe = (): void => {
                 <v-table density="compact">
                 <thead>
                     <tr>
-                        <th>ID</th><th class="text-right">金額</th><th>状態</th>
-                        <th>理由</th><th>実行者</th><th>日時</th>
+                        <th>ID</th><th class="text-right">返金額</th><th>状態</th>
+                        <th>理由</th><th>担当者</th><th>日時</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -185,8 +207,7 @@ const syncFromStripe = (): void => {
                         <td colspan="6">
                             <EmptyState
                                 icon="mdi-cash-refund"
-                                title="返金はありません"
-                                description="返金を実行した場合は、こちらに履歴が表示されます。"
+                                title="返金履歴はありません。"
                             />
                         </td>
                     </tr>
@@ -200,7 +221,7 @@ const syncFromStripe = (): void => {
                 <v-card-title>返金</v-card-title>
                 <v-card-text>
                     <v-alert type="warning" variant="tonal" density="compact" class="mb-4">
-                        返金は取り消せません。実行にはパスワードの再入力が必要です。
+                        {{ MESSAGES.payment.refundIrreversible }}
                     </v-alert>
                     <v-text-field
                         v-model.number="form.amount"

@@ -29,6 +29,8 @@ final class SmsOtpService
 
     public const PURPOSE_PHONE_VERIFICATION = 'phone_verification';
 
+    public const PURPOSE_GUEST_LOOKUP = 'guest_lookup';
+
     public function __construct(
         private readonly SmsSender $sms,
         private readonly AuditLogger $auditLogger,
@@ -51,7 +53,7 @@ final class SmsOtpService
 
         if ($phoneHmac === null) {
             throw ValidationException::withMessages([
-                'phone' => '電話番号の形式が正しくありません。',
+                'phone' => __('messages.otp.invalid_phone'),
             ]);
         }
 
@@ -101,6 +103,64 @@ final class SmsOtpService
     }
 
     /**
+     * アカウントの有無を確認せず、電話番号そのものに予約検索用 OTP を発行する。
+     *
+     * @throws ValidationException
+     */
+    public function sendForPhone(
+        string $phone,
+        string $purpose,
+        ?string $ip = null,
+    ): MfaSmsChallenge {
+        $phoneHmac = PiiHasher::phoneHmac($phone);
+
+        if ($phoneHmac === null) {
+            throw ValidationException::withMessages([
+                'phone' => __('messages.otp.invalid_phone'),
+            ]);
+        }
+
+        $this->assertGuestResendAllowed($phoneHmac, $ip);
+
+        $length = max(4, (int) config('mfa.sms.otp.length', 6));
+        $code = str_pad(
+            (string) random_int(0, (10 ** $length) - 1),
+            $length,
+            '0',
+            STR_PAD_LEFT,
+        );
+
+        $challenge = DB::transaction(function () use ($purpose, $phoneHmac, $code, $ip): MfaSmsChallenge {
+            MfaSmsChallenge::query()
+                ->whereNull('user_id')
+                ->where('purpose', $purpose)
+                ->where('phone_hmac', $phoneHmac)
+                ->whereNull('used_at')
+                ->update(['used_at' => now()]);
+
+            return MfaSmsChallenge::query()->create([
+                'user_id' => null,
+                'purpose' => $purpose,
+                'phone_hmac' => $phoneHmac,
+                'code_hash' => Hash::make($code),
+                'expires_at' => now()->addSeconds((int) config('mfa.sms.otp.ttl_seconds', 300)),
+                'sent_at' => now(),
+                'ip' => $ip,
+            ]);
+        });
+
+        $this->sms->send($phone, $this->message($code));
+
+        $this->auditLogger->log(
+            'mfa.sms.sent',
+            null,
+            "SMS OTP 送信 目的={$purpose} challenge#{$challenge->id}",
+        );
+
+        return $challenge;
+    }
+
+    /**
      * OTP を検証する。成功時に一回限りで消費する。
      *
      * @throws ValidationException
@@ -117,11 +177,11 @@ final class SmsOtpService
             ->first();
 
         if ($challenge === null) {
-            $this->fail($user, '認証コードが見つかりません。もう一度送信してください。');
+            $this->fail(__('messages.otp.not_found'));
         }
 
         if ($challenge->expires_at->isPast()) {
-            $this->fail($user, '認証コードの有効期限が切れました。もう一度送信してください。');
+            $this->fail(__('messages.otp.expired'));
         }
 
         $maxAttempts = (int) config('mfa.sms.otp.max_attempts', 5);
@@ -129,7 +189,7 @@ final class SmsOtpService
         if ($challenge->attempts >= $maxAttempts) {
             // 上限到達済みのチャレンジは失効させる。
             $challenge->forceFill(['used_at' => now()])->save();
-            $this->fail($user, '認証コードの試行回数が上限に達しました。もう一度送信してください。');
+            $this->fail(__('messages.otp.too_many_attempts'));
         }
 
         // 検証と消費を 1 transaction で行い、並行リクエストによる二重消費を防ぐ。
@@ -167,7 +227,7 @@ final class SmsOtpService
                 $user,
             );
 
-            $this->fail($user, '認証コードが正しくありません。');
+            $this->fail(__('messages.otp.mismatch'));
         }
 
         $this->auditLogger->log(
@@ -175,6 +235,90 @@ final class SmsOtpService
             null,
             "SMS OTP 検証成功 user#{$user->getKey()} challenge#{$challenge->id}",
             $user,
+        );
+
+        return $challenge->refresh();
+    }
+
+    /**
+     * 電話番号を識別子として予約検索用 OTP を検証する。
+     *
+     * @throws ValidationException
+     */
+    public function verifyForPhone(string $phone, string $code, string $purpose): MfaSmsChallenge
+    {
+        $phoneHmac = PiiHasher::phoneHmac($phone);
+
+        if ($phoneHmac === null) {
+            throw ValidationException::withMessages([
+                'phone' => __('messages.otp.invalid_phone'),
+            ]);
+        }
+
+        $this->assertGuestVerifyRateLimit($phoneHmac);
+
+        $challenge = MfaSmsChallenge::query()
+            ->whereNull('user_id')
+            ->where('purpose', $purpose)
+            ->where('phone_hmac', $phoneHmac)
+            ->whereNull('used_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($challenge === null) {
+            $this->fail(__('messages.otp.not_found'));
+        }
+
+        if ($challenge->expires_at->isPast()) {
+            $this->fail(__('messages.otp.expired'));
+        }
+
+        $maxAttempts = (int) config('mfa.sms.otp.max_attempts', 5);
+
+        if ($challenge->attempts >= $maxAttempts) {
+            $challenge->forceFill(['used_at' => now()])->save();
+            $this->fail(__('messages.otp.too_many_attempts'));
+        }
+
+        $verified = DB::transaction(function () use ($challenge, $code, $maxAttempts): bool {
+            $locked = MfaSmsChallenge::query()
+                ->whereKey($challenge->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($locked->used_at !== null || $locked->attempts >= $maxAttempts) {
+                return false;
+            }
+
+            $locked->increment('attempts');
+
+            if (! Hash::check($code, $locked->code_hash)) {
+                if ($locked->attempts + 1 >= $maxAttempts) {
+                    $locked->forceFill(['used_at' => now()])->save();
+                }
+
+                return false;
+            }
+
+            $locked->forceFill(['used_at' => now()])->save();
+
+            return true;
+        });
+
+        if (! $verified) {
+            $this->auditLogger->log(
+                'mfa.sms.failed',
+                null,
+                "SMS OTP 検証失敗 目的={$purpose} challenge#{$challenge->id}",
+            );
+
+            $this->fail(__('messages.otp.mismatch'));
+        }
+
+        $this->auditLogger->log(
+            'mfa.sms.verified',
+            null,
+            "SMS OTP 検証成功 目的={$purpose} challenge#{$challenge->id}",
         );
 
         return $challenge->refresh();
@@ -204,7 +348,7 @@ final class SmsOtpService
 
         if ($sentThisHour >= $perHour) {
             throw ValidationException::withMessages([
-                'code' => '認証コードの送信回数が上限に達しました。時間をおいてお試しください。',
+                'code' => __('messages.otp.send_limit'),
             ]);
         }
 
@@ -214,7 +358,43 @@ final class SmsOtpService
 
             if (RateLimiter::tooManyAttempts("mfa-sms-send:{$ip}", $ipLimit)) {
                 throw ValidationException::withMessages([
-                    'code' => '認証コードの送信回数が上限に達しました。時間をおいてお試しください。',
+                    'code' => __('messages.otp.send_limit'),
+                ]);
+            }
+
+            RateLimiter::hit("mfa-sms-send:{$ip}", 3600);
+        }
+    }
+
+    /** @throws ValidationException */
+    private function assertGuestResendAllowed(string $phoneHmac, ?string $ip): void
+    {
+        $minInterval = (int) config('mfa.sms.resend.min_interval_seconds', 60);
+        $query = MfaSmsChallenge::query()
+            ->whereNull('user_id')
+            ->where('purpose', self::PURPOSE_GUEST_LOOKUP)
+            ->where('phone_hmac', $phoneHmac);
+
+        if ((clone $query)->where('sent_at', '>', now()->subSeconds($minInterval))->exists()) {
+            throw ValidationException::withMessages([
+                'code' => "認証コードの再送は {$minInterval} 秒後に可能になります。",
+            ]);
+        }
+
+        $perHour = (int) config('mfa.sms.resend.max_per_hour', 5);
+
+        if ((clone $query)->where('sent_at', '>', now()->subHour())->count() >= $perHour) {
+            throw ValidationException::withMessages([
+                'code' => __('messages.otp.send_limit'),
+            ]);
+        }
+
+        if ($ip !== null) {
+            $ipLimit = (int) config('mfa.sms.rate_limit.send_per_ip_per_hour', 10);
+
+            if (RateLimiter::tooManyAttempts("mfa-sms-send:{$ip}", $ipLimit)) {
+                throw ValidationException::withMessages([
+                    'code' => __('messages.otp.send_limit'),
                 ]);
             }
 
@@ -230,7 +410,7 @@ final class SmsOtpService
 
         if (RateLimiter::tooManyAttempts($key, $perMinute)) {
             throw ValidationException::withMessages([
-                'code' => '試行回数が多すぎます。しばらくしてからお試しください。',
+                'code' => __('messages.common.too_many_attempts'),
             ]);
         }
 
@@ -238,7 +418,22 @@ final class SmsOtpService
     }
 
     /** @throws ValidationException */
-    private function fail(User $user, string $message): never
+    private function assertGuestVerifyRateLimit(string $phoneHmac): void
+    {
+        $key = "mfa-sms-verify-guest:{$phoneHmac}";
+        $perMinute = (int) config('mfa.sms.rate_limit.verify_per_minute', 5);
+
+        if (RateLimiter::tooManyAttempts($key, $perMinute)) {
+            throw ValidationException::withMessages([
+                'code' => __('messages.common.too_many_attempts'),
+            ]);
+        }
+
+        RateLimiter::hit($key, 60);
+    }
+
+    /** @throws ValidationException */
+    private function fail(string $message): never
     {
         throw ValidationException::withMessages(['code' => $message]);
     }

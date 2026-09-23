@@ -24,11 +24,11 @@ const headers = [
     { title: '月額', key: 'price' },
     { title: '回数', key: 'usage_count_per_period' },
     { title: '間隔', key: 'billing_interval' },
-    { title: 'Stripe Price', key: 'stripe_price_id' },
+    { title: 'Stripe 価格ID', key: 'stripe_price_id' },
     { title: '稼働契約', key: 'active_memberships_count' },
     { title: '表示順', key: 'sort_order' },
     { title: '有効', key: 'is_active', sortable: false },
-    { title: '', key: 'actions', sortable: false },
+    { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
 function toggleActive(plan: MembershipPlanListItem): void {
@@ -49,26 +49,26 @@ function formatPrice(price: number): string {
 </script>
 
 <template>
-    <Head title="会員プラン" />
+    <Head title="月額プラン" />
 
-    <PageHeader title="会員プラン" subtitle="月額利用権の料金と利用回数を管理します。">
+    <PageHeader title="月額プラン" subtitle="月額利用権の料金と利用回数を管理します。">
         <template #actions>
-            <v-btn color="primary" href="/admin/membership-plans/create">会員プランを追加</v-btn>
+            <v-btn color="primary" href="/admin/membership-plans/create">月額プランを追加</v-btn>
         </template>
     </PageHeader>
 
-    <SectionCard title="会員プラン一覧" class="ark-table-section">
+    <SectionCard title="月額プラン一覧" class="ark-table-section">
         <v-data-table
             :headers="headers"
             :items="membershipPlans"
             item-value="id"
-            no-data-text="会員プランはありません。"
+            no-data-text="月額プランはありません。"
         >
             <template #no-data>
                 <EmptyState
                     icon="mdi-card-account-details-outline"
-                    title="会員プランはありません"
-                    description="会員プランを追加すると、こちらで料金と利用回数を管理できます。"
+                    title="月額プランはありません"
+                    description="月額プランを追加すると、こちらで料金と利用回数を管理できます。"
                 />
             </template>
             <template #item.price="{ item }">{{ formatPrice(item.price) }}</template>
@@ -85,7 +85,13 @@ function formatPrice(price: number): string {
                 />
             </template>
             <template #item.actions="{ item }">
-                <v-btn size="small" variant="text" :href="`/admin/membership-plans/${item.id}/edit`">
+                <v-btn
+                    size="small"
+                    variant="tonal"
+                    color="primary"
+                    prepend-icon="mdi-pencil-outline"
+                    :href="`/admin/membership-plans/${item.id}/edit`"
+                >
                     編集
                 </v-btn>
             </template>

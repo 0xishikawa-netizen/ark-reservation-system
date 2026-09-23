@@ -26,6 +26,7 @@ final class UpdateAdminReservationRequest extends FormRequest
         return [
             'starts_at' => ['required', 'date'],
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
+            'is_staff_requested' => ['nullable', 'boolean'],
             'booth_id' => ['nullable', 'integer', 'exists:booths,id'],
             'version' => ['required', 'integer', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -51,7 +52,7 @@ final class UpdateAdminReservationRequest extends FormRequest
         }
 
         if ($reservation->service()->value('requires_staff') && $staffId === null) {
-            $validator->errors()->add('staff_id', 'このサービスには担当スタッフが必要です。');
+            $validator->errors()->add('staff_id', __('messages.reservation.staff_required'));
 
             return;
         }
@@ -69,7 +70,7 @@ final class UpdateAdminReservationRequest extends FormRequest
         if ($staff === null || ! $staff->is_bookable || ! $assigned) {
             $validator->errors()->add(
                 'staff_id',
-                'このスタッフは予約サービスを担当できません。',
+                __('messages.reservation.staff_not_assigned_to_reserved'),
             );
         }
     }
@@ -86,7 +87,7 @@ final class UpdateAdminReservationRequest extends FormRequest
             ->exists();
 
         if (! $active) {
-            $validator->errors()->add('booth_id', 'このブースは現在利用できません。');
+            $validator->errors()->add('booth_id', __('messages.reservation.booth_unavailable'));
         }
     }
 
@@ -106,7 +107,7 @@ final class UpdateAdminReservationRequest extends FormRequest
         if (! SlotKey::fromSettings()->isBoundary($startsAt)) {
             $validator->errors()->add(
                 'starts_at',
-                '開始時刻を予約枠の境界に合わせてください。',
+                __('messages.reservation.non_boundary_start'),
             );
         }
     }

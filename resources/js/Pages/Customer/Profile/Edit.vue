@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -41,7 +42,7 @@ const submit = (): void => {
     <v-card title="プロフィール編集">
         <v-card-text>
             <v-alert type="info" variant="tonal" class="mb-5">
-                メールアドレスはこの画面では変更できません。
+                {{ MESSAGES.customer.emailNotEditable }}
             </v-alert>
 
             <v-text-field

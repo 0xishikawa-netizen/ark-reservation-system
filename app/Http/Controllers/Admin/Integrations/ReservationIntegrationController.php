@@ -63,6 +63,6 @@ class ReservationIntegrationController extends Controller
             $dispatcher->process($claimed);
         }
 
-        return back()->with('success', 'Outbox を再投入しました。');
+        return back()->with('success', __('messages.integration.outbox_requeued'));
     }
 }

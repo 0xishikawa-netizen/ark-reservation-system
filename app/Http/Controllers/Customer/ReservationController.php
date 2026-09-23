@@ -126,7 +126,7 @@ class ReservationController extends Controller
 
         return redirect()
             ->route('mypage.reservations.show', $reservation)
-            ->with('success', '予約日時を変更しました。');
+            ->with('success', __('messages.reservation.rescheduled'));
     }
 
     public function destroy(
@@ -150,7 +150,7 @@ class ReservationController extends Controller
 
         return redirect()
             ->route('mypage.reservations.index')
-            ->with('success', '予約をキャンセルしました。');
+            ->with('success', __('messages.reservation.canceled'));
     }
 
     private function userFor(Request $request): User

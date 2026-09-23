@@ -23,6 +23,7 @@ class UpdateStaffRequest extends FormRequest
             'is_bookable' => ['sometimes', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'role' => ['nullable', 'string', Rule::in(['staff', 'manager', 'admin'])],
+            'is_active' => ['sometimes', 'boolean'],
         ];
     }
 }

@@ -45,7 +45,7 @@ class RefundPaymentRequest extends FormRequest
             ], true)) {
                 $validator->errors()->add(
                     'payment',
-                    'capture 済みの決済だけを返金できます。与信のみの決済は取消を使用してください。',
+                    __('messages.payment.only_captured_refundable_hint'),
                 );
 
                 return;

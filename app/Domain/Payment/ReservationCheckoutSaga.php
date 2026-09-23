@@ -56,13 +56,13 @@ final class ReservationCheckoutSaga
 
             if ($locked->status !== ReservationStatus::PendingPayment) {
                 throw ValidationException::withMessages([
-                    'reservation' => 'この予約は支払い手続きを開始できる状態ではありません。',
+                    'reservation' => __('messages.payment.checkout_not_allowed'),
                 ]);
             }
 
             if ($locked->payment_expires_at !== null && $locked->payment_expires_at->isPast()) {
                 throw ValidationException::withMessages([
-                    'reservation' => 'お支払い期限が切れています。もう一度予約をお取りください。',
+                    'reservation' => __('messages.payment.checkout_expired'),
                 ]);
             }
 
@@ -306,7 +306,7 @@ final class ReservationCheckoutSaga
     {
         if ($reservation->payment_method !== PaymentMethod::Single) {
             throw ValidationException::withMessages([
-                'payment_method' => 'この予約はカード決済の対象ではありません。',
+                'payment_method' => __('messages.payment.not_card_reservation'),
             ]);
         }
     }

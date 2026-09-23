@@ -12,9 +12,12 @@ use App\Http\Controllers\Admin\FailedJobsController;
 use App\Http\Controllers\Admin\Integrations\ReservationIntegrationController;
 use App\Http\Controllers\Admin\MembershipPlanController;
 use App\Http\Controllers\Admin\MfaController;
+use App\Http\Controllers\Admin\NotificationSettingsController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\ReservationController as AdminReservationController;
 use App\Http\Controllers\Admin\ReservationPolicySettingsController;
+use App\Http\Controllers\Admin\RolePermissionController;
+use App\Http\Controllers\Admin\ScheduleBlockController;
 use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\StaffController;
@@ -24,6 +27,11 @@ use App\Http\Controllers\Admin\TicketPolicySettingsController;
 use App\Http\Controllers\Admin\TicketProductController;
 use App\Http\Controllers\Admin\TwoFactorSetupController;
 use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\Booking\BookingConfirmationController;
+use App\Http\Controllers\Booking\BookingController;
+use App\Http\Controllers\Booking\BookingFindController;
+use App\Http\Controllers\Booking\BookingMemberUpgradeController;
+use App\Http\Controllers\Booking\BookingPaymentController;
 use App\Http\Controllers\Customer\MembershipController as CustomerMembershipController;
 use App\Http\Controllers\Customer\PaymentController as CustomerPaymentController;
 use App\Http\Controllers\Customer\PaymentHistoryController as CustomerPaymentHistoryController;
@@ -37,6 +45,7 @@ use App\Http\Controllers\Reserve\ReserveController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Middleware\AdminAccess;
 use App\Http\Middleware\AdminIdleTimeout;
+use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureStaffMfa;
 use App\Http\Middleware\ThrottleFortifyRequests;
 use Illuminate\Support\Facades\Route;
@@ -75,11 +84,50 @@ Route::middleware('web')->group(function (): void {
     });
 });
 
+// 未ログイン予約。会員向け reserve / mypage とは認証境界を分ける。
+Route::middleware('web')->group(function (): void {
+    Route::get('booking', [BookingController::class, 'create'])
+        ->name('booking.create');
+    Route::get('booking/find', [BookingFindController::class, 'show'])
+        ->name('booking.find.show');
+    Route::post('booking/find/send-code', [BookingFindController::class, 'sendCode'])
+        ->middleware('throttle:guest-lookup')
+        ->name('booking.find.sendCode');
+    Route::post('booking/find/verify', [BookingFindController::class, 'verify'])
+        ->middleware('throttle:guest-lookup')
+        ->name('booking.find.verify');
+    Route::get('booking/availability', [BookingController::class, 'availability'])
+        ->name('booking.availability');
+    Route::get('booking/availability/week', [BookingController::class, 'weekAvailability'])
+        ->name('booking.availability.week');
+    Route::post('booking', [BookingController::class, 'store'])
+        ->middleware('throttle:guest-reserve')
+        ->name('booking.store');
+    Route::get('booking/confirmation/{selector}', [BookingConfirmationController::class, 'show'])
+        ->name('booking.confirmation.show');
+    Route::get('booking/confirmation/{selector}/checkout', [BookingPaymentController::class, 'show'])
+        ->name('booking.confirmation.checkout');
+    Route::post('booking/confirmation/{selector}/payment/sync', [BookingPaymentController::class, 'sync'])
+        ->middleware('throttle:guest-reserve')
+        ->name('booking.confirmation.payment.sync');
+    Route::put('booking/confirmation/{selector}', [BookingConfirmationController::class, 'reschedule'])
+        ->middleware('throttle:guest-reserve')
+        ->name('booking.confirmation.reschedule');
+    Route::delete('booking/confirmation/{selector}', [BookingConfirmationController::class, 'cancel'])
+        ->middleware('throttle:guest-reserve')
+        ->name('booking.confirmation.cancel');
+    Route::post('booking/confirmation/{selector}/register-as-member', [BookingMemberUpgradeController::class, 'store'])
+        ->middleware('throttle:guest-reserve')
+        ->name('booking.confirmation.upgrade');
+});
+
 Route::middleware(['web', 'auth', 'verified'])->group(function (): void {
     Route::get('reserve', [ReserveController::class, 'create'])
         ->name('reserve.create');
     Route::get('reserve/availability', [ReserveController::class, 'availability'])
         ->name('reserve.availability');
+    Route::get('reserve/availability/week', [ReserveController::class, 'weekAvailability'])
+        ->name('reserve.availability.week');
     Route::post('reserve', [ReserveController::class, 'store'])
         ->middleware('throttle:reserve')
         ->name('reserve.store');
@@ -142,6 +190,7 @@ Route::middleware([
     'auth',
     'verified',
     AdminAccess::class,
+    EnsureAccountIsActive::class,
     AdminIdleTimeout::class,
     EnsureStaffMfa::class,
 ])->prefix('admin')->name('admin.')->group(function (): void {
@@ -163,15 +212,50 @@ Route::middleware([
     Route::get('schedule', [ScheduleController::class, 'index'])
         ->middleware('can:reservations.view')
         ->name('schedule.index');
-    Route::get('reservations/customer-search', [AdminReservationController::class, 'customerSearch'])
+    // 予約台帳のドラッグ&ドロップによる時間変更（§13-17）。既存の reschedule Service を再利用。
+    Route::put('schedule/reservations/{reservation}/time', [ScheduleController::class, 'updateReservationTime'])
         ->middleware('can:reservations.manage')
+        ->name('schedule.reservations.time');
+    // オンライン予約通知（§34-37）。ポーリングで取得・既読は管理者ごとに DB へ記録。
+    Route::get('schedule/notifications', [ScheduleController::class, 'notifications'])
+        ->middleware('can:reservations.view')
+        ->name('schedule.notifications');
+    Route::post('schedule/notifications/{reservation}/dismiss', [ScheduleController::class, 'dismissNotification'])
+        ->middleware('can:reservations.view')
+        ->name('schedule.notifications.dismiss');
+    // 予定ブロック（予約以外でスタッフ/ブースの時間を埋める・§27-46）。
+    Route::post('schedule/blocks', [ScheduleBlockController::class, 'store'])
+        ->middleware('can:reservations.manage')
+        ->name('schedule.blocks.store');
+    Route::put('schedule/blocks/{block}', [ScheduleBlockController::class, 'update'])
+        ->middleware('can:reservations.manage')
+        ->name('schedule.blocks.update');
+    Route::put('schedule/blocks/{block}/time', [ScheduleBlockController::class, 'updateTime'])
+        ->middleware('can:reservations.manage')
+        ->name('schedule.blocks.time');
+    Route::delete('schedule/blocks/{block}', [ScheduleBlockController::class, 'destroy'])
+        ->middleware('can:reservations.manage')
+        ->name('schedule.blocks.destroy');
+    // 検索は更新を伴わない閲覧操作であり、予約カードから同じ顧客情報を見られるため
+    // reservations.view に統一する（reservations.manage は新規予約/編集/D&D等の更新操作用）。
+    Route::get('reservations/customer-search', [AdminReservationController::class, 'customerSearch'])
+        ->middleware('can:reservations.view')
         ->name('reservations.customer-search');
+    // 電話予約などで未登録のお客様の予約を取るための仮登録（§新規のお客様）。
+    // 顧客レコードを作る更新操作なので reservations.manage を要求する。
+    Route::post('reservations/provisional-customer', [AdminReservationController::class, 'storeProvisionalCustomer'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.provisional-customer');
+    // 予約台帳の顧客・予約詳細パネル用の集約データ（§17）。閲覧権限のみ。
+    Route::get('reservations/{reservation}/panel', [AdminReservationController::class, 'panel'])
+        ->middleware('can:reservations.view')
+        ->name('reservations.panel');
     Route::get('reservations/availability', [AdminReservationController::class, 'availability'])
         ->middleware('can:reservations.manage')
         ->name('reservations.availability');
-    Route::get('reservations/create', [AdminReservationController::class, 'create'])
+    Route::get('reservations/available-booth', [AdminReservationController::class, 'availableBooth'])
         ->middleware('can:reservations.manage')
-        ->name('reservations.create');
+        ->name('reservations.available-booth');
     Route::post('reservations', [AdminReservationController::class, 'store'])
         ->middleware('can:reservations.manage')
         ->name('reservations.store');
@@ -195,6 +279,13 @@ Route::middleware([
         ->name('reservations.no-show');
     Route::get('customers', [CustomerController::class, 'index'])
         ->name('customers.index');
+    Route::get('customers/{customer}/summary', [CustomerController::class, 'summary'])
+        ->middleware('can:customers.view')
+        ->name('customers.summary');
+    // 予約台帳サイドパネルの顧客検索結果から開く版（§15-16）。台帳と同じ閲覧権限。
+    Route::get('customers/{customer}/board-panel', [CustomerController::class, 'boardPanel'])
+        ->middleware('can:reservations.view')
+        ->name('customers.board-panel');
     Route::get('customers/{customer}/tickets', [CustomerTicketController::class, 'show'])
         ->middleware('can:customers.view')
         ->name('customers.tickets');
@@ -207,6 +298,9 @@ Route::middleware([
         ->name('customers.edit');
     Route::put('customers/{customer}', [CustomerController::class, 'update'])
         ->name('customers.update');
+    // 台帳の顧客・予約詳細パネルからメモだけを素早く追加・編集する（§8）。
+    Route::patch('customers/{customer}/note', [CustomerController::class, 'updateNote'])
+        ->name('customers.update-note');
     Route::get('staff', [StaffController::class, 'index'])
         ->middleware('can:staff.manage')
         ->name('staff.index');
@@ -230,6 +324,19 @@ Route::middleware([
             ->name('staff-shifts.index');
         Route::post('staff-shifts', [StaffShiftController::class, 'store'])
             ->name('staff-shifts.store');
+
+        // 基本シフト / 例外日 / 予約受付 / 生成（#11）。{staffShift} より前に登録する。
+        Route::put('staff-shifts/templates', [StaffShiftController::class, 'saveTemplates'])
+            ->name('staff-shifts.templates.save');
+        Route::post('staff-shifts/exceptions', [StaffShiftController::class, 'saveException'])
+            ->name('staff-shifts.exceptions.save');
+        Route::delete('staff-shifts/exceptions/{exception}', [StaffShiftController::class, 'clearException'])
+            ->name('staff-shifts.exceptions.clear');
+        Route::post('staff-shifts/generate', [StaffShiftController::class, 'generate'])
+            ->name('staff-shifts.generate');
+        Route::put('staff-shifts/booking', [StaffShiftController::class, 'updateBooking'])
+            ->name('staff-shifts.booking.update');
+
         Route::put('staff-shifts/{staffShift}', [StaffShiftController::class, 'update'])
             ->name('staff-shifts.update');
         Route::delete('staff-shifts/{staffShift}', [StaffShiftController::class, 'destroy'])
@@ -338,4 +445,17 @@ Route::middleware([
     Route::patch('settings/reservation', [ReservationPolicySettingsController::class, 'update'])
         ->middleware(['can:settings.manage', 'password.confirm'])
         ->name('settings.reservation.update');
+    // 新規予約の通知音など、管理画面の通知設定（金額・権限に関わらないため再パスワード確認は不要）。
+    Route::get('settings/notifications', [NotificationSettingsController::class, 'show'])
+        ->middleware('can:settings.manage')
+        ->name('settings.notifications.show');
+    Route::patch('settings/notifications', [NotificationSettingsController::class, 'update'])
+        ->middleware('can:settings.manage')
+        ->name('settings.notifications.update');
+    Route::get('settings/roles', [RolePermissionController::class, 'show'])
+        ->middleware(['can:roles.manage', 'password.confirm'])
+        ->name('settings.roles.show');
+    Route::patch('settings/roles', [RolePermissionController::class, 'update'])
+        ->middleware(['can:roles.manage', 'password.confirm'])
+        ->name('settings.roles.update');
 });

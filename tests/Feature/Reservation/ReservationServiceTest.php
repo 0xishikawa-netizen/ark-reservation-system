@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Reservation;
 
+use App\Domain\Reservation\RescheduleInput;
 use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
-use App\Domain\Reservation\RescheduleInput;
 use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Reservation\ResourceType;
@@ -19,6 +19,7 @@ use App\Models\Reservation;
 use App\Models\Service;
 use App\Models\Staff;
 use App\Models\StaffShift;
+use App\Support\Settings\Settings;
 use App\Support\StateMachine\Events\StateTransitioned;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -200,6 +201,43 @@ class ReservationServiceTest extends TestCase
         );
 
         $this->assertSame('2026-08-01 10:00:00', $reservation->starts_at->format('Y-m-d H:i:s'));
+    }
+
+    public function test_closed_dates_block_both_customer_and_admin_but_horizon_only_blocks_customers(): void
+    {
+        [$customer, $service, , $booth] = $this->bookableMasters(requiresStaff: false);
+        $settings = app(Settings::class);
+        $settings->set('booking.closed_dates', ['2026-10-01'], 'json');
+        $settings->set('booking.horizon_mode', 'rolling', 'string');
+        $settings->set('booking.horizon_days', 7, 'int');
+
+        // 休業日は顧客・管理者ともに不可。
+        $this->assertValidationFailure(
+            fn () => $this->reservationService()->create(
+                $this->input($customer, $service, null, $booth, CarbonImmutable::parse('2026-10-01 10:00:00')),
+            ),
+            'starts_at',
+        );
+        $this->assertValidationFailure(
+            fn () => $this->reservationService()->create(
+                $this->input($customer, $service, null, $booth, CarbonImmutable::parse('2026-10-01 10:00:00'), adminContext: true),
+            ),
+            'starts_at',
+        );
+
+        // 受付期間外（7日先まで）は顧客のみ不可。管理者手動は通る。
+        $beyond = CarbonImmutable::parse('2026-09-20 10:00:00');
+        $this->assertValidationFailure(
+            fn () => $this->reservationService()->create(
+                $this->input($customer, $service, null, $booth, $beyond),
+            ),
+            'starts_at',
+        );
+
+        $reservation = $this->reservationService()->create(
+            $this->input($customer, $service, null, $booth, $beyond, adminContext: true),
+        );
+        $this->assertSame('2026-09-20 10:00:00', $reservation->starts_at->format('Y-m-d H:i:s'));
     }
 
     public function test_create_requires_at_least_one_resource(): void

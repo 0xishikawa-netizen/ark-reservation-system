@@ -3,6 +3,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -71,14 +72,15 @@ const updatePolicy = (): void => {
 <template>
     <Head title="予約ポリシー" />
 
+    <div class="ark-settings-page">
     <PageHeader
         title="予約ポリシー"
         subtitle="予約開始までの時間に応じたカード決済の自動返金率を設定します。"
     />
 
-    <SectionCard title="キャンセル時の返金率" max-width="920">
+    <SectionCard title="キャンセル時の返金率">
         <v-alert type="info" variant="tonal" class="mb-5">
-            予約開始までの残り時間が条件以上となる最初の段階を適用します。0時間の段階は必須です。
+            {{ MESSAGES.settings.cancellationTierHint }}
         </v-alert>
 
         <v-table class="policy-table">
@@ -168,9 +170,15 @@ const updatePolicy = (): void => {
             </v-btn>
         </div>
     </SectionCard>
+    </div>
 </template>
 
 <style scoped>
+.ark-settings-page {
+    max-width: 960px;
+    margin-inline: auto;
+}
+
 .policy-table th,
 .policy-table td {
     padding: 12px;

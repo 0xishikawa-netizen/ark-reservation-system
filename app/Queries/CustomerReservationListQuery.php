@@ -11,8 +11,8 @@ final class CustomerReservationListQuery
 {
     /**
      * @return array{
-     *     upcoming: list<array{id: int, starts_at: string, ends_at: string, service_name: string, staff_name: string|null, status: string}>,
-     *     past: list<array{id: int, starts_at: string, ends_at: string, service_name: string, staff_name: string|null, status: string}>
+     *     upcoming: list<array{id: int, starts_at: string, ends_at: string, service_id: int, service_name: string, staff_id: int|null, staff_name: string|null, status: string}>,
+     *     past: list<array{id: int, starts_at: string, ends_at: string, service_id: int, service_name: string, staff_id: int|null, staff_name: string|null, status: string}>
      * }
      */
     public function get(int $customerId): array
@@ -41,7 +41,7 @@ final class CustomerReservationListQuery
 
     /**
      * @param  Builder<Reservation>  $query
-     * @return list<array{id: int, starts_at: string, ends_at: string, service_name: string, staff_name: string|null, status: string}>
+     * @return list<array{id: int, starts_at: string, ends_at: string, service_id: int, service_name: string, staff_id: int|null, staff_name: string|null, status: string}>
      */
     private function reservations(Builder $query): array
     {
@@ -51,7 +51,9 @@ final class CustomerReservationListQuery
                 'id' => (int) $reservation->id,
                 'starts_at' => $reservation->starts_at->format('Y-m-d H:i:s'),
                 'ends_at' => $reservation->ends_at->format('Y-m-d H:i:s'),
+                'service_id' => (int) $reservation->service_id,
                 'service_name' => $reservation->service->name,
+                'staff_id' => $reservation->staff_id === null ? null : (int) $reservation->staff_id,
                 'staff_name' => $reservation->staff?->display_name,
                 'status' => $reservation->status->value,
             ])

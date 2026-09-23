@@ -2,6 +2,7 @@
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -199,7 +200,7 @@ async function mountPaymentElement(): Promise<void> {
         paymentElement = elements.create('payment');
         paymentElement.mount('#membership-payment-element');
     } catch {
-        paymentError.value = 'カード入力フォームを読み込めませんでした。時間をおいて再度お試しください。';
+        paymentError.value = MESSAGES.membership.cardFormLoadFailed;
     } finally {
         loadingPaymentElement.value = false;
     }
@@ -240,7 +241,7 @@ async function submitPaymentMethod(): Promise<void> {
     try {
         const submission = await elements.submit();
         if (submission.error) {
-            paymentError.value = 'カード情報をご確認のうえ、もう一度お試しください。';
+            paymentError.value = MESSAGES.payment.checkCard;
 
             return;
         }
@@ -248,8 +249,8 @@ async function submitPaymentMethod(): Promise<void> {
         const result = await stripe.createPaymentMethod({ elements });
         if (result.error || !result.paymentMethod) {
             paymentError.value = result.error?.type === 'validation_error'
-                ? 'カード情報をご確認のうえ、もう一度お試しください。'
-                : 'カードを登録できませんでした。時間をおいて再度お試しください。';
+                ? MESSAGES.payment.checkCard
+                : MESSAGES.membership.cardRegisterFailed;
 
             return;
         }
@@ -269,7 +270,7 @@ async function submitPaymentMethod(): Promise<void> {
             });
         }
     } catch {
-        paymentError.value = 'カードを登録できませんでした。時間をおいて再度お試しください。';
+        paymentError.value = MESSAGES.membership.cardRegisterFailed;
     } finally {
         submittingPayment.value = false;
     }
@@ -301,12 +302,12 @@ onBeforeUnmount(() => paymentElement?.unmount());
 
     <template v-if="membership === null">
         <v-alert v-if="plans.length === 0" type="info" variant="tonal" class="membership-alert">
-            現在申し込める会員プランはありません。
+            {{ MESSAGES.membership.nonePlans }}
         </v-alert>
         <div v-else class="plan-grid">
             <v-card v-for="plan in plans" :key="plan.id" class="plan-card" variant="outlined">
                 <v-card-item class="plan-card__header">
-                    <div class="text-overline text-primary mb-1">MEMBERSHIP PLAN</div>
+                    <div class="text-overline text-primary mb-1">月額プラン</div>
                     <v-card-title class="pa-0 text-h6">{{ plan.name }}</v-card-title>
                 </v-card-item>
                 <v-card-text class="plan-card__body">
@@ -350,10 +351,10 @@ onBeforeUnmount(() => paymentElement?.unmount());
             お支払いの確認中です。ご利用は継続できます（{{ formatDate(membership.grace_until) }} まで）。
         </v-alert>
         <v-alert v-else-if="membership.status === 'paused'" type="error" variant="tonal" class="membership-alert mb-4">
-            お支払いが確認できず一時停止中です。
+            {{ MESSAGES.membership.suspended }}
         </v-alert>
         <v-alert v-else-if="membership.status === 'pending'" type="info" variant="tonal" class="membership-alert mb-4">
-            <div class="mb-2">お申し込みのお支払いが未完了です。</div>
+            <div class="mb-2">{{ MESSAGES.membership.unpaidApplication }}</div>
             <v-btn size="small" color="primary" variant="flat" @click="router.visit('/mypage/membership/confirm')">
                 お支払いを完了する
             </v-btn>
@@ -439,7 +440,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
                 <v-divider />
                 <v-card-text v-if="history.length === 0" class="pa-4 pa-sm-5">
                     <v-alert type="info" variant="tonal" class="membership-alert">
-                        利用履歴はありません。
+                        {{ MESSAGES.membership.noUsageHistory }}
                     </v-alert>
                 </v-card-text>
                 <template v-else>
@@ -496,7 +497,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
                 </div>
                 <div id="membership-payment-element" />
                 <p class="text-caption text-medium-emphasis mt-4 mb-0">
-                    カード情報は Stripe が直接処理し、当店のサーバーには保存されません。
+                    {{ MESSAGES.payment.stripeHandlesCardShort }}
                 </p>
             </v-card-text>
             <v-card-actions class="membership-dialog__actions">
@@ -523,7 +524,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
     <v-dialog v-model="cancelDialog" max-width="500">
         <v-card class="membership-dialog" title="次回更新で解約しますか？">
             <v-card-text class="membership-dialog__body">
-                当期末まではご利用いただけます。次回以降の更新を停止します。
+                {{ MESSAGES.membership.cancelAtPeriodEndHint }}
             </v-card-text>
             <v-card-actions class="membership-dialog__actions">
                 <v-btn variant="text" @click="cancelDialog = false">戻る</v-btn>

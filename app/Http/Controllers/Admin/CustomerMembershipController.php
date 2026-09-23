@@ -53,7 +53,7 @@ class CustomerMembershipController extends Controller
             $request->user(),
         );
 
-        return back()->with('success', '利用権残数を調整しました。');
+        return back()->with('success', __('messages.membership.adjusted'));
     }
 
     public function cancelNow(
@@ -67,7 +67,7 @@ class CustomerMembershipController extends Controller
             $request->user(),
         );
 
-        return back()->with('success', '利用権を即時解約しました。');
+        return back()->with('success', __('messages.membership.canceled_now'));
     }
 
     public function sync(
@@ -77,6 +77,6 @@ class CustomerMembershipController extends Controller
     ): RedirectResponse {
         $subscriptions->syncFromStripe($membership, $request->user());
 
-        return back()->with('success', 'Stripe の現在状態を同期しました。');
+        return back()->with('success', __('messages.membership.stripe_synced'));
     }
 }

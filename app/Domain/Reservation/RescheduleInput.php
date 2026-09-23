@@ -18,5 +18,7 @@ final readonly class RescheduleInput
         public bool $adminContext,
         public bool $updateNotes = false,
         public ?string $notes = null,
+        // null = 現状維持（未指定）。値がある場合のみ「指名」フラグを更新する。
+        public ?bool $isStaffRequested = null,
     ) {}
 }

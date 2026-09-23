@@ -76,3 +76,39 @@ html,
 body {
     overflow-x: hidden;
 }
+
+/* ── ページネーション（ARK モダン）──
+   Vuetify 既定は選択中が見えづらいので、navy 塗り + 白文字で明快にする。 */
+.v-application .v-pagination__list {
+    gap: 4px;
+}
+
+.v-application .v-pagination__item .v-btn,
+.v-application .v-pagination__first .v-btn,
+.v-application .v-pagination__prev .v-btn,
+.v-application .v-pagination__next .v-btn,
+.v-application .v-pagination__last .v-btn {
+    min-width: 36px;
+    height: 36px;
+    border-radius: var(--ark-radius);
+    color: #1f2430;
+    font-weight: 600;
+    box-shadow: none;
+}
+
+.v-application .v-pagination__item .v-btn:hover {
+    background: #eef0f4;
+}
+
+.v-application .v-pagination__item--is-active .v-btn {
+    background: #1a2653 !important;
+    color: #ffffff !important;
+}
+
+.v-application .v-pagination__item--is-active .v-btn .v-btn__overlay {
+    opacity: 0;
+}
+
+.v-application .v-pagination .v-btn--disabled {
+    opacity: 0.35;
+}

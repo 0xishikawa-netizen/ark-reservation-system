@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Admin;
 
 use App\Domain\Auth\MfaPolicy;
+use App\Rules\JapanesePhoneNumber;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -26,8 +27,8 @@ class StartPhoneVerificationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // 国内の携帯番号を想定。ハイフン有無を許容し、正規化は PiiHasher が行う。
-            'phone' => ['required', 'string', 'max:20', 'regex:/\A[0-9+\-() ]{10,20}\z/'],
+            // 国内番号を想定。ハイフン有無を許容し、正規化は PiiHasher が行う。
+            'phone' => ['required', 'string', 'max:20', new JapanesePhoneNumber],
         ];
     }
 
@@ -35,7 +36,7 @@ class StartPhoneVerificationRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'phone.regex' => '電話番号の形式が正しくありません。',
+            'phone.regex' => __('messages.otp.invalid_phone'),
         ];
     }
 }

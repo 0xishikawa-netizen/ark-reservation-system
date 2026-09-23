@@ -26,6 +26,14 @@ class ReservationStateMachineTest extends TestCase
         $this->assertTrue($machine->can('confirmed', 'no_show'));
     }
 
+    public function test_pending_payment_can_be_explicitly_canceled(): void
+    {
+        $this->assertTrue((new ReservationStateMachine)->can(
+            ReservationStatus::PendingPayment->value,
+            ReservationStatus::Canceled->value,
+        ));
+    }
+
     public function test_same_status_transition_is_rejected(): void
     {
         $this->expectException(InvalidStateTransitionException::class);

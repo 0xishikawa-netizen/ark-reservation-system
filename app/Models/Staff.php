@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Support\Security\PiiHasher;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Support\Security\PiiHasher;
 
 class Staff extends Model
 {
@@ -55,6 +55,18 @@ class Staff extends Model
     public function shifts(): HasMany
     {
         return $this->hasMany(StaffShift::class, 'staff_id', 'user_id');
+    }
+
+    /** @return HasMany<StaffShiftTemplate, $this> */
+    public function shiftTemplates(): HasMany
+    {
+        return $this->hasMany(StaffShiftTemplate::class, 'staff_id', 'user_id');
+    }
+
+    /** @return HasMany<StaffShiftException, $this> */
+    public function shiftExceptions(): HasMany
+    {
+        return $this->hasMany(StaffShiftException::class, 'staff_id', 'user_id');
     }
 
     /**

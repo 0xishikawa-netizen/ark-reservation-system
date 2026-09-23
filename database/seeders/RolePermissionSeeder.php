@@ -32,6 +32,8 @@ class RolePermissionSeeder extends Seeder
         'ticket_products.manage',
         'integrations.view',
         'integrations.manage',
+        // ロール別の権限セット自体を管理する権限。admin 専用（§権限管理画面）。
+        'roles.manage',
     ];
 
     public function run(): void
@@ -56,26 +58,37 @@ class RolePermissionSeeder extends Seeder
             return [$name => $role];
         });
 
+        // admin と customer は常にこの内容で固定する（admin は全権限の superuser、
+        // customer は管理画面権限を一切持たない）。管理画面からのカスタマイズ対象外。
         $roles['admin']->syncPermissions($permissions->values());
-        $roles['manager']->syncPermissions($permissions->only([
-            'admin.access',
-            'failed_jobs.view',
-            'audit_logs.view',
-            'customers.view',
-            'reservations.view',
-            'reservations.manage',
-            'refund.execute',
-            'ticket.grant',
-            'membership.manage',
-            'settings.manage',
-            'integrations.view',
-        ])->values());
-        $roles['staff']->syncPermissions([
-            $permissions['admin.access'],
-            $permissions['customers.view'],
-            $permissions['reservations.view'],
-        ]);
         $roles['customer']->syncPermissions([]);
+
+        // staff / manager は「ロール権限管理」画面から管理者が変更できるようにするため、
+        // 既に権限を持っている（＝一度でも保存された）場合はここで上書きしない。
+        // 新規作成直後（wasRecentlyCreated）だけ、従来どおりの初期値を与える。
+        if ($roles['manager']->wasRecentlyCreated) {
+            $roles['manager']->syncPermissions($permissions->only([
+                'admin.access',
+                'failed_jobs.view',
+                'audit_logs.view',
+                'customers.view',
+                'reservations.view',
+                'reservations.manage',
+                'refund.execute',
+                'ticket.grant',
+                'membership.manage',
+                'settings.manage',
+                'integrations.view',
+            ])->values());
+        }
+
+        if ($roles['staff']->wasRecentlyCreated) {
+            $roles['staff']->syncPermissions([
+                $permissions['admin.access'],
+                $permissions['customers.view'],
+                $permissions['reservations.view'],
+            ]);
+        }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }

@@ -3,6 +3,7 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { PageHeader, SectionCard } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -110,7 +111,7 @@ const unlinkGoogle = (): void => {
                 v-if="google.linked && !hasPassword"
                 class="text-caption text-medium-emphasis mt-2 mb-0"
             >
-                連携を解除するには、先にパスワードを設定してください（ログイン手段が無くなるのを防ぐため）。
+                {{ MESSAGES.auth.setPasswordBeforeUnlink }}
             </p>
         </div>
     </SectionCard>

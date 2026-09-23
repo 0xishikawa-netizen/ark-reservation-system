@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace App\Queries;
 
+use App\Enums\Reservation\ReservationStatus;
 use Illuminate\Support\Facades\DB;
 
 final class ReservationFormOptionsQuery
 {
     /**
      * @return array{
-     *   services: list<array{id: int, name: string, duration_min: int, requires_staff: bool, staff_ids: list<int>}>,
+     *   services: list<array{id: int, name: string, duration_min: int, requires_staff: bool, staff_ids: list<int>, price: int, category: string|null, color: string}>,
      *   staff: list<array{user_id: int, display_name: string, color: string}>,
-     *   booths: list<array{id: int, name: string}>
+     *   booths: list<array{id: int, name: string}>,
+     *   popular_service_ids: list<int>
      * }
      */
     public function get(): array
@@ -27,13 +29,18 @@ final class ReservationFormOptionsQuery
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('id')
-            ->get(['id', 'name', 'duration_min', 'requires_staff'])
+            // price/category/color は MenuPicker（自作メニュー選択UI）向けに追加。既存の
+            // services テーブルの列をそのまま返すだけで、新しい集計は行わない。
+            ->get(['id', 'name', 'duration_min', 'requires_staff', 'price', 'category', 'color'])
             ->map(static fn (object $row): array => [
                 'id' => (int) $row->id,
                 'name' => (string) $row->name,
                 'duration_min' => (int) $row->duration_min,
                 'requires_staff' => (bool) $row->requires_staff,
                 'staff_ids' => $staffIdsByService[(int) $row->id] ?? [],
+                'price' => (int) $row->price,
+                'category' => $row->category === null ? null : (string) $row->category,
+                'color' => (string) $row->color,
             ])
             ->all();
 
@@ -50,7 +57,33 @@ final class ReservationFormOptionsQuery
             ])
             ->all();
 
-        return compact('services', 'staff', 'booths');
+        return [
+            'services' => $services,
+            'staff' => $staff,
+            'booths' => $booths,
+            'popular_service_ids' => $this->popularServiceIds(),
+        ];
+    }
+
+    /**
+     * MenuPicker の「よく使う」（§7-8）：店舗全体・直近30日の実績（無断キャンセル/キャンセル等は除外）から
+     * 利用件数が多いメニューを集計する。1クエリのみ（`reservations.starts_at` の既存インデックスを使う
+     * 範囲検索 + `service_id` での集約）。N+1にならないよう、この1回の呼び出しでIDのリストだけ返す。
+     *
+     * @return list<int>
+     */
+    private function popularServiceIds(int $limit = 6, int $lookbackDays = 30): array
+    {
+        return DB::table('reservations')
+            ->where('starts_at', '>=', now()->subDays($lookbackDays))
+            ->whereIn('status', [ReservationStatus::Confirmed->value, ReservationStatus::Completed->value])
+            ->select('service_id', DB::raw('COUNT(*) as reservation_count'))
+            ->groupBy('service_id')
+            ->orderByDesc('reservation_count')
+            ->limit($limit)
+            ->pluck('service_id')
+            ->map(static fn (mixed $id): int => (int) $id)
+            ->all();
     }
 
     /** @return list<array{user_id: int, display_name: string, color: string}> */

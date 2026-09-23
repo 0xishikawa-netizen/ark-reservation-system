@@ -55,3 +55,4 @@
 - フロントは TypeScript。`any` を避ける。`npm run build` の型エラーは 0。
 - Laravel Pint / ESLint に従える構成にする（設定は生成物のデフォルト＋最小限）。
 - コメントは必要な箇所に日本語で簡潔に。
+- 画面に出すメッセージ（エラー・完了・確認・注意・空の時の表示）は直書きしない。サーバーは `lang/ja/messages.php`（`__('messages.<グループ>.<キー>')`）、画面は `resources/js/constants/messages.ts`（`MESSAGES.<グループ>.<キー>`）に追加して参照する。

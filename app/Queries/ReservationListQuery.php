@@ -15,6 +15,7 @@ final class ReservationListQuery
         ?int $staffId,
         ?string $status,
         int $perPage = 20,
+        ?int $customerId = null,
     ): LengthAwarePaginator {
         $paginator = DB::table('reservations')
             ->join('customers', 'customers.user_id', '=', 'reservations.customer_id')
@@ -35,6 +36,7 @@ final class ReservationListQuery
             ->when($date !== null, fn ($query) => $query->whereDate('reservations.starts_at', $date))
             ->when($staffId !== null, fn ($query) => $query->where('reservations.staff_id', $staffId))
             ->when($status !== null, fn ($query) => $query->where('reservations.status', $status))
+            ->when($customerId !== null, fn ($query) => $query->where('reservations.customer_id', $customerId))
             ->orderByDesc('reservations.starts_at')
             ->orderByDesc('reservations.id')
             ->paginate($perPage)

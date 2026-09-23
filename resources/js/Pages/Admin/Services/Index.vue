@@ -31,14 +31,14 @@ const props = defineProps<{
 }>();
 
 const headers = [
-    { title: 'サービス名', key: 'name' },
+    { title: 'メニュー名', key: 'name' },
     { title: 'カテゴリ', key: 'category' },
     { title: '所要時間', key: 'duration_min', sortable: false },
     { title: '価格', key: 'price', sortable: false },
     { title: 'オンライン予約', key: 'is_online_bookable', sortable: false },
     { title: '有効', key: 'is_active', sortable: false },
     { title: '施術スタッフ', key: 'staff_names', sortable: false },
-    { title: '', key: 'actions', sortable: false },
+    { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
 const search = ref<string | null>(props.filters.search);
@@ -75,17 +75,17 @@ const formatPrice = (price: number): string =>
 </script>
 
 <template>
-    <Head title="サービス" />
+    <Head title="メニュー" />
 
-    <PageHeader title="サービス" subtitle="予約メニューの公開状態と担当スタッフを管理します。">
+    <PageHeader title="メニュー" subtitle="予約メニューの公開状態と担当スタッフを管理します。">
         <template #actions>
             <v-btn color="primary" href="/admin/services/create">
-                サービスを追加
+                メニューを追加
             </v-btn>
         </template>
     </PageHeader>
 
-    <SectionCard title="サービス一覧" class="ark-table-section">
+    <SectionCard title="メニュー一覧" class="ark-table-section">
         <div class="ark-table-section__filters">
             <v-form
                 class="d-flex align-center ga-4 flex-wrap"
@@ -93,14 +93,14 @@ const formatPrice = (price: number): string =>
             >
                 <v-text-field
                     v-model="search"
-                    label="サービス名・カテゴリを検索"
+                    label="メニュー名・カテゴリを検索"
                     clearable
                     hide-details
                     max-width="420"
                 />
                 <v-switch
                     v-model="onlyActive"
-                    label="有効なサービスのみ"
+                    label="公開中のメニューのみ"
                     color="primary"
                     hide-details
                     @update:model-value="applyFilters"
@@ -115,13 +115,13 @@ const formatPrice = (price: number): string =>
             :headers="headers"
             :items="services"
             item-value="id"
-            no-data-text="該当するサービスはありません。"
+            no-data-text="該当するメニューはありません。"
         >
             <template #no-data>
                 <EmptyState
                     icon="mdi-magnify"
-                    title="該当するサービスはありません"
-                    description="検索条件を変更するか、新しいサービスを追加してください。"
+                    title="該当するメニューはありません"
+                    description="検索条件を変更するか、新しいメニューを追加してください。"
                 />
             </template>
             <template #item.name="{ item }">
@@ -169,7 +169,9 @@ const formatPrice = (price: number): string =>
             <template #item.actions="{ item }">
                 <v-btn
                     size="small"
-                    variant="text"
+                    variant="tonal"
+                    color="primary"
+                    prepend-icon="mdi-pencil-outline"
                     :href="`/admin/services/${item.id}/edit`"
                 >
                     編集

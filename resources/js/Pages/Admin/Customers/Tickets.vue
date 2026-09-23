@@ -3,6 +3,7 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -223,7 +224,7 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
 
     <div class="ark-page__sections">
         <v-alert v-if="can.grant && ticketProducts.length === 0" type="info" class="mb-4">
-            付与できる有効な回数券商品がありません。
+            {{ MESSAGES.ticket.noneGrantable }}
         </v-alert>
 
         <SectionCard class="ark-table-section mb-6" title="保有回数券">

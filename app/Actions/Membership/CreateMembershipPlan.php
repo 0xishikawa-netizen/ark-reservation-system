@@ -31,7 +31,7 @@ class CreateMembershipPlan
             $this->auditLogger->log(
                 'membership_plan.created',
                 $plan,
-                "会員プラン「{$plan->name}」を作成",
+                "月額プラン「{$plan->name}」を作成",
                 $actor,
             );
 

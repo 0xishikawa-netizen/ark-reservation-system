@@ -56,7 +56,7 @@ class ProfileController extends Controller
         $updateCustomerProfile->execute($customer, $data, $request->user());
 
         return redirect()->route('mypage.profile.show')
-            ->with('success', 'プロフィールを更新しました。');
+            ->with('success', __('messages.customer.own_profile_updated'));
     }
 
     private function customerFor(Request $request): Customer

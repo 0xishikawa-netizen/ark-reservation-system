@@ -24,7 +24,7 @@ const headers = [
     { title: '有効期間', key: 'validity_days' },
     { title: '表示順', key: 'sort_order' },
     { title: '有効', key: 'is_active', sortable: false },
-    { title: '', key: 'actions', sortable: false },
+    { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
 const toggleActive = (product: TicketProductListItem): void => {
@@ -89,7 +89,9 @@ const formatPrice = (price: number): string =>
             <template #item.actions="{ item }">
                 <v-btn
                     size="small"
-                    variant="text"
+                    variant="tonal"
+                    color="primary"
+                    prepend-icon="mdi-pencil-outline"
                     :href="`/admin/ticket-products/${item.id}/edit`"
                 >
                     編集

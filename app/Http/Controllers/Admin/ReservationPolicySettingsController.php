@@ -38,6 +38,6 @@ final class ReservationPolicySettingsController extends Controller
             $request->user(),
         );
 
-        return back()->with('success', '予約キャンセルポリシーを更新しました。');
+        return back()->with('success', __('messages.reservation.policy_updated'));
     }
 }

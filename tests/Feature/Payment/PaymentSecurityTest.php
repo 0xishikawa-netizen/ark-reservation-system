@@ -261,6 +261,7 @@ final class PaymentSecurityTest extends TestCase
     {
         $gateway = app(StripeGateway::class);
         $this->assertInstanceOf(FakeStripeGateway::class, $gateway);
+
         return $gateway;
     }
 

@@ -153,7 +153,7 @@ final class CustomerOverviewQuery
             ReservationStatus::PendingExternalSync => '外部連携待ち',
             ReservationStatus::Confirmed => '予約確定',
             ReservationStatus::Completed => '完了',
-            ReservationStatus::NoShow => 'No-show',
+            ReservationStatus::NoShow => '無断キャンセル',
             ReservationStatus::Canceled => 'キャンセル',
             ReservationStatus::Expired => '期限切れ',
         };

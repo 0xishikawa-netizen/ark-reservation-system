@@ -7,6 +7,7 @@ namespace Tests\Feature\Membership;
 use App\Domain\Membership\MembershipLedgerService;
 use App\Enums\Membership\MembershipUsageType;
 use App\Exceptions\Membership\InsufficientMembershipBalanceException;
+use App\Models\AuditLog;
 use App\Models\Membership;
 use App\Models\MembershipUsageTransaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -124,7 +125,7 @@ final class MembershipLedgerServiceTest extends TestCase
             ->count());
         $this->assertSame(4, $this->ledger->available($this->membership));
         $this->assertSame(4, $this->membership->fresh()->period_available);
-        $this->assertSame(1, \App\Models\AuditLog::query()->where('action', 'membership.granted')->count());
+        $this->assertSame(1, AuditLog::query()->where('action', 'membership.granted')->count());
     }
 
     public function test_writes_to_an_old_period_do_not_touch_current_period_cache(): void

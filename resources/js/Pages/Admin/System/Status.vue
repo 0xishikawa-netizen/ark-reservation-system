@@ -88,7 +88,7 @@ const membershipReadinessLabel = computed<string>(() =>
         prominent
         class="mb-6"
     >
-        実 Stripe Test Mode 結合 QA: {{ qaLabel }} ／ 会員機能の本番投入:
+        実 Stripe テストモード結合 QA: {{ qaLabel }} ／ 会員機能の本番投入:
         {{ membershipReadinessLabel }}
     </v-alert>
 

@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { onMounted, ref } from 'vue';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -34,7 +35,7 @@ interface StripeInstance {
 const stripeWindow = window as unknown as { Stripe?: (key: string) => StripeInstance };
 
 const phase = ref<'authenticating' | 'syncing' | 'error'>('authenticating');
-const message = ref('カードの本人認証を行っています。しばらくお待ちください。');
+const message = ref<string>(MESSAGES.membership.threeDsInProgress);
 
 function yen(value: number): string {
     return new Intl.NumberFormat('ja-JP', {
@@ -67,7 +68,7 @@ const loadStripeJs = (): Promise<void> =>
 
 function goToSync(): void {
     phase.value = 'syncing';
-    message.value = 'お支払いの確定を確認しています。';
+    message.value = MESSAGES.membership.confirmingPayment;
     // client の申告ではなくサーバーが Stripe から取り込んで最終判断する。
     router.post('/mypage/membership/payment/sync', {}, { preserveScroll: true });
 }
@@ -94,8 +95,8 @@ onMounted(async () => {
         if (result.error) {
             fail(
                 result.error.type === 'card_error' || result.error.code === 'card_declined'
-                    ? 'カードの承認が得られませんでした。別のお支払い方法をお試しください。'
-                    : '本人認証を完了できませんでした。もう一度お試しください。',
+                    ? MESSAGES.membership.cardDeclined
+                    : MESSAGES.membership.threeDsFailed,
             );
 
             return;
@@ -135,7 +136,7 @@ onMounted(async () => {
                 <div class="text-overline text-primary mb-2">本人認証中</div>
                 <p class="text-body-1 font-weight-medium mb-0">{{ message }}</p>
                 <p class="text-caption text-medium-emphasis mt-3 mb-0">
-                    この画面を閉じずにお待ちください。
+                    {{ MESSAGES.membership.waitOnThisScreen }}
                 </p>
             </template>
             <template v-else>

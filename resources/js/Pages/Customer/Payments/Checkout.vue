@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -112,7 +113,7 @@ onMounted(async () => {
     startCountdown();
 
     if (!props.stripe.client_secret) {
-        errorMessage.value = '決済を開始できませんでした。もう一度お試しください。';
+        errorMessage.value = MESSAGES.payment.startFailed;
         loading.value = false;
 
         return;
@@ -134,7 +135,7 @@ onMounted(async () => {
         paymentElement.mount('#payment-element');
     } catch {
         // 生のエラー内容は表示しない。
-        errorMessage.value = '決済フォームを読み込めませんでした。通信環境をご確認ください。';
+        errorMessage.value = MESSAGES.payment.formLoadFailed;
     } finally {
         loading.value = false;
     }
@@ -164,8 +165,8 @@ const submit = async (): Promise<void> => {
         // Stripe の生メッセージはそのまま出さず、種別に応じた案内に置き換える。
         errorMessage.value =
             result.error.type === 'card_error' || result.error.type === 'validation_error'
-                ? 'カード情報をご確認のうえ、もう一度お試しください。'
-                : '決済を完了できませんでした。時間をおいて再度お試しください。';
+                ? MESSAGES.payment.checkCard
+                : MESSAGES.payment.completeFailed;
         submitting.value = false;
 
         return;
@@ -224,7 +225,7 @@ const submit = async (): Promise<void> => {
         </v-alert>
 
         <v-alert v-if="expired" type="warning" variant="tonal" class="mb-4">
-            お支払い期限が切れました。お手数ですが、もう一度ご予約をお取りください。
+            {{ MESSAGES.payment.expired }}
         </v-alert>
 
         <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4">
@@ -254,8 +255,8 @@ const submit = async (): Promise<void> => {
         </v-card>
 
         <p class="text-caption text-medium-emphasis mt-4">
-            カード情報は Stripe が直接処理します。当店のサーバーには保存されません。
-            <template v-if="!isAddon">お支払いが確定した時点でご予約が完了します。</template>
+            {{ MESSAGES.payment.stripeHandlesCard }}
+            <template v-if="!isAddon">{{ MESSAGES.payment.confirmedCompletesReservation }}</template>
         </p>
     </v-container>
 </template>

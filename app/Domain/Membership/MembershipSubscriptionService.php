@@ -60,7 +60,7 @@ final class MembershipSubscriptionService
         ?Authenticatable $actor = null,
     ): MembershipCheckoutResult {
         if (! $plan->is_active) {
-            throw ValidationException::withMessages(['plan' => '選択されたプランは現在申し込めません。']);
+            throw ValidationException::withMessages(['plan' => __('messages.membership.plan_unavailable')]);
         }
 
         // [TX1] ローカル確定（Stripe を呼ばない）。1 顧客 1 有効 membership を直列化して検査。
@@ -74,7 +74,7 @@ final class MembershipSubscriptionService
 
             if ($existing !== null && $existing->status !== MembershipStatus::Pending) {
                 throw ValidationException::withMessages([
-                    'membership' => 'すでに有効な利用権があります。',
+                    'membership' => __('messages.membership.already_active'),
                 ]);
             }
 
@@ -207,7 +207,7 @@ final class MembershipSubscriptionService
         $this->requireSubscription($membership);
 
         if (trim($reason) === '') {
-            throw ValidationException::withMessages(['reason' => '理由は必須です。']);
+            throw ValidationException::withMessages(['reason' => __('messages.common.reason_required')]);
         }
 
         try {

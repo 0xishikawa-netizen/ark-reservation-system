@@ -23,6 +23,7 @@ class ReservationStateMachine extends StateMachine
             ReservationStatus::PendingPayment->value => [
                 ReservationStatus::PendingExternalSync->value,
                 ReservationStatus::Confirmed->value,
+                ReservationStatus::Canceled->value,
                 ReservationStatus::Expired->value,
             ],
             ReservationStatus::PendingExternalSync->value => [

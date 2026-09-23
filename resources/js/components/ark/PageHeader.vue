@@ -34,7 +34,8 @@ defineProps<{
 .ark-page-header__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--ark-space-2);
+    align-items: center;
+    gap: var(--ark-space-3);
 }
 
 @media (min-width: 600px) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -55,7 +56,7 @@ function formatDateTime(value: string): string {
             type="info"
             variant="tonal"
         >
-            今後の予約はありません。
+            {{ MESSAGES.reservation.noUpcoming }}
         </v-alert>
         <div v-else class="d-flex flex-column ga-3">
             <v-card
@@ -87,7 +88,7 @@ function formatDateTime(value: string): string {
             type="info"
             variant="tonal"
         >
-            過去の予約はありません。
+            {{ MESSAGES.reservation.noPast }}
         </v-alert>
         <v-list v-else bg-color="transparent" class="pa-0">
             <v-list-item

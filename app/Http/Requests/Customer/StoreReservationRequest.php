@@ -46,7 +46,7 @@ class StoreReservationRequest extends FormRequest
                 || ! $service->requires_staff)) {
                 $validator->errors()->add(
                     'service_id',
-                    'このサービスはオンライン予約の対象ではありません。',
+                    __('messages.reservation.service_not_online_target'),
                 );
             }
 
@@ -82,7 +82,7 @@ class StoreReservationRequest extends FormRequest
         if ($staff === null || ! $staff->is_bookable || ! $isAssigned) {
             $validator->errors()->add(
                 'staff_id',
-                'このスタッフは選択したサービスを担当できません。',
+                __('messages.reservation.staff_not_assigned_to_selected'),
             );
         }
     }
@@ -102,7 +102,7 @@ class StoreReservationRequest extends FormRequest
         if (! SlotKey::fromSettings()->isBoundary($startsAt)) {
             $validator->errors()->add(
                 'starts_at',
-                '開始時刻を予約枠の境界に合わせてください。',
+                __('messages.reservation.non_boundary_start'),
             );
         }
     }
@@ -130,7 +130,7 @@ class StoreReservationRequest extends FormRequest
         if ($available < 1) {
             $validator->errors()->add(
                 'payment_method',
-                '利用可能な回数券がありません。',
+                __('messages.ticket.none_available_sentence'),
             );
         }
     }
@@ -158,7 +158,7 @@ class StoreReservationRequest extends FormRequest
             || app(MembershipLedgerService::class)->available($membership) < 1) {
             $validator->errors()->add(
                 'payment_method',
-                '利用可能な利用権がありません。',
+                __('messages.membership.none_available_sentence'),
             );
         }
     }

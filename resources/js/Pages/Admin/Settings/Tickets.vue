@@ -3,6 +3,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -76,12 +77,13 @@ const updatePolicy = (): void => {
 <template>
     <Head title="回数券運用設定" />
 
+    <div class="ark-settings-page">
     <PageHeader
         title="回数券運用設定"
         subtitle="回数券予約の無断キャンセルと有効期限到来時の扱いを設定します。"
     />
 
-    <SectionCard title="運用ポリシー" max-width="880">
+    <SectionCard title="運用ポリシー">
         <div class="ark-policy-form">
             <section aria-labelledby="no-show-policy-heading">
                 <h2 id="no-show-policy-heading" class="text-h6 mb-2">
@@ -159,10 +161,12 @@ const updatePolicy = (): void => {
         </div>
     </SectionCard>
 
+    </div>
+
     <v-dialog v-model="confirmationOpen" max-width="600">
         <v-card title="回数券運用設定を変更しますか？">
             <v-card-text>
-                この変更は今後作成される回数券利用予約に適用されます。既存の HOLD 済み予約には遡及適用されません。
+                {{ MESSAGES.ticket.policyNotRetroactive }}
             </v-card-text>
             <v-card-actions class="justify-end">
                 <v-btn :disabled="processing" @click="confirmationOpen = false">
@@ -177,6 +181,11 @@ const updatePolicy = (): void => {
 </template>
 
 <style scoped>
+.ark-settings-page {
+    max-width: 920px;
+    margin-inline: auto;
+}
+
 .ark-policy-form {
     padding: var(--ark-space-2);
 }

@@ -8,11 +8,14 @@ use App\Domain\Membership\MembershipLedgerService;
 use App\Domain\Reservation\AvailabilityService;
 use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
+use App\Domain\Reservation\WeekAvailabilityBuilder;
 use App\Domain\Ticket\TicketLedgerService;
 use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\ReservationSource;
 use App\Exceptions\Reservation\SlotUnavailableException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Booking\AvailabilityRequest;
+use App\Http\Requests\Booking\WeekAvailabilityRequest;
 use App\Http\Requests\Customer\StoreReservationRequest;
 use App\Models\Customer;
 use App\Models\Membership;
@@ -20,11 +23,9 @@ use App\Models\TicketWallet;
 use App\Models\User;
 use App\Queries\OnlineBookableServiceQuery;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -73,31 +74,32 @@ class ReserveController extends Controller
     }
 
     public function availability(
-        Request $request,
+        AvailabilityRequest $request,
         AvailabilityService $availabilityService,
     ): JsonResponse {
         $this->customerFor($request);
 
-        $validated = $request->validate([
-            'service_id' => [
-                'required',
-                'integer',
-                Rule::exists('services', 'id')->where(
-                    fn (Builder $query): Builder => $query
-                        ->where('is_active', true)
-                        ->where('is_online_bookable', true)
-                        ->where('requires_staff', true),
-                ),
-            ],
-            'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
-            'date' => ['required', 'date_format:Y-m-d'],
-        ]);
+        $validated = $request->validated();
 
         return response()->json($availabilityService->openStartTimes(
             (int) $validated['service_id'],
             isset($validated['staff_id']) ? (int) $validated['staff_id'] : null,
             null,
             CarbonImmutable::parse((string) $validated['date']),
+        ));
+    }
+
+    public function weekAvailability(
+        WeekAvailabilityRequest $request,
+        WeekAvailabilityBuilder $builder,
+    ): JsonResponse {
+        $this->customerFor($request);
+        $validated = $request->validated();
+
+        return response()->json($builder->build(
+            (int) $validated['service_id'],
+            isset($validated['staff_id']) ? (int) $validated['staff_id'] : null,
+            CarbonImmutable::parse((string) $validated['start_date']),
         ));
     }
 
@@ -141,11 +143,13 @@ class ReserveController extends Controller
             }
         }
 
+        $boothId = $availabilityService->firstAvailableBooth($serviceId, $startsAt);
+
         $reservation = $reservationService->create(new ReservationInput(
             customerId: (int) $customer->user_id,
             serviceId: $serviceId,
             staffId: $staffId,
-            boothId: null,
+            boothId: $boothId,
             startsAt: $startsAt,
             source: ReservationSource::ArkWeb,
             actorUserId: (int) $user->id,
@@ -158,12 +162,12 @@ class ReserveController extends Controller
         if ($paymentMethod === PaymentMethod::Single) {
             return redirect()
                 ->route('mypage.reservations.checkout', $reservation)
-                ->with('info', 'お支払いを完了すると予約が確定します。');
+                ->with('info', __('messages.reservation.pay_to_confirm'));
         }
 
         return redirect()
             ->route('mypage.reservations.show', $reservation)
-            ->with('success', '予約が確定しました。');
+            ->with('success', __('messages.reservation.confirmed'));
     }
 
     private function userFor(Request $request): User

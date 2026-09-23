@@ -30,7 +30,7 @@ class SetServiceStaff
 
             if ($existingCount !== count($staffIds)) {
                 throw ValidationException::withMessages([
-                    'staff_ids' => ['存在しないスタッフが含まれています。'],
+                    'staff_ids' => [__('messages.staff.not_found_in_list')],
                 ]);
             }
 

@@ -19,7 +19,7 @@ class SettingsTest extends TestCase
         $this->seed(SettingsSeeder::class);
         $this->seed(SettingsSeeder::class);
 
-        $this->assertSame(15, app(Settings::class)->get('reservation.slot_minutes'));
+        $this->assertSame(5, app(Settings::class)->get('reservation.slot_minutes'));
         $this->assertSame('restore', app(Settings::class)->get('ticket.no_show_policy'));
         $this->assertSame(
             'preserve_hold',

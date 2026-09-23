@@ -46,7 +46,7 @@ final class UpdateReservationPolicyRequest extends FormRequest
             if (! $hasZeroHourTier) {
                 $validator->errors()->add(
                     'tiers',
-                    '開始時刻まで0時間の段階を必ず含めてください。',
+                    __('messages.reservation.policy_zero_tier_required'),
                 );
             }
 
@@ -55,7 +55,7 @@ final class UpdateReservationPolicyRequest extends FormRequest
             if (is_string($encoded) && strlen($encoded) > 255) {
                 $validator->errors()->add(
                     'tiers',
-                    '返金段階の設定量が上限を超えています。',
+                    __('messages.reservation.policy_too_large'),
                 );
             }
         });

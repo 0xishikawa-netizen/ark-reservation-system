@@ -2,6 +2,7 @@
 import { router, useForm } from '@inertiajs/vue3';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
@@ -62,7 +63,7 @@ const loadPasswordStatus = async (): Promise<void> => {
         const data = await fetchJson('/user/confirmed-password-status');
         passwordConfirmed.value = isRecord(data) && data.confirmed === true;
     } catch {
-        errorMessage.value = 'パスワード確認状態を取得できませんでした。';
+        errorMessage.value = MESSAGES.auth.passwordStatusFailed;
     }
 };
 
@@ -87,7 +88,7 @@ const loadConfiguration = async (): Promise<void> => {
         replaceQrCode(qrData.svg);
         recoveryCodes.value = recoveryData;
     } catch {
-        errorMessage.value = '2段階認証の設定情報を取得できませんでした。';
+        errorMessage.value = MESSAGES.auth.twoFactorSetupFailed;
     } finally {
         loadingConfiguration.value = false;
     }
@@ -140,7 +141,7 @@ onBeforeUnmount(() => {
 
                     <template v-if="twoFactorEnabled">
                         <v-alert type="success" class="mb-4">
-                            2段階認証は設定済みです。
+                            {{ MESSAGES.auth.twoFactorConfigured }}
                         </v-alert>
                         <v-btn color="primary" href="/admin">管理画面へ</v-btn>
                     </template>
@@ -193,12 +194,12 @@ onBeforeUnmount(() => {
                                 alt="2段階認証設定用QRコード"
                                 width="240"
                                 height="240"
-                                class="mb-5"
+                                class="mb-5 mx-auto"
                             />
 
                             <v-alert type="warning" variant="tonal" class="mb-5">
                                 <p class="font-weight-bold mb-2">
-                                    リカバリーコードを安全な場所に保存してください。
+                                    {{ MESSAGES.auth.saveRecoveryCodes }}
                                 </p>
                                 <ul class="pl-5">
                                     <li v-for="code in recoveryCodes" :key="code">

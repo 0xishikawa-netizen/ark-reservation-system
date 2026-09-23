@@ -35,7 +35,7 @@ final class ReservationAddonPaymentController extends Controller
         } catch (PaymentGatewayException) {
             return redirect()
                 ->route('mypage.reservations.show', $reservation)
-                ->with('error', 'ただいま差額のお支払いを開始できません。時間をおいて再度お試しください。');
+                ->with('error', __('messages.payment.addon_start_failed'));
         }
 
         $reservation->loadMissing('service:id,name');
@@ -81,21 +81,21 @@ final class ReservationAddonPaymentController extends Controller
         } catch (PaymentGatewayDeclinedException) {
             return redirect()
                 ->route('mypage.reservations.show', $reservation)
-                ->with('error', 'カードの承認が得られませんでした。別のお支払い方法をお試しください。');
+                ->with('error', __('messages.payment.card_declined'));
         } catch (PaymentGatewayException) {
             return redirect()
                 ->route('mypage.reservations.show', $reservation)
-                ->with('info', '差額のお支払い確認に時間がかかっています。確定次第反映されます。');
+                ->with('info', __('messages.payment.addon_delayed'));
         }
 
         if ($addon->status !== PaymentStatus::Succeeded) {
             return redirect()
                 ->route('mypage.reservations.show', $reservation)
-                ->with('info', '差額のお支払いを確認中です。確定次第反映されます。');
+                ->with('info', __('messages.payment.addon_processing'));
         }
 
         return redirect()
             ->route('mypage.reservations.show', $reservation)
-            ->with('success', '差額のお支払いが完了しました。');
+            ->with('success', __('messages.payment.addon_completed'));
     }
 }

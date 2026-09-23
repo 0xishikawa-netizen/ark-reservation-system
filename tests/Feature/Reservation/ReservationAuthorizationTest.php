@@ -116,8 +116,10 @@ final class ReservationAuthorizationTest extends TestCase
         $this->actingAs($staffUser)
             ->get('/admin/schedule?date=2026-10-01')
             ->assertOk();
+        // 新規予約の専用画面は廃止（ブッキングボードのパネルで作成する）。
+        // reservations.manage で守られている空き時間APIで権限差を確認する。
         $this->actingAs($staffUser)
-            ->get('/admin/reservations/create')
+            ->get('/admin/reservations/availability?service_id=1&date=2026-10-01')
             ->assertForbidden();
         $this->actingAs($staffUser)
             ->post('/admin/reservations')
@@ -140,7 +142,7 @@ final class ReservationAuthorizationTest extends TestCase
                 ->get('/admin/schedule?date=2026-10-01')
                 ->assertOk();
             $this->actingAs($actor)
-                ->get('/admin/reservations/create')
+                ->get("/admin/reservations/availability?service_id={$service->id}&date=2026-10-01")
                 ->assertOk();
             $this->actingAs($actor)
                 ->post('/admin/reservations', [

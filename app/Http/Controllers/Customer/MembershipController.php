@@ -68,10 +68,10 @@ class MembershipController extends Controller
                 $request->user(),
             );
         } catch (PaymentGatewayDeclinedException) {
-            return back()->with('error', 'カードの承認が得られませんでした。別のお支払い方法をお試しください。');
+            return back()->with('error', __('messages.payment.card_declined'));
         } catch (PaymentGatewayException) {
             // 結果不明。成功と断定しない（needs_attention が立ち reconcile 対象になる）。
-            return back()->with('error', 'お申し込みの確認に時間がかかっています。しばらくして状態をご確認ください。');
+            return back()->with('error', __('messages.membership.apply_pending'));
         }
 
         if ($result->requiresConfirmation) {
@@ -80,11 +80,11 @@ class MembershipController extends Controller
 
         if ($result->membership->status === MembershipStatus::Active) {
             return redirect()->route('mypage.membership.show')
-                ->with('success', '利用権のお申し込みが完了しました。');
+                ->with('success', __('messages.membership.applied'));
         }
 
         return redirect()->route('mypage.membership.show')
-            ->with('info', 'お申し込みを受け付けました。確定処理の完了までしばらくお待ちください。');
+            ->with('info', __('messages.membership.apply_accepted'));
     }
 
     /**
@@ -114,7 +114,7 @@ class MembershipController extends Controller
             $result = $subscriptions->syncCheckout($membership, $request->user());
         } catch (PaymentGatewayException) {
             return redirect()->route('mypage.membership.show')
-                ->with('info', 'お支払いの確認に時間がかかっています。確定次第ご利用に反映されます。');
+                ->with('info', __('messages.membership.payment_pending'));
         }
 
         if (! $result->requiresConfirmation || $result->clientSecret === null) {
@@ -123,8 +123,8 @@ class MembershipController extends Controller
             return redirect()->route('mypage.membership.show')->with(
                 $active ? 'success' : 'info',
                 $active
-                    ? 'お支払いが完了し、利用権が有効になりました。'
-                    : 'お申し込みを受け付けました。確定処理の完了までしばらくお待ちください。',
+                    ? __('messages.membership.payment_completed')
+                    : __('messages.membership.apply_accepted'),
             );
         }
 
@@ -167,19 +167,19 @@ class MembershipController extends Controller
             $result = $subscriptions->syncCheckout($membership, $request->user());
         } catch (PaymentGatewayDeclinedException) {
             return redirect()->route('mypage.membership.show')
-                ->with('error', 'カードの承認が得られませんでした。別のお支払い方法をお試しください。');
+                ->with('error', __('messages.payment.card_declined'));
         } catch (PaymentGatewayException) {
             return redirect()->route('mypage.membership.show')
-                ->with('info', 'お支払いの確認に時間がかかっています。確定次第ご利用に反映されます。');
+                ->with('info', __('messages.membership.payment_pending'));
         }
 
         if ($result->membership->status === MembershipStatus::Active) {
             return redirect()->route('mypage.membership.show')
-                ->with('success', 'お支払いが完了し、利用権が有効になりました。');
+                ->with('success', __('messages.membership.payment_completed'));
         }
 
         return redirect()->route('mypage.membership.show')
-            ->with('info', 'お支払いの確認処理を行っています。完了までしばらくお待ちください。');
+            ->with('info', __('messages.membership.payment_processing'));
     }
 
     public function cancel(
@@ -190,7 +190,7 @@ class MembershipController extends Controller
 
         $subscriptions->requestCancelAtPeriodEnd($membership, $request->user());
 
-        return back()->with('success', '当期末で停止します。期末までは利用できます。');
+        return back()->with('success', __('messages.membership.cancel_at_period_end'));
     }
 
     public function resume(
@@ -201,7 +201,7 @@ class MembershipController extends Controller
 
         $subscriptions->resumeCancelAtPeriodEnd($membership, $request->user());
 
-        return back()->with('success', '次回更新での解約を取り消しました。');
+        return back()->with('success', __('messages.membership.cancel_reverted'));
     }
 
     public function updatePaymentMethod(
@@ -215,7 +215,7 @@ class MembershipController extends Controller
             $request->string('payment_method_id')->toString(),
         );
 
-        return back()->with('success', '支払い方法を更新しました。');
+        return back()->with('success', __('messages.membership.payment_method_updated'));
     }
 
     private function currentMembership(Request $request): Membership
