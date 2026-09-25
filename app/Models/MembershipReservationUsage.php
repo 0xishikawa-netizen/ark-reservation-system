@@ -9,6 +9,7 @@ use App\Enums\Membership\MembershipReservationUsageStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class MembershipReservationUsage extends Model
 {
@@ -34,6 +35,11 @@ class MembershipReservationUsage extends Model
     public function membership(): BelongsTo
     {
         return $this->belongsTo(Membership::class);
+    }
+
+    public function revenueAllocation(): HasOne
+    {
+        return $this->hasOne(RevenueAllocation::class);
     }
 
     /** @return array<string, string> */

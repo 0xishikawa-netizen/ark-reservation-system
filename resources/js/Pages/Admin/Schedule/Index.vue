@@ -163,7 +163,7 @@ interface DailySummary {
     repeat_customers: number;
     canceled: number;
     no_show: number;
-    revenue: number;
+    revenue: number | null;
 }
 
 const props = defineProps<{
@@ -4290,6 +4290,7 @@ function menuSegments(lane: ScheduleLane): {
                             aria-hidden="true"
                         />
                         <div
+                            v-if="summary.revenue !== null"
                             class="daily-summary__item daily-summary__item--revenue"
                         >
                             <span class="daily-summary__value"

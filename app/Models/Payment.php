@@ -67,6 +67,18 @@ class Payment extends Model
         return $this->hasMany(PaymentRefund::class);
     }
 
+    /** @return HasMany<CheckoutTender, $this> */
+    public function checkoutTenders(): HasMany
+    {
+        return $this->hasMany(CheckoutTender::class);
+    }
+
+    /** @return HasMany<RevenueRecognitionContract, $this> */
+    public function revenueRecognitionContracts(): HasMany
+    {
+        return $this->hasMany(RevenueRecognitionContract::class, 'source_payment_id');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

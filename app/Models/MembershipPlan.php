@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MembershipPlan extends Model
@@ -16,12 +17,18 @@ class MembershipPlan extends Model
     protected $fillable = [
         'name',
         'price',
+        'tax_category_id',
         'usage_count_per_period',
         'billing_interval',
         'stripe_price_id',
         'is_active',
         'sort_order',
     ];
+
+    public function taxCategory(): BelongsTo
+    {
+        return $this->belongsTo(TaxCategory::class);
+    }
 
     /** @return HasMany<Membership, $this> */
     public function memberships(): HasMany

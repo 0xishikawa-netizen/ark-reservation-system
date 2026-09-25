@@ -144,12 +144,8 @@ final class MembershipIdempotencyConsolidatedTest extends TestCase
 
         $service->markCompleted($reservation, $customer->user);
 
-        try {
-            $service->markCompleted($reservation, $customer->user);
-            $this->fail('終端状態への completed retry が拒否されませんでした。');
-        } catch (ValidationException) {
-            $this->assertTrue(true);
-        }
+        $retry = $service->markCompleted($reservation, $customer->user);
+        $this->assertSame($reservation->id, $retry->id);
 
         $this->assertSame(1, $this->usageCount($membership, MembershipUsageType::Release));
         $this->assertSame(1, $this->usageCount($membership, MembershipUsageType::Consume));

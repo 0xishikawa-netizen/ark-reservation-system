@@ -20,6 +20,7 @@ use App\Http\Requests\Admin\StoreStaffShiftRequest;
 use App\Http\Requests\Admin\UpdateBookingSettingsRequest;
 use App\Http\Requests\Admin\UpdateStaffShiftRequest;
 use App\Models\Staff;
+use App\Models\StaffAttendance;
 use App\Models\StaffShift;
 use App\Models\StaffShiftException;
 use App\Models\StaffShiftTemplate;
@@ -97,6 +98,23 @@ class StaffShiftController extends Controller
                     'start_at' => substr((string) $shift->start_at, 0, 5),
                     'end_at' => substr((string) $shift->end_at, 0, 5),
                     'origin' => $shift->origin,
+                ])->values(),
+            'attendances' => $selectedStaffId === null ? [] : StaffAttendance::query()->with('breaks')
+                ->where('staff_id', $selectedStaffId)
+                ->whereBetween('business_date', [$from->toDateString(), $to->toDateString()])
+                ->orderByDesc('business_date')->orderByDesc('clock_in_at')->get()
+                ->map(static fn (StaffAttendance $a): array => [
+                    'id' => (int) $a->id,
+                    'business_date' => $a->business_date->toDateString(),
+                    'clock_in_at' => $a->clock_in_at?->setTimezone('Asia/Tokyo')->format('Y-m-d\TH:i'),
+                    'clock_out_at' => $a->clock_out_at?->setTimezone('Asia/Tokyo')->format('Y-m-d\TH:i'),
+                    'status' => $a->status,
+                    'note' => $a->note,
+                    'breaks' => $a->breaks->map(static fn ($b): array => [
+                        'start_at' => $b->start_at->setTimezone('Asia/Tokyo')->format('Y-m-d\TH:i'),
+                        'end_at' => $b->end_at->setTimezone('Asia/Tokyo')->format('Y-m-d\TH:i'),
+                        'type' => $b->type, 'note' => $b->note,
+                    ])->values(),
                 ])->values(),
             'booking' => $this->bookingPayload($bookingWindow),
             'filters' => [

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reservation;
 
+use App\Domain\Business\StoreCalendarService;
 use App\Support\Settings\Settings;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -18,10 +19,10 @@ use Illuminate\Validation\ValidationException;
  *     rolling … 今日から horizon_days 日先まで。
  *     none    … 期間制限なし（未設定の既存環境はこれ。後方互換）。
  * - min_lead_minutes … 直前予約の締切（分）。0 = 直前まで可。
- * - closed_dates … 店舗休業日。全スタッフ・管理者手動を含め予約不可。
+ * - store_calendar_days … 店舗休業日・特別営業時間の正本。
  *
  * horizon / lead は「顧客の予約」にのみ効く（管理者の手動予約は従来どおり期間制限を受けない）。
- * closed_dates は誰であっても物理的に不可能な予約として扱う。
+ * 休業日は誰であっても物理的に不可能な予約として扱う。
  */
 final class BookingWindow
 {
@@ -35,7 +36,10 @@ final class BookingWindow
 
     public const DEFAULT_HORIZON_DAYS = 60;
 
-    public function __construct(private readonly Settings $settings) {}
+    public function __construct(
+        private readonly Settings $settings,
+        private readonly StoreCalendarService $storeCalendar,
+    ) {}
 
     public function horizonMode(): string
     {
@@ -75,26 +79,17 @@ final class BookingWindow
     /** @return list<string> Y-m-d */
     public function closedDates(): array
     {
-        $raw = $this->settings->get('booking.closed_dates', []);
-
-        if (! is_array($raw)) {
-            return [];
-        }
-
-        $dates = [];
-
-        foreach ($raw as $value) {
-            if (is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1) {
-                $dates[$value] = true;
-            }
-        }
-
-        return array_keys($dates);
+        return $this->storeCalendar->closedDates();
     }
 
     public function isClosedDate(CarbonInterface $date): bool
     {
-        return in_array($date->format('Y-m-d'), $this->closedDates(), true);
+        return $this->storeCalendar->isClosed($date);
+    }
+
+    public function isWithinCalendarHours(CarbonInterface $startsAt, CarbonInterface $endsAt): bool
+    {
+        return $this->storeCalendar->allowsInterval($startsAt, $endsAt);
     }
 
     /**

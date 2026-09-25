@@ -9,6 +9,7 @@ use App\Enums\Ticket\TicketReservationUsageStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class TicketReservationUsage extends Model
 {
@@ -33,6 +34,11 @@ class TicketReservationUsage extends Model
     public function wallet(): BelongsTo
     {
         return $this->belongsTo(TicketWallet::class, 'ticket_wallet_id');
+    }
+
+    public function revenueAllocation(): HasOne
+    {
+        return $this->hasOne(RevenueAllocation::class);
     }
 
     /** @return array<string, string> */

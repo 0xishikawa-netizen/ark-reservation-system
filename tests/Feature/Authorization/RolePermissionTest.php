@@ -33,6 +33,8 @@ class RolePermissionTest extends TestCase
         'membership.manage',
         'ticket_policy.manage',
         'ticket_products.manage',
+        'reports.view',
+        'sales.view',
     ];
 
     public function test_each_role_has_only_its_explicit_permissions(): void

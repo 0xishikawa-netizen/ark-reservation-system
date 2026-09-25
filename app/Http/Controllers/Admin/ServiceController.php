@@ -12,7 +12,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreServiceRequest;
 use App\Http\Requests\Admin\UpdateServiceRequest;
 use App\Models\Service;
+use App\Models\ServiceAnalysisCategory;
 use App\Models\Staff;
+use App\Models\TaxCategory;
 use App\Queries\ServiceListQuery;
 use App\Queries\ServiceStaffOptionsQuery;
 use Illuminate\Http\RedirectResponse;
@@ -34,6 +36,8 @@ class ServiceController extends Controller
                 'id' => $service->id,
                 'name' => $service->name,
                 'category' => $service->category,
+                'analysis_category_name' => $service->analysisCategory?->name,
+                'tax_category_name' => $service->taxCategory?->name,
                 'duration_min' => $service->duration_min,
                 'price' => $service->price,
                 'is_online_bookable' => $service->is_online_bookable,
@@ -57,6 +61,7 @@ class ServiceController extends Controller
     {
         return Inertia::render('Admin/Services/Create', [
             'staff' => $staffQuery->get(),
+            ...$this->masterOptions(),
         ]);
     }
 
@@ -81,6 +86,8 @@ class ServiceController extends Controller
                 'duration_min' => $service->duration_min,
                 'price' => $service->price,
                 'category' => $service->category,
+                'analysis_category_id' => $service->analysis_category_id,
+                'tax_category_id' => $service->tax_category_id,
                 'is_online_bookable' => $service->is_online_bookable,
                 'requires_staff' => $service->requires_staff,
                 'color' => $service->color,
@@ -88,6 +95,7 @@ class ServiceController extends Controller
                 'staff_ids' => $staffQuery->selectedIds($service),
             ],
             'staff' => $staffQuery->get(),
+            ...$this->masterOptions(),
         ]);
     }
 
@@ -124,5 +132,16 @@ class ServiceController extends Controller
             'success',
             $validated['active'] ? 'サービスを有効化しました。' : 'サービスを無効化しました。',
         );
+    }
+
+    /** @return array{analysisCategories:mixed,taxCategories:mixed} */
+    private function masterOptions(): array
+    {
+        return [
+            'analysisCategories' => ServiceAnalysisCategory::query()
+                ->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'code', 'name', 'is_active']),
+            'taxCategories' => TaxCategory::query()
+                ->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'code', 'name', 'is_active']),
+        ];
     }
 }

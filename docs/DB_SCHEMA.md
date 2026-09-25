@@ -300,9 +300,180 @@ index: `(payment_id)`
 - `settings`：`key varchar(80) PK` / `value varchar(255)` / `type varchar(20)`（営業時間・スロット粒度・キャンセル規定・仮予約 HOLD 時間）。
   - 予約受付（#11・キー未設定なら「制限なし」＝後方互換）：
     `booking.horizon_mode`（`none`|`monthly`|`rolling`）/ `booking.release_day_of_month`（1–28、推奨 20）/
-    `booking.horizon_days`（rolling 用）/ `booking.min_lead_minutes`（直前締切）/ `booking.closed_dates`（json 配列 `YYYY-MM-DD`。全スタッフ・管理者手動を含め予約不可）。
+    `booking.horizon_days`（rolling 用）/ `booking.min_lead_minutes`（直前締切）。旧 `booking.closed_dates` は Phase 11 migration が `store_calendar_days` へ取り込み、以後は新テーブルが正本。
     正本は `App\Domain\Reservation\BookingWindow`。`SettingsSeeder` にはあえて含めず、管理画面「勤務枠 › 予約受付」で保存した時点から有効化される。
 - Laravel 基盤：`password_reset_tokens` / `sessions` / `jobs` / `job_batches` / `failed_jobs` / `cache` / `cache_locks`。
+
+### Phase 11 Task 11-2 業務マスタ
+
+- `service_analysis_categories`: 追加可能な `code` UNIQUE / name / active / sort。初期値は M, T, A, M&T, A&T。
+- `tax_categories` / `tax_rates`: 税区分と basis point の期間付き税率。期間は `[effective_from, effective_to)`、重複はtransaction内ロックで禁止。税額計算と丸めは Task 11-3 以降で確定。
+- `products`: 物販商品。code nullable UNIQUE / name / integer price / nullable tax category / active / sort。在庫や購入事実は持たない。
+- `payment_methods`: 会計で選択する決済方法マスタ。code UNIQUE / name / enabled / order / external provider。既存 `payments` と Stripe 状態機械は変更しない。
+- `store_calendar_days`: 通常日は行なし。business_date UNIQUE の休業/特別営業時間だけを保持。
+- `monthly_sales_targets`: 月初日 UNIQUE / integer target amount。店舗デフォルトは `settings` の `sales.target.default_amount` で、月別行を優先。
+- `employment_types` / `staff_employment_periods`: 雇用形態マスタと `[effective_from, effective_to)` のスタッフ履歴。
+- `services.analysis_category_id` / `services.tax_category_id` / `ticket_products.tax_category_id` / `membership_plans.tax_category_id` はすべて nullable FK。既存行を推測backfillしない。`services.duration_min` を標準時間として再利用し、同義列は追加しない。
+- 単一店舗前提のため `stores` / `store_id` は追加しない。営業日判定は `Asia/Tokyo`、既存のUTC datetime保存方針は変更しない。
+
+### Phase 11 Task 11-3 事実データ
+
+Task 11-3は既存行を推測backfillせず、以下の追加テーブルだけを作る。`reservations`は予定、`visits`は実績、
+`payments`はStripe等のprovider transaction、`checkout_tenders`は会計の支払方法別内訳として責務を分離する。
+
+**visits**（1件の来店事実）
+
+| 主な列 | 意味 |
+|---|---|
+| customer_id FK | 必須。顧客ごとの完了来店履歴の正本 |
+| reservation_id FK null UNIQUE | 予約あり／予約なしの両方を許容し、1予約の二重来店化を防止 |
+| business_date date | `Asia/Tokyo`で判定する日計・月計の営業日。UTC timestampとは分離 |
+| status | `draft` / `completed` / `voided` |
+| started_at / completed_at | 実績timestamp（nullable） |
+| primary_staff_id FK null / name snapshot | 主担当。実担当とは別責務 |
+| visit_sequence unsigned int null | Task 11-4で完了時に採番する来店順snapshot。過去不明値はNULL |
+| first_visit_gender_snapshot string null / first_visit_age_years_snapshot unsigned smallint null | Task 11-7。初診完了時だけ性別と営業日時点の満年齢を固定。既存行は推測backfillしない |
+| future_reservation_exists_at_checkout bool null / snapshot_at | `true`=あり、`false`=なし、`null`=未確定／不明。値の確定はTask 11-4 |
+| completion_operation_id char(36) null UNIQUE | Task 11-4の完了操作を冪等化する格納先 |
+
+index: `(business_date,status)`, `(customer_id,business_date)`, `(primary_staff_id,business_date)`, `completed_at`。
+`UNIQUE(customer_id,visit_sequence)`で顧客内の確定来店順重複を防ぐ。
+
+**visit_treatments**（来店内の複数施術実績）
+
+| 主な列 | 意味 |
+|---|---|
+| visit_id FK | 1来店に複数行 |
+| service_id / analysis_category_id FK null | 現在マスタへの追跡用。過去不明値を許容 |
+| service_name / category code / category name snapshot | マスタ変更後も過去帳票を再現する最小snapshot |
+| actual_started_at / actual_ended_at / actual_minutes | 実績。標準時間`services.duration_min`とは分離 |
+| status / sort_order / operation_key | `draft` / `completed` / `voided`、表示順、任意の冪等キー |
+
+ロングは保存せず、完了施術の `SUM(actual_minutes) > 60` を来店単位で算出する。
+
+**visit_treatment_staff**（施術の複数実担当）
+
+`visit_treatment_id` / `staff_id null` / staff name snapshot / 実績開始終了 / `actual_minutes` / sort order。
+`UNIQUE(visit_treatment_id,staff_id)`。完了境界で担当分数合計と施術分数の一致をServiceがtransaction内検証する。
+
+**checkouts** / **checkout_lines**（会計ヘッダ・明細）
+
+- `checkouts`: `visit_id UNIQUE`、`draft` / `finalized` / `voided`、整数円のsubtotal/tax/total、currency、確定・取消日時、取消理由、operation ID。
+- `checkout_lines`: item type、施術／サービス／商品／回数券商品／月額プランへのnullable FK、名称・税区分code/name・適用税率basis point・数量・単価・税抜・税額・税込のsnapshot、スタッフ配分対象フラグ。
+- 税端数方式は未確定のため自動計算せず、計算済み `net + tax = gross` を保存・検証する。
+- マスタ変更はsnapshotへ遡及しない。確定後のヘッダは取消遷移だけ、明細は追加・更新・削除を禁止する。
+- 確定時にヘッダ＝明細合計を行ロック下で検証する。金額はすべてunsigned integerでfloatを使わない。
+
+**checkout_tenders**（会計支払内訳）
+
+`checkout_id` / `payment_method_id` / amount / status / received_at / external reference / `payment_id null`。
+現金5,000円＋PayPay6,000円等の複数支払を表現する。`payment_id`は既存provider transactionへの任意リンクであり、
+既存`payments`の状態機械・返金責務は変更しない。確定時にreceived行の合計＝会計totalを検証する。
+
+**staff_revenue_allocations**（スタッフ別売上snapshot）
+
+`checkout_line_id` / `staff_id null` / `visit_treatment_staff_id null` / staff name snapshot /
+`basis_minutes null` / 整数 `allocated_amount` / operation key。配分対象明細だけを対象とし、確定時に配分額合計＝明細税込額を検証する。
+実担当時間を根拠として残しつつ、端数調整後の最終配分額そのものを正本にする。
+
+**revenue_recognition_contracts** / **revenue_allocations**（施術日基準売上）
+
+- 権利の正本を重複作成しない。contractは既存`ticket_wallets`または`memberships`（月額は対象期間付き）へのリンクと、購入時の元契約金額snapshotを持つ。
+- 決済日基準はsource checkout line / 既存paymentへのnullableリンクから追跡し、施術日基準はallocationの`recognized_on`と整数amountから集計する。
+- allocationはvisit / treatment / 既存ticket usage / membership usageへnullableリンクし、契約内連番、端数行フラグ、operation keyを持つ。
+- usage FKはそれぞれUNIQUE、operation keyもUNIQUE。allocationは追記専用。契約行をロックして過剰配賦を防ぎ、close時だけ配賦合計＝元契約金額を要求する。
+- 未消化、途中解約、返金、有効期限切れの帰属規則は未確定のためTask 11-3では固定しない。既存`payment_refunds`も変更しない。
+
+重要操作（施術確定、会計確定／取消、支払内訳、スタッフ配分、契約配賦）は既存`AuditLogger`へ記録する。
+複数行合計はDB CHECKでは表現せず、FK・UNIQUE・unsigned型とDomain Serviceのtransaction／`FOR UPDATE`を組み合わせて保証する。
+
+### Phase 11 Task 11-4 予約完了transaction境界
+
+既存の管理画面・routeは`ReservationService::markCompleted()`を唯一の入口として維持し、内部を
+`VisitCompletionService::completeReservation()`へ委譲する。旧status更新・権利消化処理を並走させない。
+
+同一の短いDB transaction内で、次の順序により確定する。
+
+1. 対象`reservations`行を`FOR UPDATE`。
+2. 対象`customers`行を`FOR UPDATE`し、同一顧客の来店順採番を直列化。
+3. `reservation_id UNIQUE`を持つ`visits`を作成または既存draftとして再利用。
+4. 事前入力済み施術・実担当があれば検証して確定。無い場合だけ、現行予約枠からbufferを除いた時間と予約スタッフを初期実績にする。既存completed予約のbackfillには使用しない。
+5. 既存draft checkoutがある場合だけ`CheckoutService`で確定。checkoutが無ければ会計未確定として来店完了を許容し、税・支払を推測生成しない。
+6. 既存`TicketReservationService` / `MembershipReservationService`で権利消化。既存台帳dedupe keyを再利用し、新しい減算経路を作らない。
+7. 顧客行ロック下で`MAX(visit_sequence) + 1`を確定。既存過去予約は採番しない。
+8. 同一の完了時刻を基準に、`reservations.active()`かつ`starts_at > snapshot_at`、対象予約以外を`EXISTS`で判定し、次回予約booleanを保存。
+9. visitをcompleted、reservationを既存state machine経由でcompletedにし、`attended_at`と監査ログを保存してcommit。
+
+`visits.reservation_id UNIQUE`、顧客内`visit_sequence UNIQUE`、予約行／顧客行ロック、予約単位の決定的な
+`completion_operation_id`により、ダブルクリック・再送・同時workerを1件へ収束させる。正常完了済みretryは
+保存済みsnapshotを再計算せず既存結果を返す。取消・no-show・legacy completed（visitなし）は新規完了しない。
+Stripe API・外部予約APIはtransaction内で呼ばず、既存`payments`・`payment_refunds`の意味も変更しない。
+
+### Phase 11 Task 11-5 日次集計read model
+
+`DailyReportQuery`は`Asia/Tokyo`の指定営業日について、集計粒度ごとに独立したSQLを実行する。
+Treatment、Staff、Checkout Line、Tenderを同じJOINへ連結せず、明細数の掛け算による二重計上を構造的に避ける。
+`DailyReportService`が結果を`DailyBusinessSummary`へまとめ、月計・年間・Excel・管理APIの共通入口とする。
+
+| 指標 | 日付・正本 | 除外・NULL |
+|---|---|---|
+| 来店／初診／次回予約 | `visits.business_date`、`status=completed`、`visit_sequence`、次回予約snapshot | draft/voided除外。snapshot NULLはunknown件数へ保持 |
+| ロング | completed `visit_treatments.actual_minutes`のVisit内合計 | `>60`のみ。施術なし／分数NULLはfalseにせずunknown |
+| 分析分類 | `analysis_category_*_snapshot`のVisit内distinct | 現行Service masterを参照しない。NULLはunknown。M&Tを分解しない |
+| 決済日基準売上／支払方法 | finalized checkoutのreceived tender、`received_at`のJST営業日 | draft/voided checkout、voided tender除外。CheckoutなしVisitを推測しない |
+| 税区分／税率 | finalized checkoutの`finalized_at`営業日に属するline snapshot | net/tax/grossを個別SUMし再計算しない。NULL snapshotはnullable bucket |
+| 施術日基準売上 | 完了Visitの実施明細に直結する確定会計line + `revenue_allocations.recognized_on` | 契約購入lineを施術売上へ入れず、allocation未保存分を推測しない |
+
+日時列はJST日の`[00:00, 翌00:00)`をUTCへ変換した半開区間で検索し、DATE関数を索引列へ適用しない。
+既存`visits(business_date,status)`、`checkouts(status,finalized_at)`、lineのcheckout／treatment FK索引、
+`revenue_allocations(recognized_on,contract)`を利用する。全支払方法の日計向けに
+`checkout_tenders(status,received_at,checkout_id)`だけを追加し、支払方法別既存索引とは検索責務を分ける。
+返金日／元決済日のどちらへ帰属させるかは未確定のため、Task 11-5では`payment_refunds`を自動控除しない。
+
+### Phase 11 Task 11-6 月計read model
+
+Task 11-6では集計テーブルやmigrationを追加せず、Task 11-5の事実データから都度集計する。
+`DailyReportQuery::fetchRange()`は月範囲を集計粒度別SQLで`GROUP BY business_date`し、単日`fetch()`も同じ経路を使う。
+月の日数にかかわらず集約SQLは8本で固定し、1日ごとのN+1を発生させない。timestamp列の期間抽出は従来どおり
+UTC半開区間で索引を利用し、JST日付への変換はSELECT/GROUP BYだけで行う。
+
+`MonthlyBusinessSummary`は全暦日の日次行、2売上基準、動的な支払方法／税snapshot bucket、来店系合計、unknown、
+月率、1〜15日／16日〜月末、目標進捗、営業日数、平日／土日平均を保持する。月予約率と初診予約率は
+日別率の平均ではなく、月合計の分子÷月合計の分母とする。分母0はNULLであり0%へ変換しない。
+
+- 売上基準の既定は決済日。施術日基準は、完了施術に直結する確定lineと保存済み配賦だけを加算する。配賦契約の元line自体が施術直結する異常／互換データはdirect側だけに数え、二重加算しない。
+- 支払方法は`is_enabled=false`でも期間内の受取事実を表示する。税はline snapshotのcode/name/rate/net/tax/grossを合計し、現行masterから再計算しない。
+- `as_of_date`まで（当日を含む）を実績、翌日以降を残営業日とする。過去月は月末、現在月はJST今日、未来月は月初前日が既定。
+- 通常休業日は現時点で設けず、`store_calendar_days.status=closed`だけを営業日・平均分母・残営業日から除外する。休業日の保存済み実績は月合計から除外しない。
+- 平日=月〜金、土日=土・日。祝日判定はしない。日平均、平日平均、土日平均の分母は`as_of_date`までの非休業日で、未来日は含めない。
+- 売上目標は`monthly_sales_targets`の月別値を優先し、無ければ`settings`の店舗既定値。差額=`実績-目標`、残必要売上=`max(目標-実績,0)`、残営業日平均=`残必要売上/残営業日`。目標なし・分母0はNULLを保持する。
+
+返金帰属は引き続き未確定であり、月計でも自動控除しない。
+
+### Phase 11 Task 11-7 顧客統計read model
+
+`CustomerAnalyticsQuery`は`visits.status=completed`・JSTの`business_date`を正本に、対象月初診cohortを`visit_sequence=1`から抽出する。再診と離反は顧客単位の`EXISTS / NOT EXISTS`、2/6/10回到達は`as_of_date`までの最大sequenceで判定する。初診人数は月計の`first_visit_count`と同じ定義で、来店件数と顧客人数を混同しない。
+
+初診時の性別・満年齢は`visits.first_visit_*_snapshot`、初回担当・次回予約は既存Visit snapshot、コースは初診の完了`visit_treatments`分析分類snapshotを参照する。年齢は`AgeDecadeBucket`の承認済み区分へ変換する。属性NULLはunknown人数、保存元のない来店目的・動機・紹介者・地域は`not_captured`とし、現在の顧客プロフィールや予約、自由入力を過去属性として推測しない。既存Visitの新列はNULLのまま。詳細は`docs/CUSTOMER_ANALYTICS.md`。
+
+### Phase 11 Task 11-8 スタッフ勤怠・稼働率read model
+
+- `staff_attendances`: `staff_id` FK、JST出勤日`business_date`、UTCの`clock_in_at` / `clock_out_at` nullable、`status`、`note`、timestamps。`(staff_id,business_date)`は非uniqueで分割勤務を許容する。
+- `staff_attendance_breaks`: `staff_attendance_id` FK、UTCの`start_at` / `end_at`、`type`、`note`、timestamps。勤怠更新時は明示された休憩一覧へ置換し、auditは親の作成・修正に残す。
+- `visits.staff_requested_at_checkout` nullable boolean、`requested_staff_id_at_checkout` nullable bigint: 明示的指名事実と指名先IDの完了時snapshot。旧VisitはNULLのまま。IDは削除後も事実として保持するためFKを張らない。
+- `StaffUtilizationService`: 来店指標は主担当Visit、稼働分は完了施術の実担当分数を別GROUP BY。勤務予定は`staff_shifts`、実勤怠は新表。予約可能分は店舗カレンダー、予定シフト、staff block、実休憩のinterval演算。社員/アルバイトは`staff_employment_periods`の対象日履歴から分類する。詳細は`docs/STAFF_UTILIZATION.md`。
+
+### Phase 11 Task 11-9 時間帯別稼働率read model
+
+`TimeBandUtilizationService`は新テーブルを作らず、Task 11-8と同じ勤務・予約可能区間および`MinuteIntervals`を4つのJST時間帯へ交差分割する。実担当の時刻が不明または分数と不整合の場合は時間帯を推測せずNULL/unknownを保持する。詳細は`docs/TIME_BAND_UTILIZATION.md`。
+
+### Phase 11 Task 11-10 年間read model
+
+新しい集計テーブルやmigrationは追加しない。`AnnualReportService`は月計・顧客cohort・スタッフ/時間帯稼働率を12か月合成し、年率は分子/分母合計で算出する。詳細は`docs/ANNUAL_REPORTING.md`。
+
+### Phase 11 Task 11-11 Excel出力
+
+DB変更なし。`MonthlyBusinessSummary.actual_totals/actual_ratios`と`AnnualReportService.as_of_totals`は保存済み日次事実からの基準日時点read model。6シートの暫定cell mappingと原本依存範囲は`docs/EXCEL_EXPORT.md`。
 
 ### 外部予約連携（Phase 9・`app/Domain/Integration`）
 
@@ -343,3 +514,8 @@ index: `(payment_id)`
 > Phase 3 で `reservation_resource_slots` / `ticket_transactions` / `membership_usage_transactions` /
 > `audit_logs` の実バイト/行を `information_schema.tables` と `SHOW TABLE STATUS` で計測し、
 > ここに実測値・1 年後予測・3 年後予測・5GB に対する余裕を記録する。
+# Phase 11 過去データ移行（Task 11-12）
+
+`historical_import_batches`は原本の保護コピー、SHA-256、状態、作成者、取込/無効化日時を保持する。`historical_import_rows`と`historical_import_cells`はsheet/row/cellと暗号化原文・HMAC・validationを保持し、明細の推測backfillを行わない。`historical_metric_values`は出典行を一意参照する過去集計値で、Visit/CheckoutとはFKも集計経路も分離する。詳細は`docs/HISTORICAL_IMPORT.md`。
+
+Task 11-13の`historical_metric_reviews`は過去集計値1件につき差異分類・確認状態・理由・確認者・確認日時を1行保持する。元値とARK値は上書きせず、照合時に再計算する。詳細は`docs/PHASE11_RECONCILIATION.md`。

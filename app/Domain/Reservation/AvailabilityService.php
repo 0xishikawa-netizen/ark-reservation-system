@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domain\Reservation;
 
+use App\Domain\Business\StoreCalendarService;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Reservation\ResourceType;
 use App\Models\Booth;
 use App\Models\Service;
 use App\Models\StaffShift;
-use App\Support\Settings\Settings;
+use App\Models\StoreCalendarDay;
 use App\Support\SlotKey;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -19,7 +20,7 @@ final class AvailabilityService
 {
     private readonly SlotKey $slotKey;
 
-    public function __construct(private readonly Settings $settings)
+    public function __construct(private readonly StoreCalendarService $storeCalendar)
     {
         $this->slotKey = SlotKey::fromSettings();
     }
@@ -56,20 +57,14 @@ final class AvailabilityService
             return [];
         }
 
-        $open = $this->businessTime(
-            $date,
-            (string) $this->settings->get(
-                'business_hours.open',
-                config('reservation.business_hours.open', '10:00'),
-            ),
-        );
-        $close = $this->businessTime(
-            $date,
-            (string) $this->settings->get(
-                'business_hours.close',
-                config('reservation.business_hours.close', '22:00'),
-            ),
-        );
+        $calendarDay = $this->storeCalendar->resolve($date);
+
+        if ($calendarDay['status'] === StoreCalendarDay::STATUS_CLOSED || $calendarDay['opens_at'] === null || $calendarDay['closes_at'] === null) {
+            return [];
+        }
+
+        $open = $this->businessTime($date, $calendarDay['opens_at']);
+        $close = $this->businessTime($date, $calendarDay['closes_at']);
 
         if ($close->lessThanOrEqualTo($open)) {
             return [];

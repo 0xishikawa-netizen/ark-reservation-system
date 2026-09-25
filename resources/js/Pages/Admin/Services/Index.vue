@@ -10,6 +10,8 @@ interface ServiceListItem {
     id: number;
     name: string;
     category: string | null;
+    analysis_category_name: string | null;
+    tax_category_name: string | null;
     duration_min: number;
     price: number;
     is_online_bookable: boolean;
@@ -32,7 +34,8 @@ const props = defineProps<{
 
 const headers = [
     { title: 'メニュー名', key: 'name' },
-    { title: 'カテゴリ', key: 'category' },
+    { title: '集計分類', key: 'analysis_category_name' },
+    { title: '税区分', key: 'tax_category_name' },
     { title: '所要時間', key: 'duration_min', sortable: false },
     { title: '価格', key: 'price', sortable: false },
     { title: 'オンライン予約', key: 'is_online_bookable', sortable: false },
@@ -140,6 +143,8 @@ const formatPrice = (price: number): string =>
             <template #item.category="{ item }">
                 {{ item.category || '—' }}
             </template>
+            <template #item.analysis_category_name="{ item }">{{ item.analysis_category_name || '未設定' }}</template>
+            <template #item.tax_category_name="{ item }">{{ item.tax_category_name || '未設定' }}</template>
             <template #item.duration_min="{ item }">
                 {{ item.duration_min }}分
             </template>

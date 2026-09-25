@@ -69,6 +69,30 @@ class Staff extends Model
         return $this->hasMany(StaffShiftException::class, 'staff_id', 'user_id');
     }
 
+    /** @return HasMany<StaffEmploymentPeriod, $this> */
+    public function employmentPeriods(): HasMany
+    {
+        return $this->hasMany(StaffEmploymentPeriod::class, 'staff_id', 'user_id');
+    }
+
+    /** @return HasMany<Visit, $this> */
+    public function primaryVisits(): HasMany
+    {
+        return $this->hasMany(Visit::class, 'primary_staff_id', 'user_id');
+    }
+
+    /** @return HasMany<VisitTreatmentStaff, $this> */
+    public function treatmentAssignments(): HasMany
+    {
+        return $this->hasMany(VisitTreatmentStaff::class, 'staff_id', 'user_id');
+    }
+
+    /** @return HasMany<StaffRevenueAllocation, $this> */
+    public function revenueAllocations(): HasMany
+    {
+        return $this->hasMany(StaffRevenueAllocation::class, 'staff_id', 'user_id');
+    }
+
     /**
      * @return array<string, string>
      */

@@ -13,6 +13,7 @@ use App\Models\ReservationResourceSlot;
 use App\Models\Service;
 use App\Models\Staff;
 use App\Models\StaffShift;
+use App\Models\StoreCalendarDay;
 use App\Support\Settings\Settings;
 use App\Support\SlotKey;
 use Carbon\CarbonImmutable;
@@ -68,6 +69,24 @@ class AvailabilityServiceTest extends TestCase
         ], array_column($slots, 'starts_at'));
         $this->assertSame('2026-10-01 11:00:00', $slots[0]['ends_at']);
         $this->assertSame([], $slots[0]['available_staff_ids']);
+    }
+
+    public function test_special_business_hours_limit_open_start_times(): void
+    {
+        [$service, $staff] = $this->bookableServiceAndStaff();
+        $this->shift($staff, '10:00', '16:00');
+        StoreCalendarDay::query()->create([
+            'business_date' => $this->date->toDateString(),
+            'status' => StoreCalendarDay::STATUS_SPECIAL_HOURS,
+            'opens_at' => '12:00',
+            'closes_at' => '14:00',
+        ]);
+
+        $starts = array_column($this->openStartTimes($service, $staff), 'starts_at');
+
+        $this->assertSame('2026-10-01 12:00:00', $starts[0]);
+        $this->assertSame('2026-10-01 13:00:00', $starts[array_key_last($starts)]);
+        $this->assertNotContains('2026-10-01 11:45:00', $starts);
     }
 
     public function test_overlapping_starts_are_removed_for_an_occupied_staff(): void

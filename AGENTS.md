@@ -1,24 +1,26 @@
 # AGENTS.md — ARK 予約・決済システム（Codex 向け指示）
 
-あなた（Codex）は本リポジトリの **実装担当**。設計・レビュー・進行は Claude Code が担当する。
+あなた（Codex）は本リポジトリの **設計・実装・自己レビュー担当**。各 Task の計画、実装、検証、進行管理を一貫して行う。
 
 ## 毎回読むもの（作業前に必ず）
 
 1. この `AGENTS.md`
-2. `docs/PLAN.md`（承認済み設計。rev.5）
-3. `docs/tasks/phase-00.md`（現在のタスク一覧と受け入れ条件）
-4. 必要に応じ `docs/ARCHITECTURE.md` `docs/DB_SCHEMA.md`
+2. `docs/PLAN.md`（承認済み設計と Current Phase / Current Task）
+3. `docs/PLAN.md` が Current とする `docs/tasks/phase-XX.md`（Task の状態と受け入れ条件）
+4. 必要に応じ `docs/ARCHITECTURE.md` `docs/DB_SCHEMA.md` および当該 Task から参照される資料
 
 ## 作業ルール
 
 - **指示された Task 1 つだけ**を実装する。先の Task に手を出さない。
+- 実装可能なのは、`docs/PLAN.md` で **Current Phase** とされ、対応する `docs/tasks/phase-XX.md` で **CURRENT / APPROVED** と明記された Task だけとする。両者が不一致、未承認、または複数 Current の場合は実装せず停止して報告する。
 - Task の「受け入れ条件」をすべて満たすことをゴールにする。満たせない場合は理由を最後に明記して止まる。
 - 変更は**このリポジトリ配下のみ**。リポジトリ外（`../ark-system-proposal`, `../vela`, WordPress, その他）には一切触れない。
 - 既存ファイルを壊さない。特に以下は**上書き・削除しない**（内容統合が必要なら追記/マージする）:
   - `.gitignore` / `.env.example`
   - `config/reservation.php` / `config/retention.php` / `config/stripe.php`
   - `docs/**` / `AGENTS.md` / `.github/workflows/ci.yml`
-- コミットはしない（`git add` / `git commit` しない）。差分はワークツリーに残す。Claude Code が `git diff` でレビューする。
+- コミットはしない（`git add` / `git commit` しない）。差分はワークツリーに残し、Codex 自身が `git diff` で自己レビューする。
+- アプリケーションコード、依存関係、DB schema のいずれかを変更した Task では、当該 Task の受け入れ条件に従って regression、`./vendor/bin/sail artisan test`、`./vendor/bin/sail npm run build` を確認する。ドキュメント限定 Task では静的検証を行い、build / test を省略した理由を報告する。
 - 実装が終わったら、最後に「変更ファイル一覧・実行したコマンドと結果・受け入れ条件の充足状況・残課題」を短くまとめる。
 
 ## 絶対禁止
@@ -30,7 +32,7 @@
 - パッケージのグローバルインストール（`npm i -g`, `composer global`, `brew` 等）
 - Git remote への push
 - リポジトリ外への秘密情報送信
-- **Phase 1 以降の実装**（ドメインモデル・予約ロジック・Stripe 決済・回数券/利用権・予約台帳など）。Phase 0 は「動く土台」まで。
+- `docs/PLAN.md` と対応する Task 文書で Current / Approved になっていない Phase・Task の先行実装
 
 ## 環境
 
@@ -47,7 +49,7 @@
 - Vue 3 + TypeScript + Vuetify 3
 - DB: MySQL（Sail は当面 `mysql:8.4`。実バージョンは後日サーバー実測で確定）
 - 認証: Laravel 標準 + spatie/laravel-permission（web guard 1 つ）
-- 決済: Stripe + laravel/cashier（**Phase 1 以降**。Phase 0 では導入しない）
+- 決済: Stripe + laravel/cashier（課金契約のみ）
 
 ## コーディング規約
 

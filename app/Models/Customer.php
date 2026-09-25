@@ -93,6 +93,12 @@ class Customer extends Model
         return $this->hasMany(Payment::class, 'customer_id', 'user_id');
     }
 
+    /** @return HasMany<Visit, $this> */
+    public function visits(): HasMany
+    {
+        return $this->hasMany(Visit::class, 'customer_id', 'user_id');
+    }
+
     /**
      * @return Attribute<?Carbon, never>
      */

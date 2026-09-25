@@ -17,6 +17,8 @@ interface ServiceFormData {
     duration_min: number;
     price: number;
     category: string | null;
+    analysis_category_id: number | null;
+    tax_category_id: number | null;
     color: string;
     is_online_bookable: boolean;
     requires_staff: boolean;
@@ -24,9 +26,13 @@ interface ServiceFormData {
     staff_ids: number[];
 }
 
+interface MasterOption { id: number; code: string; name: string; is_active: boolean }
+
 const props = defineProps<{
     service: ServiceFormData;
     staff: StaffOption[];
+    analysisCategories: MasterOption[];
+    taxCategories: MasterOption[];
 }>();
 
 const categorySuggestions = ['整体', 'トレーニング', 'コンディショニング'];
@@ -36,6 +42,8 @@ const form = useForm({
     duration_min: props.service.duration_min,
     price: props.service.price,
     category: props.service.category,
+    analysis_category_id: props.service.analysis_category_id,
+    tax_category_id: props.service.tax_category_id,
     color: props.service.color,
     is_online_bookable: props.service.is_online_bookable,
     requires_staff: props.service.requires_staff,
@@ -79,6 +87,10 @@ const submit = (): void => {
                         :error-messages="form.errors.category"
                         clearable
                     />
+                    <div class="master-fields">
+                        <v-select v-model="form.analysis_category_id" label="集計用メニュー分類" :items="analysisCategories" item-title="name" item-value="id" clearable :error-messages="form.errors.analysis_category_id" />
+                        <v-select v-model="form.tax_category_id" label="税区分" :items="taxCategories" item-title="name" item-value="id" clearable :error-messages="form.errors.tax_category_id" />
+                    </div>
                     <div class="mb-4">
                         <ColorField v-model="form.color" label="表示色" />
                         <div v-if="form.errors.color" class="text-error text-caption mt-1">
@@ -184,6 +196,8 @@ const submit = (): void => {
     gap: var(--ark-space-4);
 }
 
+.master-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ark-space-4); }
+
 .switches {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -202,7 +216,8 @@ const submit = (): void => {
 
 @media (max-width: 600px) {
     .number-fields,
-    .switches {
+    .switches,
+    .master-fields {
         grid-template-columns: minmax(0, 1fr);
     }
 }

@@ -38,6 +38,12 @@ interface ShiftEntry {
     origin: string;
 }
 
+interface AttendanceBreak { start_at: string; end_at: string; type: string; note: string | null }
+interface AttendanceEntry {
+    id: number; business_date: string; clock_in_at: string | null; clock_out_at: string | null;
+    status: 'draft' | 'confirmed'; note: string | null; breaks: AttendanceBreak[];
+}
+
 interface BookingSettings {
     horizon_mode: 'none' | 'monthly' | 'rolling';
     horizon_days: number;
@@ -54,11 +60,44 @@ const props = defineProps<{
     templates: TemplateEntry[];
     exceptions: ExceptionEntry[];
     shifts: ShiftEntry[];
+    attendances: AttendanceEntry[];
     booking: BookingSettings;
     filters: { staff_id: number | null; from: string; to: string };
 }>();
 
-const tab = ref<'basic' | 'exceptions' | 'booking'>('basic');
+const tab = ref<'basic' | 'exceptions' | 'booking' | 'attendance'>('basic');
+
+const attendanceId = ref<number | null>(null);
+const attendanceForm = useForm<{
+    staff_id: number | null; business_date: string; clock_in_at: string; clock_out_at: string;
+    status: 'draft' | 'confirmed'; note: string; breaks: { start_at: string; end_at: string; type: string; note: string }[];
+}>({ staff_id: props.selected_staff_id, business_date: '', clock_in_at: '', clock_out_at: '', status: 'draft', note: '', breaks: [] });
+const editAttendance = (entry: AttendanceEntry): void => {
+    attendanceId.value = entry.id;
+    attendanceForm.staff_id = staffId.value;
+    attendanceForm.business_date = entry.business_date;
+    attendanceForm.clock_in_at = entry.clock_in_at ?? '';
+    attendanceForm.clock_out_at = entry.clock_out_at ?? '';
+    attendanceForm.status = entry.status;
+    attendanceForm.note = entry.note ?? '';
+    attendanceForm.breaks = entry.breaks.map((value) => ({ ...value, note: value.note ?? '' }));
+};
+const newAttendance = (): void => {
+    attendanceId.value = null;
+    attendanceForm.reset();
+    attendanceForm.staff_id = staffId.value;
+};
+const addAttendanceBreak = (): void => {
+    attendanceForm.breaks.push({ start_at: '', end_at: '', type: 'break', note: '' });
+};
+const saveAttendance = (): void => {
+    attendanceForm.staff_id = staffId.value;
+    if (attendanceId.value === null) {
+        attendanceForm.post('/admin/staff-shifts/attendances', { preserveScroll: true, onSuccess: newAttendance });
+    } else {
+        attendanceForm.put(`/admin/staff-shifts/attendances/${attendanceId.value}`, { preserveScroll: true });
+    }
+};
 
 // 月曜はじまりで表示（データ上は 0=日曜）。
 const WEEKDAYS: { value: number; label: string }[] = [
@@ -374,6 +413,7 @@ const horizonSummary = computed(() => {
         <v-tab value="basic">基本シフト</v-tab>
         <v-tab value="exceptions">例外日</v-tab>
         <v-tab value="booking">予約受付</v-tab>
+        <v-tab value="attendance">{{ MESSAGES.attendance.tab }}</v-tab>
     </v-tabs>
 
     <!-- スタッフ選択（基本シフト / 例外日で共通） -->
@@ -397,6 +437,46 @@ const horizonSummary = computed(() => {
     </div>
 
     <v-window v-model="tab">
+        <v-window-item value="attendance">
+            <SectionCard :title="MESSAGES.attendance.title" :subtitle="MESSAGES.attendance.subtitle">
+                <p v-if="staffId === null">{{ MESSAGES.attendance.selectStaff }}</p>
+                <template v-else>
+                    <div class="d-flex flex-wrap ga-3 mb-3">
+                        <v-text-field v-model="attendanceForm.business_date" type="date" :label="MESSAGES.attendance.date" style="max-width: 190px" />
+                        <v-text-field v-model="attendanceForm.clock_in_at" type="datetime-local" :label="MESSAGES.attendance.clockIn" style="max-width: 240px" />
+                        <v-text-field v-model="attendanceForm.clock_out_at" type="datetime-local" :label="MESSAGES.attendance.clockOut" style="max-width: 240px" />
+                    </div>
+                    <div v-for="(entry, index) in attendanceForm.breaks" :key="index" class="d-flex flex-wrap ga-3 align-center mb-2">
+                        <v-text-field v-model="entry.start_at" type="datetime-local" :label="MESSAGES.attendance.breakStart" style="max-width: 240px" />
+                        <v-text-field v-model="entry.end_at" type="datetime-local" :label="MESSAGES.attendance.breakEnd" style="max-width: 240px" />
+                        <v-btn variant="text" color="error" @click="attendanceForm.breaks.splice(index, 1)">{{ MESSAGES.attendance.removeBreak }}</v-btn>
+                    </div>
+                    <v-btn variant="text" class="mb-3" @click="addAttendanceBreak">{{ MESSAGES.attendance.addBreak }}</v-btn>
+                    <div class="d-flex flex-wrap ga-3">
+                        <v-select v-model="attendanceForm.status" :items="[{ title: MESSAGES.attendance.draft, value: 'draft' }, { title: MESSAGES.attendance.confirmed, value: 'confirmed' }]" style="max-width: 180px" />
+                        <v-text-field v-model="attendanceForm.note" :label="MESSAGES.attendance.note" style="max-width: 400px" />
+                    </div>
+                    <p v-if="Object.keys(attendanceForm.errors).length" role="alert" class="text-error">{{ MESSAGES.attendance.formError }} {{ Object.values(attendanceForm.errors).join(' / ') }}</p>
+                    <div class="d-flex ga-3">
+                        <v-btn color="primary" :loading="attendanceForm.processing" @click="saveAttendance">{{ MESSAGES.attendance.save }}</v-btn>
+                        <v-btn variant="outlined" @click="newAttendance">{{ MESSAGES.attendance.new }}</v-btn>
+                    </div>
+                </template>
+            </SectionCard>
+            <SectionCard :title="MESSAGES.attendance.title" class="mt-5">
+                <p v-if="attendances.length === 0">{{ MESSAGES.attendance.none }}</p>
+                <v-table v-else>
+                    <tbody>
+                        <tr v-for="entry in attendances" :key="entry.id">
+                            <td>{{ entry.business_date }}</td><td>{{ entry.clock_in_at ?? '—' }} 〜 {{ entry.clock_out_at ?? '—' }}</td>
+                            <td>{{ entry.status === 'confirmed' ? MESSAGES.attendance.confirmed : MESSAGES.attendance.draft }}</td>
+                            <td>{{ entry.note ?? '—' }}</td>
+                            <td><v-btn variant="text" @click="editAttendance(entry)">{{ MESSAGES.attendance.edit }}</v-btn></td>
+                        </tr>
+                    </tbody>
+                </v-table>
+            </SectionCard>
+        </v-window-item>
         <!-- ───────── タブ1：基本シフト ───────── -->
         <v-window-item value="basic">
             <SectionCard

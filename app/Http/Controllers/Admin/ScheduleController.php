@@ -77,7 +77,7 @@ final class ScheduleController extends Controller
         $reservationFormOptions = $optionsQuery->get();
 
         return Inertia::render('Admin/Schedule/Index', [
-            ...$query->get($date, $staffId, $view, $axis),
+            ...$query->get($date, $staffId, $view, $axis, $request->user()?->can('sales.view') ?? false),
             'staff_options' => $optionsQuery->staff(),
             // メニュー別「本当に予約できる開始時刻」プレビュー用（§11）。
             'menu_options' => $reservationFormOptions['services'],

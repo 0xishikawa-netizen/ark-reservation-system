@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Queries;
 
+use App\Domain\Reporting\DailyReportService;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Schedule\ScheduleBlockType;
 use App\Support\Settings\Settings;
@@ -12,7 +13,10 @@ use Illuminate\Support\Facades\DB;
 
 final class ScheduleQuery
 {
-    public function __construct(private readonly Settings $settings) {}
+    public function __construct(
+        private readonly Settings $settings,
+        private readonly DailyReportService $dailyReports,
+    ) {}
 
     /**
      * @return array{
@@ -26,7 +30,7 @@ final class ScheduleQuery
      *   range: array{start: string, end: string},
      *   days: list<string>,
      *   booths: list<array{id: int, name: string, sort_order: int}>,
-     *   summary: array{total: int, completed: int, new_customers: int, repeat_customers: int, canceled: int, no_show: int, revenue: int}|null
+     *   summary: array{total: int, completed: int, new_customers: int, repeat_customers: int, canceled: int, no_show: int, revenue: int|null}|null
      * }
      */
     public function get(
@@ -34,6 +38,7 @@ final class ScheduleQuery
         ?int $staffId = null,
         string $view = 'day',
         string $axis = 'staff',
+        bool $includeSales = false,
     ): array {
         $rangeStart = $view === 'week' ? $date->startOfWeek() : $date;
         $rangeEnd = $view === 'week' ? $date->endOfWeek() : $date;
@@ -190,7 +195,7 @@ final class ScheduleQuery
             'staff' => $staff,
             'shifts' => $shifts,
             'reservations' => $reservations,
-            'summary' => $view === 'day' ? $this->dailySummary($date) : null,
+            'summary' => $view === 'day' ? $this->dailySummary($date, $includeSales) : null,
             'business_hours' => [
                 'open' => (string) $this->settings->get(
                     'business_hours.open',
@@ -218,15 +223,14 @@ final class ScheduleQuery
     }
 
     /**
-     * 当日サマリー（§38-39）。既存 DB から正確に算出できるものだけを対象にする
-     * （曖昧な指標は作らない）。スタッフ絞り込みに関わらず、その日の店舗全体を集計する。
+     * 予約台帳の運用件数に、Phase 11の共通日次実績を合成する。
+     * スタッフ絞り込みに関わらず、その日の店舗全体を集計する。
      *
-     * @return array{total: int, completed: int, new_customers: int, repeat_customers: int, canceled: int, no_show: int, revenue: int}
+     * @return array{total: int, completed: int, new_customers: int, repeat_customers: int, canceled: int, no_show: int, revenue: int|null}
      */
-    private function dailySummary(CarbonImmutable $date): array
+    private function dailySummary(CarbonImmutable $date, bool $includeSales): array
     {
-        $rows = DB::table('reservations')
-            ->join('services', 'services.id', '=', 'reservations.service_id')
+        $reservationCounts = DB::table('reservations')
             ->where('reservations.starts_at', '>=', $date->startOfDay())
             ->where('reservations.starts_at', '<', $date->addDay()->startOfDay())
             ->whereIn('reservations.status', [
@@ -237,69 +241,20 @@ final class ScheduleQuery
                 ReservationStatus::NoShow->value,
                 ReservationStatus::Canceled->value,
             ])
-            ->get([
-                'reservations.customer_id',
-                'reservations.status',
-                'reservations.final_amount',
-                'services.price as service_price',
-            ]);
-
-        $customerIds = $rows->pluck('customer_id')->unique()->values()->all();
-        $firstVisitAt = $customerIds === []
-            ? collect()
-            : DB::table('reservations')
-                ->whereIn('customer_id', $customerIds)
-                ->whereIn('status', [
-                    ReservationStatus::PendingPayment->value,
-                    ReservationStatus::PendingExternalSync->value,
-                    ReservationStatus::Confirmed->value,
-                    ReservationStatus::Completed->value,
-                    ReservationStatus::NoShow->value,
-                ])
-                ->groupBy('customer_id')
-                ->selectRaw('customer_id, MIN(starts_at) as first_starts_at')
-                ->pluck('first_starts_at', 'customer_id');
-
-        $dayStart = $date->startOfDay()->format('Y-m-d H:i:s');
-        $dayEnd = $date->addDay()->startOfDay()->format('Y-m-d H:i:s');
-
-        $newCustomerIds = [];
-        $repeatCustomerIds = [];
-        $completed = 0;
-        $canceled = 0;
-        $noShow = 0;
-        $revenue = 0;
-
-        foreach ($rows as $row) {
-            $status = (string) $row->status;
-
-            if ($status === ReservationStatus::Completed->value) {
-                $completed++;
-                $revenue += $row->final_amount !== null ? (int) $row->final_amount : (int) $row->service_price;
-            } elseif ($status === ReservationStatus::Canceled->value) {
-                $canceled++;
-            } elseif ($status === ReservationStatus::NoShow->value) {
-                $noShow++;
-            }
-
-            $first = $firstVisitAt[$row->customer_id] ?? null;
-            $isNewToday = $first !== null && (string) $first >= $dayStart && (string) $first < $dayEnd;
-
-            if ($isNewToday) {
-                $newCustomerIds[$row->customer_id] = true;
-            } else {
-                $repeatCustomerIds[$row->customer_id] = true;
-            }
-        }
+            ->selectRaw('COUNT(*) AS total')
+            ->selectRaw('COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS canceled', [ReservationStatus::Canceled->value])
+            ->selectRaw('COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS no_show', [ReservationStatus::NoShow->value])
+            ->first();
+        $report = $this->dailyReports->forDate($date->toDateString());
 
         return [
-            'total' => $rows->count(),
-            'completed' => $completed,
-            'new_customers' => count($newCustomerIds),
-            'repeat_customers' => count($repeatCustomerIds),
-            'canceled' => $canceled,
-            'no_show' => $noShow,
-            'revenue' => $revenue,
+            'total' => (int) $reservationCounts->total,
+            'completed' => $report->visitCount,
+            'new_customers' => $report->firstVisitCount,
+            'repeat_customers' => $report->visitCount - $report->firstVisitCount,
+            'canceled' => (int) $reservationCounts->canceled,
+            'no_show' => (int) $reservationCounts->no_show,
+            'revenue' => $includeSales ? $report->paymentDateRevenue : null,
         ];
     }
 }

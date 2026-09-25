@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class TicketWallet extends Model
 {
@@ -45,6 +46,11 @@ class TicketWallet extends Model
     public function reservationUsages(): HasMany
     {
         return $this->hasMany(TicketReservationUsage::class);
+    }
+
+    public function revenueRecognitionContract(): HasOne
+    {
+        return $this->hasOne(RevenueRecognitionContract::class);
     }
 
     /** @param  Builder<TicketWallet>  $query */

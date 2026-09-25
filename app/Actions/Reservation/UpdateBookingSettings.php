@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Actions\Reservation;
 
+use App\Domain\Business\StoreCalendarService;
 use App\Domain\Reservation\BookingWindow;
 use App\Support\Audit\AuditLogger;
 use App\Support\Settings\Settings;
@@ -17,6 +18,7 @@ final class UpdateBookingSettings
 {
     public function __construct(
         private readonly Settings $settings,
+        private readonly StoreCalendarService $storeCalendar,
         private readonly AuditLogger $auditLogger,
     ) {}
 
@@ -47,7 +49,7 @@ final class UpdateBookingSettings
         $this->settings->set('booking.horizon_days', max(1, min(365, $data['horizon_days'])), 'int');
         $this->settings->set('booking.release_day_of_month', max(1, min(28, $data['release_day_of_month'])), 'int');
         $this->settings->set('booking.min_lead_minutes', max(0, $data['min_lead_minutes']), 'int');
-        $this->settings->set('booking.closed_dates', $closedDates, 'json');
+        $this->storeCalendar->replaceClosedDates($closedDates, $actor);
 
         $this->auditLogger->log(
             'booking_settings.updated',

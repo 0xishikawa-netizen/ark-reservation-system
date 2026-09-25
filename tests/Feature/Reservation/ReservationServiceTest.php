@@ -19,6 +19,7 @@ use App\Models\Reservation;
 use App\Models\Service;
 use App\Models\Staff;
 use App\Models\StaffShift;
+use App\Models\StoreCalendarDay;
 use App\Support\Settings\Settings;
 use App\Support\StateMachine\Events\StateTransitioned;
 use Carbon\CarbonImmutable;
@@ -207,7 +208,10 @@ class ReservationServiceTest extends TestCase
     {
         [$customer, $service, , $booth] = $this->bookableMasters(requiresStaff: false);
         $settings = app(Settings::class);
-        $settings->set('booking.closed_dates', ['2026-10-01'], 'json');
+        StoreCalendarDay::query()->create([
+            'business_date' => '2026-10-01',
+            'status' => StoreCalendarDay::STATUS_CLOSED,
+        ]);
         $settings->set('booking.horizon_mode', 'rolling', 'string');
         $settings->set('booking.horizon_days', 7, 'int');
 
@@ -238,6 +242,24 @@ class ReservationServiceTest extends TestCase
             $this->input($customer, $service, null, $booth, $beyond, adminContext: true),
         );
         $this->assertSame('2026-09-20 10:00:00', $reservation->starts_at->format('Y-m-d H:i:s'));
+    }
+
+    public function test_special_business_hours_block_direct_reservation_outside_exception_hours(): void
+    {
+        [$customer, $service, , $booth] = $this->bookableMasters(requiresStaff: false);
+        StoreCalendarDay::query()->create([
+            'business_date' => '2026-10-01',
+            'status' => StoreCalendarDay::STATUS_SPECIAL_HOURS,
+            'opens_at' => '12:00',
+            'closes_at' => '18:00',
+        ]);
+
+        $this->assertValidationFailure(
+            fn () => $this->reservationService()->create(
+                $this->input($customer, $service, null, $booth, CarbonImmutable::parse('2026-10-01 10:00:00'), adminContext: true),
+            ),
+            'starts_at',
+        );
     }
 
     public function test_create_requires_at_least_one_resource(): void

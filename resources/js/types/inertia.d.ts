@@ -28,6 +28,8 @@ interface AuthPermissions {
     integrationsManage: boolean;
     settingsManage: boolean;
     rolesManage: boolean;
+    reportsView: boolean;
+    salesView: boolean;
 }
 
 interface SharedPageProps {

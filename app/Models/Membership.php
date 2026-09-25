@@ -56,6 +56,12 @@ class Membership extends Model
         return $this->hasMany(MembershipReservationUsage::class);
     }
 
+    /** @return HasMany<RevenueRecognitionContract, $this> */
+    public function revenueRecognitionContracts(): HasMany
+    {
+        return $this->hasMany(RevenueRecognitionContract::class);
+    }
+
     /** @param  Builder<Membership>  $query */
     public function scopeBookable(Builder $query): void
     {

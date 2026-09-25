@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Reservation;
 
 use App\Domain\Reservation\BookingWindow;
+use App\Models\StoreCalendarDay;
 use App\Support\Settings\Settings;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -75,7 +76,7 @@ class BookingWindowTest extends TestCase
         $this->set('booking.horizon_mode', 'monthly', 'string');
         $this->set('booking.release_day_of_month', 20, 'int');
         $this->set('booking.min_lead_minutes', 120, 'int');
-        $this->set('booking.closed_dates', ['2026-09-23'], 'json');
+        StoreCalendarDay::query()->create(['business_date' => '2026-09-23', 'status' => StoreCalendarDay::STATUS_CLOSED]);
 
         $now = CarbonImmutable::parse('2026-09-14 12:00:00');
         $window = $this->window();
@@ -107,7 +108,7 @@ class BookingWindowTest extends TestCase
 
     public function test_assert_customer_bookable_throws_validation_exception(): void
     {
-        $this->set('booking.closed_dates', ['2026-09-20'], 'json');
+        StoreCalendarDay::query()->create(['business_date' => '2026-09-20', 'status' => StoreCalendarDay::STATUS_CLOSED]);
 
         $this->expectException(ValidationException::class);
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { MESSAGES } from '@/constants/messages';
 
 const navigationGroupTitles = [
     // 店舗業務のメイン画面。ヘッダー左端（ダッシュボードより前）に単独タブで出す。
@@ -9,6 +10,7 @@ const navigationGroupTitles = [
     '予約',
     '顧客',
     '支払い',
+    '集計',
     '設定',
     'システム',
 ] as const;
@@ -71,11 +73,32 @@ const navigationItems = computed<NavigationItem[]>(() => {
         ...(can.reservationsView
             ? [{ title: 'ブッキングボード', href: '/admin/schedule', disabled: false, icon: 'mdi-calendar-month-outline', group: 'ボード' as const }]
             : []),
+        ...(can.reportsView && can.salesView
+            ? [{ title: '月計', href: '/admin/reports/monthly', disabled: false, icon: 'mdi-chart-box-outline', group: '集計' as const }]
+            : []),
+        ...(can.reportsView && can.salesView
+            ? [{ title: MESSAGES.reporting.annualTitle, href: '/admin/reports/annual', disabled: false, icon: 'mdi-calendar-range', group: '集計' as const }]
+            : []),
+        ...(can.reportsView
+            ? [{ title: MESSAGES.reporting.customerTitle, href: '/admin/reports/customers', disabled: false, icon: 'mdi-account-group-outline', group: '集計' as const }]
+            : []),
+        ...(can.reportsView
+            ? [{ title: MESSAGES.reporting.staffTitle, href: '/admin/reports/staff-utilization', disabled: false, icon: 'mdi-chart-timeline-variant', group: '集計' as const }]
+            : []),
+        ...(can.reportsView
+            ? [{ title: MESSAGES.reporting.bandTitle, href: '/admin/reports/time-bands', disabled: false, icon: 'mdi-clock-outline', group: '集計' as const }]
+            : []),
         ...(can.staffManage
             ? [{ title: 'スタッフ', href: '/admin/staff', disabled: false, icon: 'mdi-account-group-outline', group: '設定' as const, subgroup: '店舗設定' }]
             : []),
         ...(can.servicesManage
             ? [{ title: 'メニュー', href: '/admin/services', disabled: false, icon: 'mdi-clipboard-text-outline', group: '設定' as const, subgroup: '店舗設定' }]
+            : []),
+        ...(can.settingsManage
+            ? [
+                  { title: '商品', href: '/admin/products', disabled: false, icon: 'mdi-package-variant-closed', group: '設定' as const, subgroup: '店舗設定' },
+                  { title: '業務マスタ', href: '/admin/settings/business-masters', disabled: false, icon: 'mdi-database-cog-outline', group: '設定' as const, subgroup: '店舗設定' },
+              ]
             : []),
         ...(can.boothsManage
             ? [{ title: 'ブース', href: '/admin/booths', disabled: false, icon: 'mdi-door-open', group: '設定' as const, subgroup: '店舗設定' }]

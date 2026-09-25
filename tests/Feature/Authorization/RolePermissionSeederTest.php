@@ -23,8 +23,8 @@ class RolePermissionSeederTest extends TestCase
 
         $this->assertSame($firstCounts, $this->permissionTableCounts());
         $this->assertSame(4, $firstCounts['roles']);
-        $this->assertSame(20, $firstCounts['permissions']);
-        $this->assertSame(34, $firstCounts['role_has_permissions']);
+        $this->assertSame(25, $firstCounts['permissions']);
+        $this->assertSame(39, $firstCounts['role_has_permissions']);
         $this->assertTrue($this->roleHasPermission('admin', 'roles.manage'));
         $this->assertFalse($this->roleHasPermission('manager', 'roles.manage'));
         $this->assertFalse($this->roleHasPermission('staff', 'roles.manage'));
@@ -35,6 +35,15 @@ class RolePermissionSeederTest extends TestCase
         $this->assertTrue($this->roleHasPermission('manager', 'integrations.view'));
         $this->assertFalse($this->roleHasPermission('manager', 'integrations.manage'));
         $this->assertFalse($this->roleHasPermission('staff', 'integrations.view'));
+        $this->assertTrue($this->roleHasPermission('admin', 'reports.view'));
+        $this->assertTrue($this->roleHasPermission('admin', 'reports.export'));
+        $this->assertTrue($this->roleHasPermission('admin', 'reports.reconcile'));
+        $this->assertTrue($this->roleHasPermission('admin', 'historical_data.import'));
+        $this->assertFalse($this->roleHasPermission('manager', 'historical_data.import'));
+        $this->assertFalse($this->roleHasPermission('manager', 'reports.export'));
+        $this->assertTrue($this->roleHasPermission('admin', 'sales.view'));
+        $this->assertFalse($this->roleHasPermission('manager', 'reports.view'));
+        $this->assertFalse($this->roleHasPermission('manager', 'sales.view'));
         $this->assertTrue($this->roleHasPermission('admin', 'booths.manage'));
         $this->assertTrue($this->roleHasPermission('admin', 'shifts.manage'));
         $this->assertTrue($this->roleHasPermission('admin', 'customers.view'));

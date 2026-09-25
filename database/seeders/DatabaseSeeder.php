@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(RolePermissionSeeder::class);
         $this->call(SettingsSeeder::class);
+        $this->call(Phase11MasterSeeder::class);
 
         // 開発用の固定管理者（Phase 9 / item 10）。production では呼ばず、
         // DevelopmentAdminSeeder 自身も同じ環境判定で no-op になる（多重ガード）。

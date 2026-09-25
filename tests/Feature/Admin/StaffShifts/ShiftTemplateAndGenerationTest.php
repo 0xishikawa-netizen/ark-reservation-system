@@ -9,6 +9,7 @@ use App\Models\Staff;
 use App\Models\StaffShift;
 use App\Models\StaffShiftException;
 use App\Models\StaffShiftTemplate;
+use App\Models\StoreCalendarDay;
 use App\Models\User;
 use App\Support\Settings\Settings;
 use Carbon\CarbonImmutable;
@@ -139,7 +140,10 @@ class ShiftTemplateAndGenerationTest extends TestCase
         $settings->set('booking.horizon_days', 40, 'int');
 
         // 対象になる月曜日たち: 9/21, 9/28, 10/5, 10/12 ...
-        $settings->set('booking.closed_dates', ['2026-09-21'], 'json');
+        StoreCalendarDay::query()->create([
+            'business_date' => '2026-09-21',
+            'status' => StoreCalendarDay::STATUS_CLOSED,
+        ]);
         StaffShiftException::query()->create([
             'staff_id' => $staff->user_id, 'exception_date' => '2026-09-28', 'is_off' => true,
         ]);
@@ -294,7 +298,10 @@ class ShiftTemplateAndGenerationTest extends TestCase
         $settings = app(Settings::class);
         $this->assertSame('monthly', $settings->get('booking.horizon_mode'));
         $this->assertSame(20, $settings->get('booking.release_day_of_month'));
-        $this->assertSame(['2026-12-31'], $settings->get('booking.closed_dates'));
+        $this->assertDatabaseHas('store_calendar_days', [
+            'business_date' => '2026-12-31',
+            'status' => StoreCalendarDay::STATUS_CLOSED,
+        ]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'booking_settings.updated']);
     }
 

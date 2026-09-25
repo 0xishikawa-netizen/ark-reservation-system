@@ -9,6 +9,7 @@ use App\Domain\Integration\Service\ReservationOutboxRecorder;
 use App\Domain\Membership\MembershipReservationService;
 use App\Domain\Payment\PaymentService;
 use App\Domain\Ticket\TicketReservationService;
+use App\Domain\Visit\VisitCompletionService;
 use App\Enums\Payment\PaymentKind;
 use App\Enums\Payment\PaymentStatus as CardPaymentStatus;
 use App\Enums\Payment\RefundStatus;
@@ -51,6 +52,7 @@ final class ReservationService
         private readonly CancellationPolicy $cancellationPolicy,
         private readonly PaymentService $payments,
         private readonly BookingWindow $bookingWindow,
+        private readonly VisitCompletionService $visitCompletion,
     ) {}
 
     /** @throws ValidationException|SlotUnavailableException */
@@ -392,24 +394,7 @@ final class ReservationService
         Reservation $reservation,
         ?Authenticatable $actor,
     ): Reservation {
-        $reservation = DB::transaction(function () use ($reservation, $actor): Reservation {
-            $reservation = $this->lockReservation($reservation);
-            $this->applyStatus($reservation, ReservationStatus::Completed);
-            $reservation->forceFill(['attended_at' => now()])->save();
-            $this->tickets->consume($reservation, $actor);
-            $this->memberships->consume($reservation, $actor);
-
-            return $reservation;
-        });
-
-        $this->auditLogger->log(
-            'reservation.completed',
-            $reservation,
-            "予約完了 #{$reservation->id}",
-            $actor,
-        );
-
-        return $reservation;
+        return $this->visitCompletion->completeReservation($reservation, $actor)->reservation;
     }
 
     /** @throws ValidationException */
@@ -513,6 +498,10 @@ final class ReservationService
         // 店舗休業日は物理的に不可能な予約として、管理者手動も含め一律で拒否する（#11）。
         if ($this->bookingWindow->isClosedDate($startsAt)) {
             $this->throwValidation('starts_at', __('messages.reservation.closed_date'));
+        }
+
+        if (! $this->bookingWindow->isWithinCalendarHours($startsAt, $endsAt)) {
+            $this->throwValidation('starts_at', __('messages.reservation.outside_calendar_hours'));
         }
 
         // 予約受付期間・直前締切は「顧客の予約」にのみ効かせる（管理者手動は従来どおり）。

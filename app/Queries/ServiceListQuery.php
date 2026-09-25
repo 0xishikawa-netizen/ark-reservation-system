@@ -22,13 +22,19 @@ class ServiceListQuery
                 'duration_min',
                 'price',
                 'category',
+                'analysis_category_id',
+                'tax_category_id',
                 'is_online_bookable',
                 'requires_staff',
                 'color',
                 'is_active',
                 'sort_order',
             ])
-            ->with('staff:user_id,display_name')
+            ->with([
+                'staff:user_id,display_name',
+                'analysisCategory:id,name',
+                'taxCategory:id,name',
+            ])
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($query) use ($search): void {
                     $query->where('name', 'like', "%{$search}%")

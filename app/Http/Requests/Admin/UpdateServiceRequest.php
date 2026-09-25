@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Requests\Admin;
 
 use App\Models\Service;
+use App\Models\ServiceAnalysisCategory;
+use App\Models\TaxCategory;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class UpdateServiceRequest extends FormRequest
@@ -23,6 +26,8 @@ class UpdateServiceRequest extends FormRequest
             'duration_min' => ['required', 'integer', 'min:5', 'max:600'],
             'price' => ['required', 'integer', 'min:0'],
             'category' => ['nullable', 'string', 'max:50'],
+            'analysis_category_id' => ['nullable', 'integer', Rule::exists(ServiceAnalysisCategory::class, 'id')],
+            'tax_category_id' => ['nullable', 'integer', Rule::exists(TaxCategory::class, 'id')],
             'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'is_online_bookable' => ['sometimes', 'boolean'],
             'requires_staff' => ['sometimes', 'boolean'],

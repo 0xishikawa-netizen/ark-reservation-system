@@ -91,18 +91,14 @@ final class TicketIdempotencyTest extends TestCase
         $this->assertSame(TicketReservationUsageStatus::Released, $this->usage($reservation)->status);
     }
 
-    public function test_completed_retry_is_rejected_and_release_and_consume_are_each_written_once(): void
+    public function test_completed_retry_returns_safely_and_release_and_consume_are_each_written_once(): void
     {
         [$reservation, $wallet] = $this->ticketReservation('complete-retry');
 
         $this->reservationService()->markCompleted($reservation, null);
 
-        try {
-            $this->reservationService()->markCompleted($reservation, null);
-            $this->fail('完了済み予約への再完了が成功しました。');
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey('status', $exception->errors());
-        }
+        $retry = $this->reservationService()->markCompleted($reservation, null);
+        $this->assertSame($reservation->id, $retry->id);
 
         $this->assertSame(1, $this->transactionCount(TicketTransactionType::ReserveRelease));
         $this->assertSame(1, $this->transactionCount(TicketTransactionType::Consume));

@@ -11,8 +11,12 @@ interface StaffOption {
     is_bookable: boolean;
 }
 
+interface MasterOption { id: number; code: string; name: string; is_active: boolean }
+
 defineProps<{
     staff: StaffOption[];
+    analysisCategories: MasterOption[];
+    taxCategories: MasterOption[];
 }>();
 
 const categorySuggestions = ['整体', 'トレーニング', 'コンディショニング'];
@@ -22,6 +26,8 @@ const form = useForm({
     duration_min: 60,
     price: 0,
     category: null as string | null,
+    analysis_category_id: null as number | null,
+    tax_category_id: null as number | null,
     color: '#607d8b',
     is_online_bookable: true,
     requires_staff: true,
@@ -65,6 +71,26 @@ const submit = (): void => {
                         :error-messages="form.errors.category"
                         clearable
                     />
+                    <div class="master-fields">
+                        <v-select
+                            v-model="form.analysis_category_id"
+                            label="集計用メニュー分類"
+                            :items="analysisCategories"
+                            item-title="name"
+                            item-value="id"
+                            clearable
+                            :error-messages="form.errors.analysis_category_id"
+                        />
+                        <v-select
+                            v-model="form.tax_category_id"
+                            label="税区分"
+                            :items="taxCategories"
+                            item-title="name"
+                            item-value="id"
+                            clearable
+                            :error-messages="form.errors.tax_category_id"
+                        />
+                    </div>
                     <div class="mb-4">
                         <ColorField v-model="form.color" label="表示色" />
                         <div v-if="form.errors.color" class="text-error text-caption mt-1">
@@ -170,6 +196,8 @@ const submit = (): void => {
     gap: var(--ark-space-4);
 }
 
+.master-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ark-space-4); }
+
 .switches {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -188,7 +216,8 @@ const submit = (): void => {
 
 @media (max-width: 600px) {
     .number-fields,
-    .switches {
+    .switches,
+    .master-fields {
         grid-template-columns: minmax(0, 1fr);
     }
 }

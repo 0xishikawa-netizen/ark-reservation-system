@@ -3,28 +3,40 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AnnualReportController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BoothController;
+use App\Http\Controllers\Admin\BusinessMasterSettingsController;
+use App\Http\Controllers\Admin\CustomerAnalyticsController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\CustomerMembershipController as AdminCustomerMembershipController;
 use App\Http\Controllers\Admin\CustomerTicketController;
+use App\Http\Controllers\Admin\DailyReportController;
 use App\Http\Controllers\Admin\FailedJobsController;
+use App\Http\Controllers\Admin\HistoricalImportController;
 use App\Http\Controllers\Admin\Integrations\ReservationIntegrationController;
 use App\Http\Controllers\Admin\MembershipPlanController;
 use App\Http\Controllers\Admin\MfaController;
+use App\Http\Controllers\Admin\MonthlyReportController;
 use App\Http\Controllers\Admin\NotificationSettingsController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
+use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\ReportReconciliationController;
+use App\Http\Controllers\Admin\ReportWorkbookController;
 use App\Http\Controllers\Admin\ReservationController as AdminReservationController;
 use App\Http\Controllers\Admin\ReservationPolicySettingsController;
 use App\Http\Controllers\Admin\RolePermissionController;
 use App\Http\Controllers\Admin\ScheduleBlockController;
 use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
+use App\Http\Controllers\Admin\StaffAttendanceController;
 use App\Http\Controllers\Admin\StaffController;
 use App\Http\Controllers\Admin\StaffShiftController;
+use App\Http\Controllers\Admin\StaffUtilizationController;
 use App\Http\Controllers\Admin\SystemStatusController;
 use App\Http\Controllers\Admin\TicketPolicySettingsController;
 use App\Http\Controllers\Admin\TicketProductController;
+use App\Http\Controllers\Admin\TimeBandUtilizationController;
 use App\Http\Controllers\Admin\TwoFactorSetupController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Booking\BookingConfirmationController;
@@ -212,6 +224,53 @@ Route::middleware([
     Route::get('schedule', [ScheduleController::class, 'index'])
         ->middleware('can:reservations.view')
         ->name('schedule.index');
+    Route::get('reports/daily', DailyReportController::class)
+        ->middleware(['can:reports.view', 'can:sales.view'])
+        ->name('reports.daily');
+    Route::get('reports/monthly', [MonthlyReportController::class, 'index'])
+        ->middleware(['can:reports.view', 'can:sales.view'])
+        ->name('reports.monthly');
+    Route::get('reports/monthly/data', [MonthlyReportController::class, 'data'])
+        ->middleware(['can:reports.view', 'can:sales.view'])
+        ->name('reports.monthly.data');
+    Route::get('reports/customers', [CustomerAnalyticsController::class, 'index'])
+        ->middleware('can:reports.view')
+        ->name('reports.customers');
+    Route::get('reports/customers/data', [CustomerAnalyticsController::class, 'data'])
+        ->middleware('can:reports.view')
+        ->name('reports.customers.data');
+    Route::get('reports/staff-utilization', [StaffUtilizationController::class, 'index'])
+        ->middleware('can:reports.view')->name('reports.staff-utilization');
+    Route::get('reports/staff-utilization/data', [StaffUtilizationController::class, 'data'])
+        ->middleware('can:reports.view')->name('reports.staff-utilization.data');
+    Route::get('reports/time-bands', [TimeBandUtilizationController::class, 'index'])
+        ->middleware('can:reports.view')->name('reports.time-bands');
+    Route::get('reports/time-bands/data', [TimeBandUtilizationController::class, 'data'])
+        ->middleware('can:reports.view')->name('reports.time-bands.data');
+    Route::get('reports/annual', [AnnualReportController::class, 'index'])
+        ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.annual');
+    Route::get('reports/annual/data', [AnnualReportController::class, 'data'])
+        ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.annual.data');
+    Route::get('reports/excel', ReportWorkbookController::class)
+        ->middleware(['can:reports.view', 'can:sales.view', 'can:reports.export'])->name('reports.excel');
+    Route::get('reports/reconciliation', [ReportReconciliationController::class, 'index'])
+        ->middleware(['can:reports.view', 'can:sales.view', 'can:reports.reconcile'])->name('reports.reconciliation');
+    Route::post('reports/reconciliation/{historicalMetric}/review', [ReportReconciliationController::class, 'review'])
+        ->middleware(['can:reports.view', 'can:sales.view', 'can:reports.reconcile'])->name('reports.reconciliation.review');
+    Route::get('reports/historical-imports', [HistoricalImportController::class, 'index'])
+        ->middleware('can:historical_data.import')->name('reports.historical-imports.index');
+    Route::post('reports/historical-imports/preview', [HistoricalImportController::class, 'preview'])
+        ->middleware(['can:historical_data.import', 'throttle:6,1'])->name('reports.historical-imports.preview');
+    Route::post('reports/historical-imports', [HistoricalImportController::class, 'store'])
+        ->middleware(['can:historical_data.import', 'throttle:6,1'])->name('reports.historical-imports.store');
+    Route::get('reports/historical-imports/{batch}', [HistoricalImportController::class, 'show'])
+        ->middleware('can:historical_data.import')->name('reports.historical-imports.show');
+    Route::post('reports/historical-imports/{batch}/commit', [HistoricalImportController::class, 'commit'])
+        ->middleware('can:historical_data.import')->name('reports.historical-imports.commit');
+    Route::post('reports/historical-import-rows/{row}/customer-match', [HistoricalImportController::class, 'confirmCustomerMatch'])
+        ->middleware('can:historical_data.import')->name('reports.historical-imports.customer-match');
+    Route::post('reports/historical-imports/{batch}/invalidate', [HistoricalImportController::class, 'invalidate'])
+        ->middleware('can:historical_data.import')->name('reports.historical-imports.invalidate');
     // 予約台帳のドラッグ&ドロップによる時間変更（§13-17）。既存の reschedule Service を再利用。
     Route::put('schedule/reservations/{reservation}/time', [ScheduleController::class, 'updateReservationTime'])
         ->middleware('can:reservations.manage')
@@ -320,6 +379,10 @@ Route::middleware([
         ->middleware(['can:staff.manage', 'password.confirm'])
         ->name('staff.deactivate');
     Route::middleware('can:shifts.manage')->group(function (): void {
+        Route::post('staff-shifts/attendances', [StaffAttendanceController::class, 'store'])
+            ->name('staff-shifts.attendances.store');
+        Route::put('staff-shifts/attendances/{attendance}', [StaffAttendanceController::class, 'update'])
+            ->name('staff-shifts.attendances.update');
         Route::get('staff-shifts', [StaffShiftController::class, 'index'])
             ->name('staff-shifts.index');
         Route::post('staff-shifts', [StaffShiftController::class, 'store'])
@@ -347,6 +410,45 @@ Route::middleware([
             ->only(['index', 'create', 'store', 'edit', 'update']);
         Route::patch('services/{service}/active', [ServiceController::class, 'setActive'])
             ->name('services.set-active');
+    });
+    Route::middleware('can:settings.manage')->group(function (): void {
+        Route::resource('products', ProductController::class)
+            ->only(['index', 'create', 'store', 'edit', 'update']);
+        Route::patch('products/{product}/active', [ProductController::class, 'setActive'])
+            ->name('products.set-active');
+
+        Route::get('settings/business-masters', [BusinessMasterSettingsController::class, 'show'])
+            ->name('settings.business-masters.show');
+        Route::post('settings/business-masters/analysis-categories', [BusinessMasterSettingsController::class, 'storeAnalysisCategory'])
+            ->name('settings.business-masters.analysis-categories.store');
+        Route::put('settings/business-masters/analysis-categories/{analysisCategory}', [BusinessMasterSettingsController::class, 'updateAnalysisCategory'])
+            ->name('settings.business-masters.analysis-categories.update');
+        Route::post('settings/business-masters/tax-categories', [BusinessMasterSettingsController::class, 'storeTaxCategory'])
+            ->name('settings.business-masters.tax-categories.store');
+        Route::put('settings/business-masters/tax-categories/{taxCategory}', [BusinessMasterSettingsController::class, 'updateTaxCategory'])
+            ->name('settings.business-masters.tax-categories.update');
+        Route::post('settings/business-masters/tax-rates', [BusinessMasterSettingsController::class, 'storeTaxRate'])
+            ->name('settings.business-masters.tax-rates.store');
+        Route::put('settings/business-masters/tax-rates/{taxRate}', [BusinessMasterSettingsController::class, 'updateTaxRate'])
+            ->name('settings.business-masters.tax-rates.update');
+        Route::post('settings/business-masters/payment-methods', [BusinessMasterSettingsController::class, 'storePaymentMethod'])
+            ->name('settings.business-masters.payment-methods.store');
+        Route::put('settings/business-masters/payment-methods/{paymentMethod}', [BusinessMasterSettingsController::class, 'updatePaymentMethod'])
+            ->name('settings.business-masters.payment-methods.update');
+        Route::put('settings/business-masters/calendar', [BusinessMasterSettingsController::class, 'saveCalendarDay'])
+            ->name('settings.business-masters.calendar.save');
+        Route::delete('settings/business-masters/calendar/{calendarDay}', [BusinessMasterSettingsController::class, 'clearCalendarDay'])
+            ->name('settings.business-masters.calendar.clear');
+        Route::put('settings/business-masters/sales-target/default', [BusinessMasterSettingsController::class, 'updateDefaultSalesTarget'])
+            ->name('settings.business-masters.sales-target.default');
+        Route::put('settings/business-masters/sales-target/monthly', [BusinessMasterSettingsController::class, 'updateMonthlySalesTarget'])
+            ->name('settings.business-masters.sales-target.monthly');
+        Route::delete('settings/business-masters/sales-target/monthly/{salesTarget}', [BusinessMasterSettingsController::class, 'clearMonthlySalesTarget'])
+            ->name('settings.business-masters.sales-target.monthly.clear');
+        Route::post('settings/business-masters/employment-types', [BusinessMasterSettingsController::class, 'storeEmploymentType'])
+            ->name('settings.business-masters.employment-types.store');
+        Route::put('settings/business-masters/employment-types/{employmentType}', [BusinessMasterSettingsController::class, 'updateEmploymentType'])
+            ->name('settings.business-masters.employment-types.update');
     });
     Route::middleware('can:ticket_products.manage')->group(function (): void {
         Route::get('ticket-products', [TicketProductController::class, 'index'])

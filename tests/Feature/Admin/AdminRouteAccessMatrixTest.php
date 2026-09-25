@@ -154,6 +154,7 @@ final class AdminRouteAccessMatrixTest extends TestCase
             'reservations.manage', 'settings.manage', 'refund.execute', 'ticket.grant',
             'membership.manage', 'ticket_policy.manage', 'ticket_products.manage',
             'failed_jobs.view', 'audit_logs.view', 'integrations.view', 'integrations.manage',
+            'reports.view', 'sales.view',
         ];
 
         foreach ($can as $permission) {

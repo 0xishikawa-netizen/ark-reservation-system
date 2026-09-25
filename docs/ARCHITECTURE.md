@@ -25,7 +25,7 @@ ARK Conditioning の会員予約・決済システム。既存 WordPress サイ�
 | `Ticket` | 回数券（wallet / 追記型 transaction / FEFO） |
 | `Membership` | 利用権（`membership_plans` / `memberships` / `membership_usage_transactions`） |
 | `Payment` | Stripe 課金・返金・Webhook（Cashier は課金契約のみ） |
-| `Reporting` | 集計（Phase 11。初期は空の器） |
+| `Reporting` | 日次・月次・年間の共通read model（`DailyReportService` / `MonthlyReportService` / `AnnualReportService`）。Excelも同じSummaryを再利用する |
 | `ExternalIntegration` | 外部予約サービスとの**通信のみ**（`ExternalReservationGateway`）、同期ジョブ、`sync_logs` |
 
 補助：`app/Support`（`StateMachine` / `Money` / `SlotKey` / `Retention`）。
@@ -91,7 +91,7 @@ Phase 9 で Provider 非依存の連携基盤を実装。Domain（`ReservationSe
 
 - **基本シフト**：`staff_shift_templates`（曜日 × 時間帯、同一曜日複数可）。`SaveShiftTemplates` が 1 スタッフぶんをまるごと置換。過去の実績枠は書き換えない。
 - **例外日**：`staff_shift_exceptions`（`is_off` = 休み / 時間変更）。例外日がある (staff, date) は自動生成の対象外。`is_off` は生成済み `origin=template` 枠のみ削除し、手動枠・予約には触れない。
-- **予約受付**：`BookingWindow`（`App\Domain\Reservation`）が正本。`booking.horizon_mode`（`monthly`：毎月 `release_day_of_month` に翌月末まで開放 / `rolling`：`horizon_days` 先まで / `none`）、`booking.min_lead_minutes`（直前締切）、`booking.closed_dates`（店舗休業日）。
+- **予約受付**：`BookingWindow`（`App\Domain\Reservation`）が予約可能期間と締切の窓口。休業日/特別営業時間の正本は `store_calendar_days`、読取窓口は `StoreCalendarService`。旧 `booking.closed_dates` はmigration時に一度取り込む。
   - 設定キーが未設定なら **完全に無制限**（既存環境の後方互換）。`SettingsSeeder` には含めず、管理画面「勤務枠 › 予約受付」で保存した時点から有効。
   - **horizon / lead は顧客予約のみ**に適用（`ReservationService::validateReservationDetails` で `!$adminContext` のとき）。管理者の手動予約は従来どおり期間制限を受けない。
   - **`closed_dates` は誰でも不可**（管理者手動・D&D を含む物理的に不可能な予約として拒否）。
@@ -166,9 +166,10 @@ Peak Manager の業務導線（カード→顧客情報→来店履歴→その�
   既読は `reservation_notification_dismissals`（`user_id` + `reservation_id` で一意）に保存し、
   **管理者ごとに永続**（`localStorage` 依存ではない）。ブロードキャスト基盤（Reverb/Pusher 等）は未設定
   （`BROADCAST_CONNECTION=log`）のため、真のリアルタイム push ではなくポーリングで近似している。
-- **当日サマリー**：`ScheduleQuery::dailySummary()` が日表示のときだけ、予約件数・来店完了・新規・リピーター・
-  キャンセル・無断キャンセル・当日売上（`Completed` の `final_amount` 優先、無ければメニュー価格）を実 DB から
-  集計する。スタッフ絞り込みには関わらず店舗全体を対象にする。
+- **当日サマリー**：予約件数・キャンセル・無断キャンセルは予定情報である`reservations`から、来店完了・初診・
+  リピーター・売上はPhase 11の`DailyReportService`から取得する。売上は`checkout_tenders.received_at`を
+  `Asia/Tokyo`営業日へ変換した決済日基準で、`sales.view`保有者にだけ返す。スタッフ絞り込みには関わらず
+  店舗全体を対象にし、予約価格や現在のメニュー価格から実績売上を推測しない。
 - **軸「両方」**：`ScheduleQuery::get(axis: 'both')` がスタッフとブースの両方を返し、フロントは 1 つの
   縦積みレーン一覧としてレンダリングする（スタッフ行の後にブース行、ブース区間の先頭行に「ブース」の
   区切りバッジを表示）。1 件の予約がスタッフ行・ブース行の両方に現れ得るため、**D&D と「満席」帯表示は
@@ -277,6 +278,15 @@ Peak Manager の業務導線（カード→顧客情報→来店履歴→その�
   `wrapper.find()` ではなく `document.body` を直接検索する必要がある点に注意（`MenuPicker.spec.ts` 参照）。
   `Schedule/Index.vue` 本体（4000行超）はコンポーネントテストで丸ごと検証するには大きすぎるため、
   戻る履歴・draft・ステータス変換など再利用しやすい部分を純粋関数として切り出してテストする方針を採った。
+
+### 4.5 Phase 11 日次・月次Reporting
+
+- `DailyReportQuery::fetchRange()`が指定期間を集計粒度別の8本のSQLで取得する。単日APIも月計も同じSQL定義を使い、月計が日次APIを最大31回呼ぶ構造にはしない。
+- `DailyReportService`は単日`forDate()`と期間`forRange()`を持ち、いずれも`DailyBusinessSummary`へ変換する。来店、ロング、次回予約snapshot、初診、分類、決済日／施術日売上、支払方法、税snapshotの定義はここで一元化する。
+- `MonthlyReportService`は月の全暦日を`MonthlyBusinessSummary`へ構成し、店舗カレンダー、月間売上目標、`as_of_date`を重ねる。月率は日別率平均ではなく、月の分子合計÷分母合計で算出する。
+- 平日は月〜金、土日は土・日とし、祝日専用判定は行わない。臨時休業日は営業日数・平均の分母・残営業日から除外する一方、その日に保存済みの事実は月合計と曜日別の分子から失わない。
+- `as_of_date`は現在月=JST今日、過去月=月末、未来月=月初前日。実績進捗は同日まで、残営業日は翌日以降とする。未来日はUI上「未実績」で、平均分母へ含めない。
+- 管理画面/APIは`reports.view`と`sales.view`を両方要求する。`GET /admin/reports/monthly`が画面、`GET /admin/reports/monthly/data`が年月・売上基準切替用JSONである。
 
 ## 5. Stripe（課金のみ）
 

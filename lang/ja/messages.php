@@ -13,6 +13,11 @@ declare(strict_types=1);
 */
 
 return [
+    'staff_utilization' => [
+        'attendance_invalid' => '出退勤時刻と営業日を確認してください。退勤は出勤後36時間以内にしてください。',
+        'break_invalid' => '休憩時刻は出勤から退勤までの範囲内で指定してください。',
+        'attendance_saved' => '実勤怠を保存しました。',
+    ],
     // 共通
     'common' => [
         'reason_required' => '理由は必須です。',
@@ -94,6 +99,7 @@ return [
         'booth_block_overlap' => 'この時間はブースの予定（清掃・メンテナンス等）と重なっています。',
         'past_datetime' => '過去の日時は予約できません。',
         'closed_date' => '選択した日は休業日のため予約できません。',
+        'outside_calendar_hours' => '選択した時間は店舗の特別営業時間外です。',
         'non_boundary_start' => '開始時刻を予約枠の境界に合わせてください。',
         'invalid_transition' => 'この予約はその操作を実行できません。',
         'customer_search_required' => '氏名・カナ・電話番号のうち、分かるものを1つ以上入力してください。',
@@ -112,6 +118,13 @@ return [
         'policy_zero_tier_required' => '開始時刻まで0時間の段階を必ず含めてください。',
         'policy_too_large' => '返金段階の設定量が上限を超えています。',
         'policy_updated' => '予約キャンセルポリシーを更新しました。',
+    ],
+
+    'visit_completion' => [
+        'invalid_status' => '確定済みの予約だけを来店完了にできます。',
+        'legacy_completed_without_visit' => 'この完了済み予約には来店実績がないため、再完了できません。',
+        'visit_conflict' => 'この予約には競合する来店実績があります。内容を確認してください。',
+        'voided_checkout' => '取消済み会計があるため、来店完了できません。',
     ],
 
     // 予定ブロック（休憩・清掃など）
@@ -157,6 +170,34 @@ return [
         'staff_required' => 'スタッフが必要なサービスには、施術可能スタッフを1名以上指定してください。',
         'created' => 'サービスを作成しました。',
         'updated' => 'サービスを更新しました。',
+    ],
+
+    // Phase 11 商品・業務マスタ
+    'product' => [
+        'created' => '商品を作成しました。',
+        'updated' => '商品を更新しました。',
+        'activated' => '商品を有効にしました。',
+        'deactivated' => '商品を無効にしました。',
+    ],
+    'business' => [
+        'analysis_category_saved' => '分析カテゴリを保存しました。',
+        'tax_category_saved' => '税区分を保存しました。',
+        'tax_rate_saved' => '税率期間を保存しました。',
+        'tax_rate_end_after_start' => '終了日は開始日より後にしてください。',
+        'tax_rate_overlap' => '同じ税区分の適用期間が重複しています。',
+        'payment_method_saved' => '決済方法を保存しました。',
+        'calendar_saved' => '店舗カレンダーを保存しました。',
+        'calendar_cleared' => '店舗カレンダーを通常営業に戻しました。',
+        'calendar_invalid_status' => '店舗カレンダーの状態が不正です。',
+        'calendar_hours_invalid' => '特別営業時間は開店時刻より閉店時刻を後にしてください。',
+        'sales_target_saved' => '売上目標を保存しました。',
+        'sales_target_cleared' => '月別売上目標を削除しました。',
+        'employment_type_saved' => '雇用形態を保存しました。',
+        'employment_period_overlap' => '雇用形態の適用期間が重複します。',
+    ],
+
+    'reporting' => [
+        'monthly_invalid' => '月計の指定条件が不正です。',
     ],
 
     // ブース

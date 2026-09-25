@@ -229,6 +229,10 @@ final class AdminReservationManagementTest extends TestCase
         $this->actingAs($manager)
             ->patch("/admin/reservations/{$completed->id}/complete")
             ->assertSessionHasNoErrors();
+        // ダブルクリック／HTTP再送でも既存の完了結果へ収束する。
+        $this->actingAs($manager)
+            ->patch("/admin/reservations/{$completed->id}/complete")
+            ->assertSessionHasNoErrors();
         $this->actingAs($manager)
             ->patch("/admin/reservations/{$noShow->id}/no-show")
             ->assertSessionHasNoErrors();
@@ -237,6 +241,7 @@ final class AdminReservationManagementTest extends TestCase
         $this->assertSame(0, $canceled->resourceSlots()->count());
         $this->assertSame(ReservationStatus::Completed, $completed->fresh()?->status);
         $this->assertNotNull($completed->fresh()?->attended_at);
+        $this->assertSame(1, $completed->visit()->count());
         $this->assertSame(8, $completed->resourceSlots()->count());
         $this->assertSame(ReservationStatus::NoShow, $noShow->fresh()?->status);
         $this->assertSame(8, $noShow->resourceSlots()->count());

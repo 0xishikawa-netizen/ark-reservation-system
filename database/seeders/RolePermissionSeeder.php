@@ -32,6 +32,11 @@ class RolePermissionSeeder extends Seeder
         'ticket_products.manage',
         'integrations.view',
         'integrations.manage',
+        'reports.view',
+        'reports.export',
+        'reports.reconcile',
+        'historical_data.import',
+        'sales.view',
         // ロール別の権限セット自体を管理する権限。admin 専用（§権限管理画面）。
         'roles.manage',
     ];

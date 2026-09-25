@@ -62,6 +62,13 @@ final class RolePermissionController extends Controller
             'ticket_policy.manage' => '回数券運用設定',
             'membership.manage' => '月額プラン管理',
         ],
+        'レポート' => [
+            'reports.view' => 'レポート閲覧',
+            'sales.view' => '売上閲覧',
+            'reports.export' => 'Excel出力',
+            'reports.reconcile' => '帳票照合',
+            'historical_data.import' => '過去データ取込',
+        ],
         '連携・システム' => [
             'integrations.view' => '外部連携閲覧',
             'failed_jobs.view' => '失敗ジョブ閲覧',

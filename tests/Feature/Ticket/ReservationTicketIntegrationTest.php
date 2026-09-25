@@ -284,12 +284,8 @@ class ReservationTicketIntegrationTest extends TestCase
         $this->reservations()->markCompleted($completedReservation, null);
         $transactionCount = TicketTransaction::query()->count();
 
-        try {
-            $this->reservations()->markCompleted($completedReservation, null);
-            $this->fail('完了済み予約の再完了が成功しました。');
-        } catch (ValidationException) {
-            $this->assertTrue(true);
-        }
+        $retry = $this->reservations()->markCompleted($completedReservation, null);
+        $this->assertSame($completedReservation->id, $retry->id);
 
         $this->assertSame($transactionCount, TicketTransaction::query()->count());
     }

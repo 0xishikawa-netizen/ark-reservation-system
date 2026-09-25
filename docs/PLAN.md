@@ -1,7 +1,15 @@
-# ARK Conditioning 予約・決済システム — 設計プラン (rev.5 確定版)
+# ARK Conditioning 予約・決済システム — 設計プラン (rev.6)
 
 > これは承認済みの設計正本。実装は本プランと `docs/ARCHITECTURE.md` / `docs/DB_SCHEMA.md` に従う。
-> Phase 0（土台）→ Phase 1 以降（ドメイン実装）。Phase 0 の残タスクは `docs/tasks/phase-00.md`。
+> Phase ごとの実装可否と Current Task は本書および対応する `docs/tasks/phase-XX.md` の両方で管理する。
+
+## Current execution status
+
+- **Current Phase**: Phase 11 — Reporting / Business Automation（実装・原本書式互換は完了、実数値照合のみ外部資料待ち）
+- **Current Task**: なし
+- **Task status**: Task 11-11 DONE（提供原本コピーによる6シート出力・書式/セル位置検証）。Task 11-13 BLOCKED（実績入力済み旧原本と同期間のARK実データが未提供のため、実数値照合のみ未実施）。
+- **Task specification**: `docs/tasks/phase-11.md`
+- Phase 11 全体の一括実装は許可しない。Task 11-13の自動検証・fixture照合は完了した。実数値照合は必要資料を受領後に再承認・再開する。
 
 ## Context
 
@@ -220,7 +228,7 @@ Production（`member...`、新規 DB、Stripe Live、VPS 推奨）。
 
 | Phase | 内容（要約） |
 |---|---|
-| 0 設計・環境確認 | 本プラン確定。サーバー実測 or VPS 決定。リポジトリ scaffold、`docs/` 7 ファイル、CI 雛形、`.env.example`、`config/{reservation,retention,stripe}.php`。**Laravel 13 実アプリ scaffold + Inertia + Vue3 + TS + Vuetify3 + build + test + local 起動 + Codex 実装フロー 1 周**（← 今ここ） |
+| 0 設計・環境確認 | 完了。Laravel 13 実アプリ scaffold + Inertia + Vue3 + TS + Vuetify3 + build + test + local 起動。 |
 | 1 基盤 | 認証（単一 guard + role）+ スタッフ MFA + `/admin` idle timeout、基盤 migration、`app/Support/StateMachine`、`ExternalReservationGateway` interface + `NullExternalReservationGateway`、Stripe Live キー起動ガード、レイアウト、CSRF/XSS/SQLi + rate limit、`audit_logs` 雛形、`failed_jobs` 可視化、Pest + CI 緑 |
 | 2 マスタ | customers / staff（+ shifts）/ services / service_staff / booths + 管理 CRUD |
 | 3 自作予約（gateway=null） | reservations + state machine + `reservation_resource_slots` UNIQUE + `ReservationService` + 予約台帳 + 仮予約失効 + 同時実行テスト |
@@ -232,11 +240,12 @@ Production（`member...`、新規 DB、Stripe Live、VPS 推奨）。
 | 8 店舗管理 + システム状態 | ダッシュボード / 予約一覧 / 顧客 360 / 回数券管理 / 契約管理 / `Admin/SystemStatus` / DB 容量スナップショット + 通知 |
 | 9 外部予約連携基盤（実装済み・AUTOMATED GREEN） | Provider 非依存基盤 `app/Domain/Integration/*`（Contract / Capability / Resolver / DTO）/ 5 テーブル（mapping UNIQUE 2 本・outbox・append-only events・conflicts・sync_state）/ Inbound（advisory lock + `ReservationService` 経由 + conflict 検出）/ Outbound（Outbox パターン・外部 HTTP は transaction 外・`SKIP LOCKED` + lease + sequence 直列化）/ Reconcile / Mock provider / Peak Manager・SALON BOARD は skeleton（推測実装なし）/ Admin ステータス + 手動 retry / 詳細は `docs/tasks/phase-09.md`。実 API 結合は Phase 10。 |
 | 10 Peak Manager / SALON BOARD 連携 | 具象 Gateway + sandbox + 補償 Saga。**両 API 不可時の fallback：予約は現行 Peak Manager をそのまま利用、自作は決済/回数券/Membership/顧客/会計のみ担当** |
-| 11 Reporting / Business Automation（Backlog） | Daily/Monthly 集計 + `ReportingService` + `NotificationChannel`（Mail のみ。LINE/Slack は API 仕様確定後） |
+| **11 Reporting / Business Automation（実装・自動検証・Excel原本互換完了、実数値照合待ち）** | 日計・月計・顧客統計・新規/再診/離反/継続率・勤怠/稼働率・時間帯別稼働率・年間実績・既存6シートExcel出力・過去データ取込基盤。Task 11-11はDONE。Task 11-13の旧帳票実績値とARK実績値の照合だけBLOCKED。**Current Taskなし。** Google Sheets実書込、SALON BOARD連携、外部予約サイト同期、メール自動送信は対象外。 |
 
-## 17. Codex 連携
+## 17. Codex 実行ガバナンス
 
-Claude Code がタスク仕様を作成 → Codex が実装 → Claude Code がレビュー（要件一致 / コード品質 / 安全性・整合性・冪等性 / DB 設計・容量 / 復旧設計 / テスト（同時実行・二重処理を含む）/ WP 影響ゼロ / Gateway 拡張性 / 保守性）→ 是正 → 反復。1 回で終わらせない。
+Codex が Task 仕様の確認 → 実装 → 検証 → `git diff` による自己レビュー（要件一致 / コード品質 / 安全性・整合性・冪等性 / DB 設計・容量 / 復旧設計 / テスト（同時実行・二重処理を含む）/ WP 影響ゼロ / Gateway 拡張性 / 保守性）→ 是正、を反復する。
+実装できるのは、本書の Current Phase と対応する Task 文書の CURRENT / APPROVED が一致する 1 Task だけ。Task 完了後も、次 Task を自動的に Current にせず、明示的な状態更新を待つ。
 禁止：Stripe 本番 / Peak Manager・SALON BOARD 実接続 / 本番 DB / WordPress 変更 / Controller・Vue からの直接 DB 更新。
 
 ## 18. Open Questions
