@@ -34,6 +34,9 @@ final class AnnualReportAccessTest extends TestCase
         $this->actingAs($user)->getJson('/admin/reports/annual/data?year=2026&basis=treatment_date&as_of_date=2026-10-15')
             ->assertOk()->assertJsonPath('data.sales_basis', 'treatment_date')->assertJsonCount(12, 'data.months');
         $this->actingAs($user)->getJson('/admin/reports/annual/data?year=2026&basis=invalid')->assertUnprocessable();
-        $this->actingAs($user)->getJson('/admin/reports/annual/data?year=2026&as_of_date=2027-01-01')->assertUnprocessable();
+        // 既定は4月始まり事業年度（2026年度=2026-04-01〜2027-03-31）。期間外の基準日だけ拒否する。
+        $this->actingAs($user)->getJson('/admin/reports/annual/data?year=2026&as_of_date=2027-01-01')->assertOk();
+        $this->actingAs($user)->getJson('/admin/reports/annual/data?year=2026&as_of_date=2027-04-01')->assertUnprocessable();
+        $this->actingAs($user)->getJson('/admin/reports/annual/data?year=2026&period=calendar&as_of_date=2027-01-01')->assertUnprocessable();
     }
 }
