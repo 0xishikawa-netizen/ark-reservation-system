@@ -404,6 +404,9 @@ const statusText = (status: string | undefined): string => ({
 .entry-side { position: sticky; top: 76px; }
 @media (max-width: 1100px) { .entry-grid { grid-template-columns: 1fr; } .entry-side { position: static; } }
 .meta-row, .staff-row, .line-head, .add-buttons, .sub { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* outlined入力の浮きラベルが上の行と重ならないよう、行間を空ける */
+.staff-row { row-gap: 16px; }
+.staff-row + .staff-row, h4 + .staff-row { margin-top: 16px; }
 .treatment, .line { border-top: 1px solid #e4e8ee; padding: 12px 0; }
 .indent { margin-left: 24px; margin-top: 8px; }
 .field-xs { max-width: 90px; } .field-sm { max-width: 140px; } .field-md { min-width: 180px; max-width: 220px; } .field-lg { min-width: 240px; flex: 1 1 240px; }

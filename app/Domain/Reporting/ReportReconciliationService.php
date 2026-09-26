@@ -85,7 +85,8 @@ final class ReportReconciliationService
 
         $checks = [...$checks, ...$this->factChecks($start, $end->addDay()),
             ...$this->utilizationChecks($staff['monthly_rows'], $bands['overall_rows'])];
-        $comparisons = $this->historicalComparisons($batchId, $startDate, $endDate, $business, $customer);
+        $arkHasFacts = $this->arkHasFacts($start, $end->addDay(), $startDate, $endDate);
+        $comparisons = $this->historicalComparisons($batchId, $startDate, $endDate, $business, $customer, $arkHasFacts);
         $sourceWorkbook = $this->providedWorkbook->forPeriod($year, $month);
 
         return [
@@ -94,6 +95,8 @@ final class ReportReconciliationService
                 ? ($sourceWorkbook === null ? 'not_provided' : 'provided_without_imported_actuals')
                 : ($comparisons === [] ? 'no_comparable_rows' : 'available'),
             'source_batch_id' => $batchId,
+            // ARK側に対象月の来店・入金が1件もない場合、ARK値0は観測値ではないため比較しない。
+            'ark_source_status' => $arkHasFacts ? 'available' : 'no_facts',
             'source_workbook_evidence' => $sourceWorkbook,
             'checks' => $checks,
             'check_summary' => [
@@ -247,7 +250,7 @@ final class ReportReconciliationService
 
     /** @return list<array<string,mixed>> */
     private function historicalComparisons(?int $batchId, string $startDate, string $endDate,
-        MonthlyBusinessSummary $business, MonthlyCustomerSummary $customer): array
+        MonthlyBusinessSummary $business, MonthlyCustomerSummary $customer, bool $arkHasFacts): array
     {
         if ($batchId === null) {
             return [];
@@ -275,16 +278,22 @@ final class ReportReconciliationService
         $comparisons = [];
         foreach ($rows as $row) {
             // 切り口付き（時間帯・スタッフ枠等）の旧値は店舗合計のARK値と直接比較しない。
-            $arkValue = $row->dimension === null ? ($ark[$row->metric_code] ?? null) : null;
+            $arkValue = $row->dimension === null && $arkHasFacts ? ($ark[$row->metric_code] ?? null) : null;
             if (! is_int($arkValue)) {
                 $arkValue = null;
             }
             $difference = $arkValue === null ? null : $arkValue - (int) $row->value_integer;
+            $status = match (true) {
+                $row->dimension === null && ! $arkHasFacts => 'ark_source_missing',
+                $arkValue === null => 'not_comparable',
+                $difference === 0 => 'matched',
+                default => 'different',
+            };
             $comparisons[] = [
                 'historical_metric_value_id' => (int) $row->id, 'source_row_id' => (int) $row->source_row_id,
                 'metric_code' => $row->metric_code, 'dimension' => $row->dimension, 'source_value' => (int) $row->value_integer,
                 'ark_value' => $arkValue, 'difference' => $difference,
-                'comparison_status' => $arkValue === null ? 'not_comparable' : ($difference === 0 ? 'matched' : 'different'),
+                'comparison_status' => $status,
                 'difference_category' => $row->difference_category,
                 'review_status' => $row->review_status ?? 'pending', 'reason' => $row->reason,
                 'reviewed_at' => $row->reviewed_at,
@@ -292,6 +301,15 @@ final class ReportReconciliationService
         }
 
         return $comparisons;
+    }
+
+    /** 対象月にARKの来店（状態を問わない）または受領済み入金が1件でもあるか。 */
+    private function arkHasFacts(CarbonImmutable $start, CarbonImmutable $endExclusive, string $startDate, string $endDate): bool
+    {
+        return DB::table('visits')->whereBetween('business_date', [$startDate, $endDate])->exists()
+            || DB::table('checkout_tenders')->where('status', 'received')
+                ->where('received_at', '>=', $start->utc()->format('Y-m-d H:i:s'))
+                ->where('received_at', '<', $endExclusive->utc()->format('Y-m-d H:i:s'))->exists();
     }
 
     /** @return array<string,mixed> */

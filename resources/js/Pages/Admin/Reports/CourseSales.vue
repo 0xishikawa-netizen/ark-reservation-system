@@ -16,7 +16,7 @@ interface Row {
     target_amount: number | null; target_count: number | null; average_unit_amount: number | null;
     difference_amount: number | null; achievement_rate: number | null;
 }
-interface Report { month_key: string; sales_basis: SalesBasis; rows: Row[]; totals: { sales_amount: number; sales_quantity: number; usage_count: number; target_amount: number } }
+interface Report { month_key: string; sales_basis: SalesBasis; rows: Row[]; totals: { sales_amount: number; sales_quantity: number; usage_count: number; target_amount: number | null } }
 
 const props = defineProps<{ report: Report; dataEndpoint: string; targetEndpoint: string; canEditTargets: boolean }>();
 const labels = MESSAGES.reporting;
@@ -74,7 +74,7 @@ function saveTarget(row: Row, clear = false): void {
         <ReportKpi :label="labels.courseSales" emphasis><ReportValue :value="report.totals.sales_amount" format="money" /></ReportKpi>
         <ReportKpi :label="labels.courseQuantity"><ReportValue :value="report.totals.sales_quantity" /></ReportKpi>
         <ReportKpi :label="labels.courseUsage"><ReportValue :value="report.totals.usage_count" /></ReportKpi>
-        <ReportKpi :label="labels.courseTarget"><ReportValue :value="report.totals.target_amount" format="money" /></ReportKpi>
+        <ReportKpi :label="labels.courseTarget"><ReportValue :value="report.totals.target_amount" format="money" :empty-label="MESSAGES.common.notSet" /></ReportKpi>
     </div>
     <p class="note">{{ labels.courseNote }}</p>
 

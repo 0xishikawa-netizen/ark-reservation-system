@@ -88,7 +88,7 @@ function create(): void {
                     <td>{{ row.kind === 'visit' ? labels.kindVisit : labels.kindSale }}<small v-if="row.kind === 'visit'" class="muted">（{{ row.has_reservation ? labels.reservationLinked : labels.walkIn }}）</small></td>
                     <td><template v-if="row.customer_name">{{ row.customer_name }}</template><EmptyValue v-else :label="labels.anonymous" /></td>
                     <td><template v-if="row.primary_staff_name">{{ row.primary_staff_name }}</template><EmptyValue v-else /></td>
-                    <td>{{ row.kind === 'visit' ? statusLabel(row.visit_status) : '' }}</td>
+                    <td><template v-if="row.kind === 'visit'">{{ statusLabel(row.visit_status) }}</template><EmptyValue v-else /></td>
                     <td>{{ statusLabel(row.checkout_status) }}</td>
                     <td class="num"><ReportValue :value="row.total_amount" format="money" /></td>
                     <td><v-btn size="small" variant="text" color="primary" :href="row.url">{{ labels.open }}</v-btn></td>

@@ -76,9 +76,12 @@ class CourseSalesServiceTest extends TestCase
         $this->assertNull($singleRow['target_amount']);
         $this->assertNull($singleRow['difference_amount']);
         $this->assertSame(68200, $report['totals']['sales_amount']);
+        $this->assertSame(100000, $report['totals']['target_amount']);
 
         $service->setTarget('2026-09', 'ticket', $ticket->id, null, null, null);
         $this->assertNull(collect($service->forMonth(2026, 9)['rows'])->firstWhere('course_id', $ticket->id)['target_amount']);
+        // 目標が1件もない月の合計目標は0円ではなくNULL（未設定）。
+        $this->assertNull($service->forMonth(2026, 9)['totals']['target_amount']);
     }
 
     public function test_target_editing_requires_settings_permission(): void

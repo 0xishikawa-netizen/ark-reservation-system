@@ -94,6 +94,34 @@ final class ReportReconciliationServiceTest extends TestCase
         $service->forMonth(2025, 2, $batch);
     }
 
+    public function test_month_without_any_ark_facts_is_source_missing_not_zero(): void
+    {
+        Storage::fake('local');
+        $user = User::factory()->create();
+        $csv = "record_type,metric_code,dimension,period_start,period_end,value,source_identifier\n"
+            ."historical_aggregate,visit_count,,2024-05-01,2024-05-31,0,empty-zero\n"
+            ."historical_aggregate,new_customers,,2024-05-01,2024-05-31,12,empty-new\n"
+            ."historical_aggregate,new_customers,channel:hotpepper,2024-05-01,2024-05-31,5,empty-channel\n";
+        $imports = app(HistoricalImportService::class);
+        $batch = $imports->stage(UploadedFile::fake()->createWithContent('empty.csv', $csv), $user->id)['batch_id'];
+        $imports->commit($batch);
+
+        $report = app(ReportReconciliationService::class)->forMonth(2024, 5, $batch);
+        $this->assertSame('no_facts', $report['ark_source_status']);
+        $rows = collect($report['comparisons'])->keyBy(fn (array $row): string => $row['metric_code'].'|'.$row['dimension']);
+        // 旧値0でもARK側の事実がなければ「一致」としない。
+        $this->assertSame('ark_source_missing', $rows['visit_count|']['comparison_status']);
+        $this->assertNull($rows['visit_count|']['ark_value']);
+        $this->assertNull($rows['new_customers|']['difference']);
+        $this->assertSame('not_comparable', $rows['new_customers|channel:hotpepper']['comparison_status']);
+
+        Visit::factory()->create(['business_date' => '2024-05-20', 'status' => VisitStatus::Completed,
+            'completed_at' => '2024-05-20 04:00:00', 'visit_sequence' => 1]);
+        $withFacts = app(ReportReconciliationService::class)->forMonth(2024, 5, $batch);
+        $this->assertSame('available', $withFacts['ark_source_status']);
+        $this->assertSame('different', collect($withFacts['comparisons'])->firstWhere('metric_code', 'visit_count')['comparison_status']);
+    }
+
     public function test_reconciliation_flags_checkout_and_staff_time_inconsistency_without_join_multiplication(): void
     {
         $visit = Visit::factory()->create([

@@ -6,8 +6,8 @@
 ## Current execution status
 
 - **Current Phase**: Phase 11 — Reporting / Business Automation（実装・原本書式互換・ローカル実操作確認は完了、旧資料との実数値照合のみ外部資料待ち）
-- **Current Task**: Task 11-13（既存資料との照合・最終検証、2026-09-27再開）
-- **Task status**: Task 11-11 DONE。Task 11-13 BLOCKED（旧Excel / Google Sheetsの実数値照合のみ）。Task 11-14 DONE。Task 11-15 DONE。Task 11-16 DONE。Task 11-17 DONE（2026-09-26）。Task 11-18 DONE（2026-09-26、Reports・ブッキングボード・設定メニューのUI/UX統一。`docs/REPORTS_UI.md`）。Task 11-19 DONE（2026-09-27、来店・会計入力）。Task 11-20 DONE（支払配分・税抜・物販）。Task 11-21 DONE（顧客カルテ・顧客統計）。Task 11-22 DONE（スタッフ別売上・指名売上）。Task 11-23 DONE（時間帯別稼働率の表示拡張）。Task 11-24 DONE（4月始まり事業年度）。Task 11-25 DONE（コース別売上・目標）。Task 11-26 DONE（過去データ取込mapping）。Task 11-13 CURRENT（再開）。2026-09-27にユーザーが11-19〜11-26と11-13再開を一括承認（1 Taskずつ順に実施）。
+- **Current Task**: なし
+- **Task status**: Task 11-11 DONE。Task 11-13 BLOCKED（旧Excel / Google Sheetsの実数値照合のみ）。Task 11-14 DONE。Task 11-15 DONE。Task 11-16 DONE。Task 11-17 DONE（2026-09-26）。Task 11-18 DONE（2026-09-26、Reports・ブッキングボード・設定メニューのUI/UX統一。`docs/REPORTS_UI.md`）。Task 11-19 DONE（2026-09-27、来店・会計入力）。Task 11-20 DONE（支払配分・税抜・物販）。Task 11-21 DONE（顧客カルテ・顧客統計）。Task 11-22 DONE（スタッフ別売上・指名売上）。Task 11-23 DONE（時間帯別稼働率の表示拡張）。Task 11-24 DONE（4月始まり事業年度）。Task 11-25 DONE（コース別売上・目標）。Task 11-26 DONE（過去データ取込mapping）。Task 11-13は2026-09-27に再開・再検証し、ARK稼働前期間の旧値↔ARK実数値照合だけBLOCKED。2026-09-27にユーザーが11-19〜11-26と11-13再開を一括承認（1 Taskずつ順に実施）。
 - **Task specification**: `docs/tasks/phase-11.md`
 - Phase 11 全体の一括実装は許可しない。現在承認済みの実装Taskはない。次回以降は実物帳票サンプルとの比較結果を踏まえて新Taskを承認してから着手する（Cloud引継ぎ: `docs/handoff/2026-09-26-cloud-handoff.md`）。Task 11-13の実原本との実数値照合は資料受領後に再承認・再開する。ローカル実操作・自動検証の証跡は`docs/PHASE11_OPERATIONAL_VERIFICATION.md`および`docs/EXCEL_EXPORT.md`。
 
@@ -240,7 +240,7 @@ Production（`member...`、新規 DB、Stripe Live、VPS 推奨）。
 | 8 店舗管理 + システム状態 | ダッシュボード / 予約一覧 / 顧客 360 / 回数券管理 / 契約管理 / `Admin/SystemStatus` / DB 容量スナップショット + 通知 |
 | 9 外部予約連携基盤（実装済み・AUTOMATED GREEN） | Provider 非依存基盤 `app/Domain/Integration/*`（Contract / Capability / Resolver / DTO）/ 5 テーブル（mapping UNIQUE 2 本・outbox・append-only events・conflicts・sync_state）/ Inbound（advisory lock + `ReservationService` 経由 + conflict 検出）/ Outbound（Outbox パターン・外部 HTTP は transaction 外・`SKIP LOCKED` + lease + sequence 直列化）/ Reconcile / Mock provider / Peak Manager・SALON BOARD は skeleton（推測実装なし）/ Admin ステータス + 手動 retry / 詳細は `docs/tasks/phase-09.md`。実 API 結合は Phase 10。 |
 | 10 Peak Manager / SALON BOARD 連携 | 具象 Gateway + sandbox + 補償 Saga。**両 API 不可時の fallback：予約は現行 Peak Manager をそのまま利用、自作は決済/回数券/Membership/顧客/会計のみ担当** |
-| **11 Reporting / Business Automation（実装・UI統一完了、実数値照合待ち）** | 日計・月計・顧客統計・新規/再診/離反/継続率・勤怠/稼働率・時間帯別稼働率・年間実績・既存6シートExcel出力・過去データ取込基盤。Task 11-14〜11-18はDONE。**Current Taskなし。** Task 11-13の旧帳票実績値とARK実績値の照合だけBLOCKED。Google Sheets実書込、SALON BOARD連携、外部予約サイト同期、メール自動送信は対象外。 |
+| **11 Reporting / Business Automation（実装・UI統一完了、実数値照合待ち）** | 日計・月計・顧客統計・新規/再診/離反/継続率・勤怠/稼働率・時間帯別稼働率・年間実績・既存6シートExcel出力・過去データ取込基盤。Task 11-14〜11-26はDONE。**Current Taskなし。** Task 11-13の旧帳票実績値とARK実績値の照合だけBLOCKED。Google Sheets実書込、SALON BOARD連携、外部予約サイト同期、メール自動送信は対象外。 |
 
 ## 17. Codex 実行ガバナンス
 

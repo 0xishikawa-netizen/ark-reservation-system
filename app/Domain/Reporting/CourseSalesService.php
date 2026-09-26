@@ -89,7 +89,7 @@ final class CourseSalesService
         }
 
         $rows = [];
-        $totals = ['sales_amount' => 0, 'sales_quantity' => 0, 'usage_count' => 0, 'target_amount' => 0, 'target_missing' => 0];
+        $totals = ['sales_amount' => 0, 'sales_quantity' => 0, 'usage_count' => 0, 'target_amount' => null, 'target_missing' => 0];
         foreach ($courses as $course) {
             $hasFacts = $course['sales_amount'] > 0 || $course['sales_quantity'] > 0 || $course['usage_count'] > 0 || $course['target_amount'] !== null;
             if (! $course['is_active'] && ! $hasFacts) {
@@ -103,7 +103,8 @@ final class CourseSalesService
             $totals['sales_quantity'] += $course['sales_quantity'];
             $totals['usage_count'] += $course['usage_count'];
             if ($course['target_amount'] !== null) {
-                $totals['target_amount'] += $course['target_amount'];
+                // 目標が1件もない月は0円ではなく未設定（NULL）のまま返す。
+                $totals['target_amount'] = ($totals['target_amount'] ?? 0) + $course['target_amount'];
             }
         }
 
