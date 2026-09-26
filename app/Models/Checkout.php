@@ -16,7 +16,7 @@ class Checkout extends Model
     use HasFactory;
 
     protected $fillable = [
-        'visit_id', 'status', 'subtotal_amount', 'tax_amount', 'total_amount', 'currency',
+        'visit_id', 'customer_id', 'sale_date', 'status', 'subtotal_amount', 'tax_amount', 'total_amount', 'currency',
         'finalized_at', 'voided_at', 'void_reason', 'operation_id',
     ];
 
@@ -46,6 +46,11 @@ class Checkout extends Model
         return $this->belongsTo(Visit::class);
     }
 
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'customer_id', 'user_id');
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(CheckoutLine::class)->orderBy('sort_order');
@@ -63,6 +68,7 @@ class Checkout extends Model
             'subtotal_amount' => 'integer',
             'tax_amount' => 'integer',
             'total_amount' => 'integer',
+            'sale_date' => 'date',
             'finalized_at' => 'datetime',
             'voided_at' => 'datetime',
         ];

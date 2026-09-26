@@ -4,26 +4,95 @@ declare(strict_types=1);
 
 namespace App\Domain\Accounting;
 
+use App\Domain\Ticket\TicketLedgerService;
+use App\Enums\Accounting\CheckoutLineItemType;
 use App\Enums\Accounting\CheckoutStatus;
 use App\Enums\Accounting\CheckoutTenderStatus;
 use App\Models\Checkout;
 use App\Models\CheckoutLine;
 use App\Models\CheckoutTender;
+use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\PaymentMethod;
 use App\Models\Staff;
 use App\Models\StaffRevenueAllocation;
 use App\Models\TaxCategory;
+use App\Models\TicketProduct;
 use App\Models\Visit;
 use App\Models\VisitTreatmentStaff;
 use App\Support\Audit\AuditLogger;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 final class CheckoutService
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(
+        private readonly AuditLogger $audit,
+        private readonly TicketLedgerService $tickets,
+    ) {}
+
+    /**
+     * 来店を伴わない会計（物販のみ・回数券購入のみ等）。架空Visitは作らない。
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function createStoreDraft(?Customer $customer, string $saleDate, array $attributes = [], ?Authenticatable $actor = null): Checkout
+    {
+        return DB::transaction(function () use ($customer, $saleDate, $attributes, $actor): Checkout {
+            $checkout = Checkout::query()->create([
+                ...$attributes,
+                'visit_id' => null,
+                'customer_id' => $customer?->getKey(),
+                'sale_date' => $saleDate,
+                'status' => CheckoutStatus::Draft,
+            ]);
+            $this->audit->log('checkout.created', $checkout, '来店なし会計の下書きを作成', $actor);
+
+            return $checkout;
+        });
+    }
+
+    /** 下書き会計の明細・支払・配分を空にする（入力画面の保存で全体を置き換えるため）。 */
+    public function clearDraft(Checkout $checkout): Checkout
+    {
+        return DB::transaction(function () use ($checkout): Checkout {
+            $locked = $this->lockDraft($checkout);
+            $lineIds = CheckoutLine::query()->where('checkout_id', $locked->getKey())->pluck('id');
+            StaffRevenueAllocation::query()->whereIn('checkout_line_id', $lineIds)->get()->each->delete();
+            CheckoutTender::query()->where('checkout_id', $locked->getKey())->get()->each->delete();
+            CheckoutLine::query()->where('checkout_id', $locked->getKey())->get()->each->delete();
+
+            return $locked;
+        });
+    }
+
+    /** 下書き会計のヘッダー合計を明細snapshotの合計へ揃える。 */
+    public function syncTotals(Checkout $checkout): Checkout
+    {
+        return DB::transaction(function () use ($checkout): Checkout {
+            $locked = $this->lockDraft($checkout);
+            $lines = CheckoutLine::query()->where('checkout_id', $locked->getKey())->get();
+            $locked->forceFill([
+                'subtotal_amount' => (int) $lines->sum('net_amount'),
+                'tax_amount' => (int) $lines->sum('tax_amount'),
+                'total_amount' => (int) $lines->sum('gross_amount'),
+            ])->save();
+
+            return $locked;
+        });
+    }
+
+    /** 会計の購入者。来店会計は来店顧客、来店なし会計は会計の顧客。 */
+    public function customerIdFor(Checkout $checkout): ?int
+    {
+        $customerId = $checkout->visit_id !== null
+            ? Visit::query()->whereKey($checkout->visit_id)->value('customer_id')
+            : $checkout->customer_id;
+
+        return $customerId === null ? null : (int) $customerId;
+    }
 
     /** @param array<string, mixed> $attributes */
     public function createDraft(Visit $visit, array $attributes = [], ?Authenticatable $actor = null): Checkout
@@ -90,7 +159,7 @@ final class CheckoutService
             if ($amount < 1) {
                 throw ValidationException::withMessages(['amount' => '支払金額は1円以上で指定してください。']);
             }
-            if ($payment !== null && (int) $payment->customer_id !== (int) $locked->visit()->value('customer_id')) {
+            if ($payment !== null && (int) $payment->customer_id !== (int) $this->customerIdFor($locked)) {
                 throw ValidationException::withMessages(['payment_id' => '外部決済と会計の顧客が一致しません。']);
             }
 
@@ -186,6 +255,7 @@ final class CheckoutService
             }
 
             $locked->forceFill(['status' => CheckoutStatus::Finalized, 'finalized_at' => now()])->save();
+            $this->grantPurchasedTickets($locked, $lines, $actor);
             $this->audit->log('checkout.finalized', $locked, '会計を確定', $actor);
 
             return $locked->refresh();
@@ -207,6 +277,40 @@ final class CheckoutService
 
             return $locked->refresh();
         });
+    }
+
+    /**
+     * 回数券購入明細は確定時に既存の回数券台帳へ付与する（数量分、明細IDで冪等）。
+     *
+     * @param  Collection<int, CheckoutLine>  $lines
+     */
+    private function grantPurchasedTickets(Checkout $checkout, $lines, ?Authenticatable $actor): void
+    {
+        $ticketLines = $lines->filter(fn (CheckoutLine $line): bool => $line->item_type === CheckoutLineItemType::Ticket->value);
+        if ($ticketLines->isEmpty()) {
+            return;
+        }
+        $customerId = $this->customerIdFor($checkout);
+        $customer = $customerId === null ? null : Customer::query()->find($customerId);
+        if ($customer === null) {
+            throw ValidationException::withMessages(['customer_id' => __('messages.checkout_entry.customer_required_for_ticket')]);
+        }
+        foreach ($ticketLines as $line) {
+            $product = TicketProduct::query()->find($line->ticket_product_id);
+            if ($product === null) {
+                throw ValidationException::withMessages(['lines' => __('messages.checkout_entry.ticket_product_missing')]);
+            }
+            for ($index = 1; $index <= (int) $line->quantity; $index++) {
+                $this->tickets->grant(
+                    $customer,
+                    $product,
+                    null,
+                    "checkout-line:{$line->getKey()}:{$index}",
+                    __('messages.checkout_entry.ticket_grant_reason', ['id' => $checkout->getKey()]),
+                    $actor,
+                );
+            }
+        }
     }
 
     private function lockDraft(Checkout $checkout): Checkout

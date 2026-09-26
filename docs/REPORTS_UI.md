@@ -18,6 +18,11 @@ Reports 系画面と関連管理画面の表示ルールの正本。新しい集
 メニュー定義は `resources/js/layouts/reportNavigation.ts`。原本固定 6 シート Excel（`docs/EXCEL_EXPORT.md`）は
 月計画面の「月計表をダウンロード」ボタン（reports.export 権限・決済日基準のみ）から出力する。
 
+### 来店・会計入力（Task 11-19）
+
+`/admin/checkouts`（ナビ「支払い」グループ「来店・会計」、`checkouts.manage`）。日付は `DateField`、一覧は `ReportTable`、
+金額は `ReportValue`、値なしは `EmptyValue`。入力画面は左に施術・明細、右に会計サマリーと支払。規則は `docs/CHECKOUT_ENTRY.md`。
+
 ## 2. 値なし（NULL 等）の表示ルール
 
 - 画面上は **薄いグレーの `-`** に統一する（`resources/js/components/ark/EmptyValue.vue`、文言は `MESSAGES.common.emptyValue`）。

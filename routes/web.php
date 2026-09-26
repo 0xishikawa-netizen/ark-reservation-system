@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AnnualReportController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BoothController;
 use App\Http\Controllers\Admin\BusinessMasterSettingsController;
+use App\Http\Controllers\Admin\CheckoutEntryController;
 use App\Http\Controllers\Admin\CustomerAnalyticsController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\CustomerMembershipController as AdminCustomerMembershipController;
@@ -222,6 +223,21 @@ Route::middleware([
     Route::get('reservations', [AdminReservationController::class, 'index'])
         ->middleware('can:reservations.view')
         ->name('reservations.index');
+    // 来店・会計入力（Task 11-19）。閲覧・保存・確定は checkouts.manage、取消は checkouts.void。
+    Route::middleware('can:checkouts.manage')->group(function (): void {
+        Route::get('checkouts', [CheckoutEntryController::class, 'index'])->name('checkouts.index');
+        Route::post('checkouts', [CheckoutEntryController::class, 'storeSale'])->name('checkouts.store');
+        Route::get('checkouts/{checkout}', [CheckoutEntryController::class, 'showCheckout'])->name('checkouts.show');
+        Route::put('checkouts/{checkout}', [CheckoutEntryController::class, 'updateCheckout'])->name('checkouts.update');
+        Route::post('checkouts/{checkout}/finalize', [CheckoutEntryController::class, 'finalize'])->name('checkouts.finalize');
+        Route::post('visits', [CheckoutEntryController::class, 'storeWalkIn'])->name('visits.store');
+        Route::get('visits/{visit}/checkout', [CheckoutEntryController::class, 'showVisit'])->name('visits.checkout.show');
+        Route::put('visits/{visit}/checkout', [CheckoutEntryController::class, 'updateVisit'])->name('visits.checkout.update');
+        Route::post('visits/{visit}/complete', [CheckoutEntryController::class, 'completeVisit'])->name('visits.complete');
+        Route::post('reservations/{reservation}/visit', [CheckoutEntryController::class, 'openReservation'])->name('reservations.visit');
+    });
+    Route::post('checkouts/{checkout}/void', [CheckoutEntryController::class, 'void'])
+        ->middleware(['can:checkouts.manage', 'can:checkouts.void'])->name('checkouts.void');
     Route::get('schedule', [ScheduleController::class, 'index'])
         ->middleware('can:reservations.view')
         ->name('schedule.index');

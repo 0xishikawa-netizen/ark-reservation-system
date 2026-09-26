@@ -31,6 +31,7 @@ interface AuthPermissions {
     reportsView: boolean;
     reportsManage: boolean;
     salesView: boolean;
+    checkoutsManage: boolean;
 }
 
 interface SharedPageProps {

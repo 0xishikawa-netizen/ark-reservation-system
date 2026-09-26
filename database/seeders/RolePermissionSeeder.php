@@ -38,6 +38,8 @@ class RolePermissionSeeder extends Seeder
         'reports.reconcile',
         'historical_data.import',
         'sales.view',
+        'checkouts.manage',
+        'checkouts.void',
         // ロール別の権限セット自体を管理する権限。admin 専用（§権限管理画面）。
         'roles.manage',
     ];
@@ -80,6 +82,7 @@ class RolePermissionSeeder extends Seeder
                 'customers.view',
                 'reservations.view',
                 'reservations.manage',
+                'checkouts.manage',
                 'refund.execute',
                 'ticket.grant',
                 'membership.manage',

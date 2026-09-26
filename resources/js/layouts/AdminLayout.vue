@@ -77,6 +77,9 @@ const navigationItems = computed<NavigationItem[]>(() => {
             : []),
         ...reportNavigationItems(can, page.props.auth.reportRoutes),
         ...settingsNavigationItems(can),
+        ...(can.checkoutsManage
+            ? [{ title: '来店・会計', href: '/admin/checkouts', disabled: false, icon: 'mdi-cash-register', group: '支払い' as const }]
+            : []),
         ...(can.customersView
             ? [{ title: '顧客', href: '/admin/customers', disabled: false, icon: 'mdi-account-multiple-outline', group: '顧客' as const }]
             : []),

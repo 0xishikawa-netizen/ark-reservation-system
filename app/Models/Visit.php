@@ -21,7 +21,7 @@ class Visit extends Model
         'primary_staff_id', 'primary_staff_name_snapshot', 'visit_sequence',
         'first_visit_gender_snapshot', 'first_visit_age_years_snapshot',
         'future_reservation_exists_at_checkout', 'future_reservation_snapshot_at',
-        'staff_requested_at_checkout', 'requested_staff_id_at_checkout', 'completion_operation_id',
+        'staff_requested_at_checkout', 'requested_staff_id_at_checkout', 'nominations_recorded_at', 'completion_operation_id',
     ];
 
     protected static function booted(): void
@@ -53,6 +53,11 @@ class Visit extends Model
         return $this->belongsTo(Staff::class, 'primary_staff_id', 'user_id');
     }
 
+    public function nominations(): HasMany
+    {
+        return $this->hasMany(VisitStaffNomination::class);
+    }
+
     public function treatments(): HasMany
     {
         return $this->hasMany(VisitTreatment::class)->orderBy('sort_order');
@@ -75,6 +80,7 @@ class Visit extends Model
             'future_reservation_exists_at_checkout' => 'boolean',
             'future_reservation_snapshot_at' => 'datetime',
             'staff_requested_at_checkout' => 'boolean',
+            'nominations_recorded_at' => 'datetime',
         ];
     }
 }

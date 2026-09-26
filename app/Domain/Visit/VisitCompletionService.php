@@ -15,12 +15,14 @@ use App\Models\Checkout;
 use App\Models\Customer;
 use App\Models\Reservation;
 use App\Models\Visit;
+use App\Models\VisitStaffNomination;
 use App\Models\VisitTreatment;
 use App\Models\VisitTreatmentStaff;
 use App\Support\Audit\AuditLogger;
 use App\Support\Business\BusinessTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Ramsey\Uuid\Uuid;
@@ -98,40 +100,7 @@ final class VisitCompletionService
             $this->tickets->consume($lockedReservation, $actor);
             $this->memberships->consume($lockedReservation, $actor);
 
-            $sequence = $visit->visit_sequence ?? ((int) Visit::query()
-                ->where('customer_id', $lockedReservation->customer_id)
-                ->whereNotNull('visit_sequence')
-                ->where('id', '!=', $visit->id)
-                ->max('visit_sequence') + 1);
-            $hasFutureReservation = Reservation::query()
-                ->active()
-                ->where('customer_id', $lockedReservation->customer_id)
-                ->where('id', '!=', $lockedReservation->id)
-                ->where('starts_at', '>', $completedAt)
-                ->exists();
-            $firstVisitAge = null;
-            if ($sequence === 1 && $customer->birthday !== null) {
-                $birthday = CarbonImmutable::createFromFormat('!Y-m-d', $customer->birthday->toDateString(), $this->businessTime->timezone());
-                $businessDate = CarbonImmutable::createFromFormat(
-                    '!Y-m-d', $visit->business_date->toDateString(), $this->businessTime->timezone(),
-                );
-                if ($birthday !== false && $businessDate !== false && $birthday->lte($businessDate)) {
-                    $firstVisitAge = (int) $birthday->diffInYears($businessDate);
-                }
-            }
-
-            $visit->forceFill([
-                'status' => VisitStatus::Completed,
-                'completed_at' => $completedAt,
-                'visit_sequence' => $sequence,
-                'first_visit_gender_snapshot' => $sequence === 1 ? $customer->gender : null,
-                'first_visit_age_years_snapshot' => $firstVisitAge,
-                'future_reservation_exists_at_checkout' => $hasFutureReservation,
-                'future_reservation_snapshot_at' => $completedAt,
-                // 予約担当者の存在から指名を推測しない。既存完了VisitはNULLのまま。
-                'staff_requested_at_checkout' => $lockedReservation->is_staff_requested,
-                'requested_staff_id_at_checkout' => $lockedReservation->is_staff_requested ? $lockedReservation->staff_id : null,
-            ])->save();
+            $this->applyCompletionSnapshots($visit, $customer, $lockedReservation, $completedAt);
 
             (new ReservationStateMachine)->apply(
                 $lockedReservation,
@@ -153,6 +122,113 @@ final class VisitCompletionService
                 accountingPending: $accountingPending,
             );
         });
+    }
+
+    /**
+     * 予約なし来店（飛び込み）の完了。予約完了と同じsnapshot規則を使い、予約・権利消化は行わない。
+     */
+    public function completeWalkIn(Visit $visit, ?Authenticatable $actor = null): VisitCompletionResult
+    {
+        return DB::transaction(function () use ($visit, $actor): VisitCompletionResult {
+            $locked = Visit::query()->whereKey($visit->getKey())->lockForUpdate()->firstOrFail();
+            if ($locked->status === VisitStatus::Completed) {
+                return new VisitCompletionResult(
+                    reservation: null,
+                    visit: $locked,
+                    accountingPending: $locked->checkout === null || $locked->checkout->status === CheckoutStatus::Draft,
+                );
+            }
+            if ($locked->status !== VisitStatus::Draft || $locked->reservation_id !== null) {
+                throw ValidationException::withMessages(['visit' => __('messages.visit_completion.visit_conflict')]);
+            }
+            $customer = Customer::query()->whereKey($locked->customer_id)->lockForUpdate()->firstOrFail();
+
+            $treatments = VisitTreatment::query()->where('visit_id', $locked->id)->lockForUpdate()->get();
+            if ($treatments->isEmpty()) {
+                throw ValidationException::withMessages(['treatments' => __('messages.checkout_entry.treatment_required')]);
+            }
+            foreach ($treatments as $treatment) {
+                $this->visitFacts->completeTreatment($treatment, $actor);
+            }
+            $accountingPending = $this->finalizeExistingCheckout($locked, $actor);
+            $this->applyCompletionSnapshots($locked, $customer, null, now());
+            $this->audit->log('visit.completed', $locked, "予約なし来店を完了 visit#{$locked->id}", $actor);
+
+            return new VisitCompletionResult(reservation: null, visit: $locked->refresh(), accountingPending: $accountingPending);
+        });
+    }
+
+    /** 来店順・初診属性・次回予約・指名を完了時点の値で固定する。 */
+    private function applyCompletionSnapshots(Visit $visit, Customer $customer, ?Reservation $reservation, CarbonImmutable|Carbon $completedAt): void
+    {
+        $sequence = $visit->visit_sequence ?? ((int) Visit::query()
+            ->where('customer_id', $customer->getKey())
+            ->whereNotNull('visit_sequence')
+            ->where('id', '!=', $visit->id)
+            ->max('visit_sequence') + 1);
+        $hasFutureReservation = Reservation::query()
+            ->active()
+            ->where('customer_id', $customer->getKey())
+            ->when($reservation !== null, fn ($query) => $query->where('id', '!=', $reservation->id))
+            ->where('starts_at', '>', $completedAt)
+            ->exists();
+        $firstVisitAge = null;
+        if ($sequence === 1 && $customer->birthday !== null) {
+            $birthday = CarbonImmutable::createFromFormat('!Y-m-d', $customer->birthday->toDateString(), $this->businessTime->timezone());
+            $businessDate = CarbonImmutable::createFromFormat(
+                '!Y-m-d', $visit->business_date->toDateString(), $this->businessTime->timezone(),
+            );
+            if ($birthday !== false && $businessDate !== false && $birthday->lte($businessDate)) {
+                $firstVisitAge = (int) $birthday->diffInYears($businessDate);
+            }
+        }
+
+        [$staffRequested, $requestedStaffId, $recordedAt] = $this->nominationSnapshot($visit, $reservation, $completedAt);
+
+        $visit->forceFill([
+            'status' => VisitStatus::Completed,
+            'completed_at' => $completedAt,
+            'visit_sequence' => $sequence,
+            'first_visit_gender_snapshot' => $sequence === 1 ? $customer->gender : null,
+            'first_visit_age_years_snapshot' => $firstVisitAge,
+            'future_reservation_exists_at_checkout' => $hasFutureReservation,
+            'future_reservation_snapshot_at' => $completedAt,
+            'staff_requested_at_checkout' => $staffRequested,
+            'requested_staff_id_at_checkout' => $requestedStaffId,
+            'nominations_recorded_at' => $recordedAt,
+        ])->save();
+    }
+
+    /**
+     * 画面で指名を記録した来店はvisit_staff_nominationsが正本。visit単位の旧列は「主担当が指名されたか」を表す。
+     * 未記録の予約来店は従来どおり予約の明示指名だけを使い、担当者の存在から指名を推測しない。
+     *
+     * @return array{0:?bool,1:?int,2:mixed}
+     */
+    private function nominationSnapshot(Visit $visit, ?Reservation $reservation, mixed $completedAt): array
+    {
+        if ($visit->nominations_recorded_at !== null) {
+            $nominated = VisitStaffNomination::query()->where('visit_id', $visit->id)->pluck('staff_id')
+                ->filter()->map(fn ($id): int => (int) $id)->all();
+            $primaryNominated = $visit->primary_staff_id !== null && in_array((int) $visit->primary_staff_id, $nominated, true);
+
+            return [$primaryNominated, $primaryNominated ? (int) $visit->primary_staff_id : null, $visit->nominations_recorded_at];
+        }
+        if ($reservation === null || $reservation->is_staff_requested === null) {
+            return [null, null, null];
+        }
+        if ($reservation->is_staff_requested && $reservation->staff_id !== null) {
+            VisitStaffNomination::query()->firstOrCreate(
+                ['visit_id' => $visit->id, 'staff_id' => $reservation->staff_id],
+                ['staff_name_snapshot' => $reservation->staff?->display_name],
+            );
+        }
+
+        return [
+            (bool) $reservation->is_staff_requested,
+            $reservation->is_staff_requested ? $reservation->staff_id : null,
+            $completedAt,
+        ];
     }
 
     private function completedResult(Reservation $reservation): VisitCompletionResult

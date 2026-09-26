@@ -10,7 +10,7 @@ use App\Models\Visit;
 final readonly class VisitCompletionResult
 {
     public function __construct(
-        public Reservation $reservation,
+        public ?Reservation $reservation,
         public Visit $visit,
         public bool $accountingPending,
     ) {}

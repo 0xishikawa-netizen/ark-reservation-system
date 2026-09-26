@@ -479,6 +479,14 @@ UTC半開区間で索引を利用し、JST日付への変換はSELECT/GROUP BY�
 
 `daily_business_notes`: `id`、`business_date` date UNIQUE、`business_condition` nullable TEXT（営業の様子）、`reflection` nullable TEXT（振り返り）、`created_by` / `updated_by` nullable users FK（ユーザー削除時はNULL）、timestamps。同一日1行で、未入力はNULL。単一店舗のためstore列は設けない。文章はmanual narrative dataであり、売上・来店等のReporting factsへ混ぜない。更新履歴は既存`audit_logs`で追跡する。原本Excelの日報D/H列へ書くが、原本からの推測backfillはしない。
 
+### Phase 11 Task 11-19 来店・会計入力
+
+- `checkouts.visit_id` をnullableへ変更（UNIQUEは維持。来店会計は従来どおり1来店1会計）。来店なし会計（物販のみ・回数券/月額購入のみ等）は `visit_id NULL`、`customer_id`（nullable、匿名物販はNULL）と `sale_date` を持つ。架空Visitは作らない。
+- `visit_staff_nominations`: `visit_id` / `staff_id`（nullOnDelete）/ `staff_name_snapshot`、UNIQUE(`visit_id`,`staff_id`)。来店単位・スタッフ単位の指名snapshotで、完了済み来店では変更不可（model guard）。
+- `visits.nominations_recorded_at`: NULL=指名未記録（旧Visit。推測backfillしない）、値あり=`visit_staff_nominations`が正本。既存 `staff_requested_at_checkout` / `requested_staff_id_at_checkout` は「主担当が指名されたか」を表し、Task 11-8の指名率の意味を変えない。
+- 会計明細の `item_type` は `service` / `product` / `ticket` / `membership` / `other`（`CheckoutLineItemType`）。税額は明細単位・内税・1円未満切り捨て（`TaxAmountCalculator`）でsnapshotし、集計時に再計算しない。
+- 回数券購入明細は会計確定時に既存 `TicketLedgerService::grant` で数量分付与（dedupe `grant:checkout-line:{line}:{n}`）。月額明細は売上記録のみで利用権は既存月額管理が正本。
+
 ### 外部予約連携（Phase 9・`app/Domain/Integration`）
 
 - `reservation_provider_mappings`：`provider`(32) / `reservation_id` FK cascade / `external_reservation_id`(191) / `external_customer_id`(191) / `fingerprint`(64) / `external_updated_at` / `external_version`(64) / `last_synced_at` / `last_seen_at` / `sync_status`(16 default `in_sync`)。

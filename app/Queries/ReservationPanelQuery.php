@@ -150,6 +150,10 @@ final class ReservationPanelQuery
             ],
             // 状態遷移は既存 ReservationStateMachine が正本。ここは表示用の目安のみ。
             'can_complete' => $canManage && $status === ReservationStatus::Confirmed,
+            // 来店・会計入力（Task 11-19）。POSTで来店下書きを開き入力画面へ遷移する。
+            'visit_entry_url' => (auth()->user()?->can('checkouts.manage') ?? false)
+                && in_array($status, [ReservationStatus::Confirmed, ReservationStatus::Completed], true)
+                ? "/admin/reservations/{$reservation->id}/visit" : null,
             'can_cancel' => $canManage && in_array($status, [
                 ReservationStatus::PendingPayment,
                 ReservationStatus::PendingExternalSync,

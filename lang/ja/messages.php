@@ -297,4 +297,30 @@ return [
     'integration' => [
         'outbox_requeued' => 'Outbox を再投入しました。',
     ],
+
+    // 来店・会計入力（Task 11-19）
+    'checkout_entry' => [
+        'saved' => '来店・会計を保存しました。',
+        'completed' => '来店を完了しました。',
+        'finalized' => '会計を確定しました。',
+        'voided' => '会計を取り消しました。',
+        'opened' => '来店・会計を開きました。',
+        'amount_invalid' => '数量・金額が不正です。',
+        'tax_rate_missing' => '売上日の税率が設定されていません。業務マスタで税率期間を登録してください。',
+        'tax_category_required' => '税区分を選択してください。',
+        'item_type_invalid' => '明細の種別が不正です。',
+        'item_name_required' => '明細名を入力してください。',
+        'customer_required_for_ticket' => '回数券・月額の販売には顧客が必要です。',
+        'ticket_product_missing' => '回数券商品が見つかりません。',
+        'ticket_grant_reason' => '店頭会計 #:id の回数券購入',
+        'treatment_required' => '施術を1件以上入力してください。',
+        'treatment_missing' => '明細に対応する施術が見つかりません。',
+        'minutes_required' => '施術時間を1分以上で入力してください。',
+        'staff_minutes_mismatch' => '担当スタッフの時間の合計が施術時間と一致しません。',
+        'staff_duplicated' => '同じ施術に同じスタッフが重複しています。',
+        'visit_locked' => 'この来店は変更できません。',
+        'checkout_locked' => '確定済み会計がある来店の施術は変更できません。取消してから入力し直してください。',
+        'visit_checkout_elsewhere' => '来店に紐づく会計は来店・会計画面で編集してください。',
+        'complete_visit_first' => '先に来店を完了してください。',
+    ],
 ];

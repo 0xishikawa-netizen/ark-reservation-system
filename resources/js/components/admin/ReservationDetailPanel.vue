@@ -48,6 +48,7 @@ interface PanelData {
             url: string;
         } | null;
         can_complete: boolean;
+        visit_entry_url: string | null;
         can_cancel: boolean;
         can_no_show: boolean;
     } | null;
@@ -371,6 +372,14 @@ function runAction(
         },
         onSuccess: () => refetch(),
     });
+}
+
+function openVisitEntry(): void {
+    const url = data.value?.reservation?.visit_entry_url;
+    if (url) {
+        actionBusy.value = true;
+        router.post(url, {}, { onFinish: () => { actionBusy.value = false; } });
+    }
 }
 
 function complete(): void {
@@ -808,7 +817,19 @@ function submitConfirm(): void {
             <div class="rdp__footer">
                 <template v-if="data.reservation">
                     <v-btn
-                        v-if="data.reservation.can_complete"
+                        v-if="data.reservation.visit_entry_url"
+                        color="primary"
+                        variant="flat"
+                        size="small"
+                        prepend-icon="mdi-cash-register"
+                        data-testid="open-visit-entry"
+                        :loading="actionBusy"
+                        @click="openVisitEntry"
+                    >
+                        来店・会計
+                    </v-btn>
+                    <v-btn
+                        v-else-if="data.reservation.can_complete"
                         color="primary"
                         variant="flat"
                         size="small"
@@ -867,6 +888,12 @@ function submitConfirm(): void {
                             prepend-icon="mdi-calendar-plus-outline"
                             title="新規予約"
                             @click="emit('create')"
+                        />
+                        <v-list-item
+                            v-if="data.reservation?.visit_entry_url && data.reservation.can_complete"
+                            prepend-icon="mdi-check-circle-outline"
+                            title="会計なしで来店完了"
+                            @click="complete"
                         />
                         <v-list-item
                             v-if="data.reservation?.payment"
