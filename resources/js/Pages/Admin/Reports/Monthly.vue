@@ -60,6 +60,7 @@ const basisItems: { title: string; value: SalesBasis }[] = [
     { title: labels.annualTreatmentBasis, value: 'treatment_date' },
 ];
 const basisLabel = computed(() => (report.value.sales_basis === 'payment_date' ? labels.annualPaymentBasis : labels.annualTreatmentBasis));
+const methodHeading = (method: { code: string | null; name: string }): string => (method.code ? labels.paymentMethodHeadings[method.code] : undefined) ?? method.name;
 const categories = ['M', 'T', 'A', 'M&T', 'A&T'] as const;
 
 // 決済列はマスタの表示順（原本と同じ 現金→PayPay→…→ID）で固定し、マスタ外（無効化済み等）で実績がある手段は後ろに足す。
@@ -96,10 +97,21 @@ const monthSplit = computed(() => report.value.totals.sales_split as SalesSplit 
 const hasFacts = (row: DailyRow): boolean => row.visit_count > 0 || row.payment_date_revenue > 0 || row.treatment_date_revenue > 0;
 /** 未来日で実績がない日は、0 ではなく「未実績」として「-」にする。 */
 const isPending = (row: DailyRow): boolean => row.is_future && !hasFacts(row);
-const taxKey = (tax: TaxTotal): string => `${tax.tax_category_code ?? 'unknown'}|${tax.tax_category_name ?? 'unknown'}|${tax.tax_rate_bps ?? 'unknown'}`;
-const taxLabel = (tax: TaxTotal): string => tax.tax_rate_bps === null
-    ? `${tax.tax_category_name ?? '不明'}（税率不明）`
-    : `${tax.tax_category_name ?? tax.tax_category_code ?? '税区分不明'} ${tax.tax_rate_bps / 100}%`;
+// 原本の月計表に税区分名の欄はないため、画面にも税区分名（マスタの内部名）は出さず税率ごとにまとめる。
+interface TaxRateTotal { rate_bps: number | null; net_amount: number; tax_amount: number }
+const taxRates = computed<TaxRateTotal[]>(() => {
+    const byRate = new Map<number | null, TaxRateTotal>();
+    for (const tax of props.report.tax_buckets) {
+        const current = byRate.get(tax.tax_rate_bps) ?? { rate_bps: tax.tax_rate_bps, net_amount: 0, tax_amount: 0 };
+        current.net_amount += tax.net_amount;
+        current.tax_amount += tax.tax_amount;
+        byRate.set(tax.tax_rate_bps, current);
+    }
+    return [...byRate.values()].sort((a, b) => (b.rate_bps ?? -1) - (a.rate_bps ?? -1));
+});
+const taxRateLabel = (tax: TaxRateTotal): string => tax.rate_bps === null
+    ? labels.monthlyTaxRateUnknown
+    : labels.monthlyTaxRateTarget.replace('{rate}', String(tax.rate_bps / 100));
 const totalNumber = (key: string): number => report.value.totals[key] as number;
 const categoryTotals = computed(() => report.value.totals.analysis_category_visit_counts as Record<string, number>);
 
@@ -228,9 +240,9 @@ function changeBasis(value: SalesBasis): void {
                     <th :colspan="categories.length + 1" class="group-start">施術分類</th>
                 </tr>
                 <tr>
-                    <th v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">{{ method.name }}</th>
+                    <th v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">{{ methodHeading(method) }}</th>
                     <th class="num">{{ labels.monthlyNetSubtotal }}</th>
-                    <th v-for="(method, index) in retailColumns" :key="`r-${method.payment_method_id}`" class="num" :class="{ 'group-start': index === 0 }">{{ method.name }}</th>
+                    <th v-for="(method, index) in retailColumns" :key="`r-${method.payment_method_id}`" class="num" :class="{ 'group-start': index === 0 }">{{ methodHeading(method) }}</th>
                     <th class="num" :class="{ 'group-start': retailColumns.length === 0 }">{{ labels.monthlyNetSubtotal }}</th>
                     <th class="num group-start">{{ labels.monthlyNetSales }}</th><th class="num">{{ labels.monthlySalesTax }}</th><th class="num">{{ labels.monthlyGrossSales }}</th>
                     <th class="num">{{ labels.monthlySelectedRevenue }}<br><small>{{ basisLabel }}</small></th>
@@ -302,9 +314,9 @@ function changeBasis(value: SalesBasis): void {
             </tfoot>
         </ReportTable>
         <div class="period-summary">
-            <span class="period-summary__item">1〜15日 <strong><ReportValue :value="report.periods.first.selected_revenue" format="money" /></strong> / {{ report.periods.first.visit_count }}来店</span>
-            <span v-for="tax in report.tax_buckets" :key="taxKey(tax)" class="period-summary__item">{{ taxLabel(tax) }} {{ labels.monthlyNetSales }} <strong><ReportValue :value="tax.net_amount" format="money" /></strong> / {{ labels.monthlySalesTax }} <ReportValue :value="tax.tax_amount" format="money" /></span>
-            <span class="period-summary__item">16日〜月末 <strong><ReportValue :value="report.periods.second.selected_revenue" format="money" /></strong> / {{ report.periods.second.visit_count }}来店</span>
+            <span class="period-summary__item" data-testid="period-first">{{ labels.monthlyFirstHalf }} <strong><ReportValue :value="report.periods.first.selected_revenue" format="money" /></strong> / {{ report.periods.first.visit_count }}{{ labels.monthlyVisitUnit }}</span>
+            <span class="period-summary__item" data-testid="period-second">{{ labels.monthlySecondHalf }} <strong><ReportValue :value="report.periods.second.selected_revenue" format="money" /></strong> / {{ report.periods.second.visit_count }}{{ labels.monthlyVisitUnit }}</span>
+            <span v-for="tax in taxRates" :key="String(tax.rate_bps)" class="period-summary__item" data-testid="tax-rate-summary">{{ taxRateLabel(tax) }} {{ labels.monthlyNetSales }} <strong><ReportValue :value="tax.net_amount" format="money" /></strong> / {{ labels.monthlySalesTax }} <ReportValue :value="tax.tax_amount" format="money" /></span>
         </div>
     </SectionCard>
 </template>

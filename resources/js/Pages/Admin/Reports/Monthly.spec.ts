@@ -29,7 +29,11 @@ const report = () => ({
     year: 2026, month: 10, month_key: '2026-10', as_of_date: '2026-10-15', sales_basis: 'payment_date' as const,
     daily_rows: Array.from({ length: 31 }, (_, index) => row(index + 1)),
     payment_methods: [{ payment_method_id: 1, code: 'cash', name: '現金', amount: 1100 }],
-    tax_buckets: [{ tax_category_code: 'standard', tax_category_name: '標準', tax_rate_bps: 1000, net_amount: 1000, tax_amount: 100, gross_amount: 1100, line_count: 1 }],
+    tax_buckets: [
+        { tax_category_code: 'standard', tax_category_name: '標準', tax_rate_bps: 1000, net_amount: 1000, tax_amount: 100, gross_amount: 1100, line_count: 1 },
+        { tax_category_code: 'TEST_TAX', tax_category_name: 'TEST_検証専用税区分', tax_rate_bps: 1000, net_amount: 500, tax_amount: 50, gross_amount: 550, line_count: 1 },
+        { tax_category_code: 'reduced', tax_category_name: '軽減', tax_rate_bps: 800, net_amount: 300, tax_amount: 24, gross_amount: 324, line_count: 1 },
+    ],
     totals: { net_sales: 1007, sales_tax: 93, gross_sales: 1100,
         sales_split: { treatment: { net: 710, tax: 70, gross: 780 }, retail: { net: 297, tax: 23, gross: 320 } },
         payment_category_totals: [{ payment_method_id: 1, code: 'cash', name: '現金', amount: 1100, treatment_amount: 780, retail_amount: 320, unallocated_amount: 0 }],
@@ -63,7 +67,14 @@ describe('Monthly report page', () => {
     it('renders zero as 0 and nullable / future values as a muted hyphen keeping their meaning', () => {
         const page = render();
         const table = page.get('[data-testid="monthly-daily-table"]');
-        expect(page.text()).toContain('標準 10% 税抜売上');
+        // 税区分名（マスタの内部名）は出さず、税率ごとに合算して表示する。
+        expect(page.findAll('[data-testid="tax-rate-summary"]').map((item) => item.text())).toEqual([
+            '10%対象 税抜売上 1,500円 / 税額 150円', '8%対象 税抜売上 300円 / 税額 24円',
+        ]);
+        expect(page.text()).not.toContain('検証専用税区分');
+        expect(page.text()).not.toContain('標準 10%');
+        expect(page.get('[data-testid="period-first"]').text()).toBe('1日〜15日 1,100円 / 1来店');
+        expect(page.get('[data-testid="period-second"]').text()).toBe('16日〜月末 0円 / 0来店');
         expect(page.text()).toContain('31日');
         expect(table.text()).toContain('0.0%');
         expect(table.text()).toContain('0円');
@@ -79,7 +90,8 @@ describe('Monthly report page', () => {
     it('orders daily columns like the canonical 月計表 (treatment payments → retail payments → sales → visits → first visit → categories)', () => {
         const page = render();
         const headers = page.findAll('[data-testid="monthly-daily-table"] thead tr:nth-child(2) th').map((cell) => cell.text());
-        expect(headers).toEqual(['現金', 'PayPay', 'iD', '計（税抜）', '現金', 'PayPay', 'iD', '計（税抜）', '税抜売上', '税額', '税込売上', '売上金決済日基準',
+        // 決済手段の見出しは原本Excel（月計表）の表記（iD → ID）。
+        expect(headers).toEqual(['現金', 'PayPay', 'ID', '計（税抜）', '現金', 'PayPay', 'ID', '計（税抜）', '税抜売上', '税額', '税込売上', '売上金決済日基準',
             '来店数', 'ロング', '予約', '予約率', '初診数', '初診予約', '初診予約率', 'M', 'T', 'A', 'M&T', 'A&T', '分類不明']);
         const groups = page.findAll('[data-testid="monthly-daily-table"] thead tr.group-row th').map((cell) => cell.text());
         expect(groups).toEqual(['日', '曜', '施術等 決済別（税込）', '物販 決済別（税込）', '売上', '来店', '初診', '施術分類']);

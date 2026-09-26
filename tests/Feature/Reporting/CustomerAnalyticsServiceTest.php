@@ -100,6 +100,8 @@ final class CustomerAnalyticsServiceTest extends TestCase
 
         $summary = $this->report(2026, 10, '2026-10-31');
         $this->assertSame(1, $this->bucketCount($summary->breakdowns['gender']['buckets'], 'male'));
+        // 画面へ英語のコード値（male）を出さないよう、日本語の表示名を付けて返す。
+        $this->assertSame('男性', collect($summary->breakdowns['gender']['buckets'])->firstWhere('value', 'male')['label']);
         $this->assertSame(1, $this->bucketCount($summary->breakdowns['gender']['buckets'], null));
         $this->assertSame(0, $this->bucketCount($summary->breakdowns['gender']['buckets'], 'female'));
         $this->assertSame(1, $this->bucketCount($summary->breakdowns['age_at_first_visit']['buckets'], '29'));

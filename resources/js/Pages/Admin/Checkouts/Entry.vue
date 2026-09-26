@@ -74,7 +74,7 @@ const touch = (): void => { dirty.value = true; };
 const staffItems = computed(() => props.staff.map((s) => ({ title: s.name, value: s.id })));
 const serviceItems = computed(() => props.services.map((s) => ({ title: s.name, value: s.id })));
 const taxItems = computed(() => props.taxCategories.map((t) => ({ title: t.name, value: t.id })));
-const methodItems = computed(() => props.paymentMethods.map((m) => ({ title: m.name, value: m.id })));
+const methodItems = computed(() => props.paymentMethods.map((m) => ({ title: MESSAGES.reporting.paymentMethodHeadings[m.code] ?? m.name, value: m.id })));
 const treatmentItems = computed(() => treatments.value.map((row, index) => ({
     title: `${index + 1}. ${props.services.find((s) => s.id === row.service_id)?.name ?? labels.treatments}`,
     value: index,

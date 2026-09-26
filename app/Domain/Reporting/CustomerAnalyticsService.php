@@ -49,7 +49,8 @@ final class CustomerAnalyticsService
                 }
                 $this->addBucket($buckets, "reached_{$threshold}", $maxSequence >= $threshold ? 'true' : 'false');
             }
-            $this->addBucket($buckets, 'gender', $first->first_visit_gender_snapshot);
+            $gender = $first->first_visit_gender_snapshot;
+            $this->addBucket($buckets, 'gender', $gender, in_array($gender, ['male', 'female', 'other'], true) ? __('messages.reporting.gender_'.$gender) : null);
             $age = $first->first_visit_age_years_snapshot;
             $this->addBucket($buckets, 'age_at_first_visit', $age === null ? null : (string) $age);
             $decade = AgeDecadeBucket::codeFor($age === null ? null : (int) $age);
