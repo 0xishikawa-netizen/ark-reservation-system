@@ -12,6 +12,7 @@ interface ReportRoutes {
     staffUtilization: string;
     timeBands: string;
     annual: string;
+    staffSales?: string;
 }
 
 export interface ReportNavigationItem {
@@ -32,6 +33,7 @@ export function reportNavigationItems(can: ReportPermissions, routes: ReportRout
         ...(can.salesView ? [
             { title: '月計', href: routes.monthly, disabled: false as const, icon: 'mdi-chart-box-outline', group: '集計' as const },
             { title: MESSAGES.reporting.annualTitle, href: routes.annual, disabled: false as const, icon: 'mdi-calendar-range', group: '集計' as const },
+            ...(routes.staffSales ? [{ title: MESSAGES.reporting.staffSalesTitle, href: routes.staffSales, disabled: false as const, icon: 'mdi-account-cash-outline', group: '集計' as const }] : []),
         ] : []),
         { title: MESSAGES.reporting.customerTitle, href: routes.customers, disabled: false, icon: 'mdi-account-group-outline', group: '集計' },
         { title: MESSAGES.reporting.staffTitle, href: routes.staffUtilization, disabled: false, icon: 'mdi-chart-timeline-variant', group: '集計' },

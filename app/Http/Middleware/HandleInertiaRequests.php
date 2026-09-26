@@ -67,6 +67,7 @@ class HandleInertiaRequests extends Middleware
                     'customers' => route('admin.reports.customers'),
                     'staffUtilization' => route('admin.reports.staff-utilization'),
                     'timeBands' => route('admin.reports.time-bands'),
+                    'staffSales' => route('admin.reports.staff-sales'),
                     'annual' => route('admin.reports.annual'),
                 ],
             ],

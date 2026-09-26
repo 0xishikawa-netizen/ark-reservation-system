@@ -33,6 +33,7 @@ use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\StaffAttendanceController;
 use App\Http\Controllers\Admin\StaffController;
+use App\Http\Controllers\Admin\StaffSalesController;
 use App\Http\Controllers\Admin\StaffShiftController;
 use App\Http\Controllers\Admin\StaffUtilizationController;
 use App\Http\Controllers\Admin\SystemStatusController;
@@ -268,6 +269,10 @@ Route::middleware([
         ->middleware('can:reports.view')->name('reports.time-bands');
     Route::get('reports/time-bands/data', [TimeBandUtilizationController::class, 'data'])
         ->middleware('can:reports.view')->name('reports.time-bands.data');
+    Route::get('reports/staff-sales', [StaffSalesController::class, 'index'])
+        ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.staff-sales');
+    Route::get('reports/staff-sales/data', [StaffSalesController::class, 'data'])
+        ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.staff-sales.data');
     Route::get('reports/annual', [AnnualReportController::class, 'index'])
         ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.annual');
     Route::get('reports/annual/data', [AnnualReportController::class, 'data'])

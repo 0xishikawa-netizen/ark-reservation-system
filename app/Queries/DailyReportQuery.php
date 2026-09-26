@@ -184,7 +184,7 @@ final class DailyReportQuery
      * 確定会計の決済日（受領済み支払の最終受領日時）。支払が期間内にある会計だけを候補にし、
      * 会計の全支払の最終受領が期間内のものを返す。税・税抜・物販の決済日基準はこの日付で揃える。
      */
-    private function paidCheckouts(string $startUtc, string $endUtc): Builder
+    public function paidCheckouts(string $startUtc, string $endUtc): Builder
     {
         $candidates = DB::table('checkout_tenders')->select('checkout_id')
             ->where('status', CheckoutTenderStatus::Received->value)

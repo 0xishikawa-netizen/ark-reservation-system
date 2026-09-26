@@ -14,6 +14,7 @@ Reports 系画面と関連管理画面の表示ルールの正本。新しい集
 | 顧客統計 | `/admin/reports/customers` | reports.view | `Pages/Admin/Reports/Customers.vue` |
 | スタッフ稼働率 | `/admin/reports/staff-utilization` | reports.view | `Pages/Admin/Reports/StaffUtilization.vue` |
 | 時間帯別稼働率 | `/admin/reports/time-bands` | reports.view | `Pages/Admin/Reports/TimeBands.vue` |
+| スタッフ売上（Task 11-22） | `/admin/reports/staff-sales` | reports.view + sales.view | `Pages/Admin/Reports/StaffSales.vue` |
 
 メニュー定義は `resources/js/layouts/reportNavigation.ts`。原本固定 6 シート Excel（`docs/EXCEL_EXPORT.md`）は
 月計画面の「月計表をダウンロード」ボタン（reports.export 権限・決済日基準のみ）から出力する。
