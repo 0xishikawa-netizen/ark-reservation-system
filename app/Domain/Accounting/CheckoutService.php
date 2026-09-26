@@ -8,9 +8,11 @@ use App\Domain\Ticket\TicketLedgerService;
 use App\Enums\Accounting\CheckoutLineItemType;
 use App\Enums\Accounting\CheckoutStatus;
 use App\Enums\Accounting\CheckoutTenderStatus;
+use App\Enums\Accounting\TenderAllocationCategory;
 use App\Models\Checkout;
 use App\Models\CheckoutLine;
 use App\Models\CheckoutTender;
+use App\Models\CheckoutTenderAllocation;
 use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\PaymentMethod;
@@ -61,10 +63,46 @@ final class CheckoutService
             $locked = $this->lockDraft($checkout);
             $lineIds = CheckoutLine::query()->where('checkout_id', $locked->getKey())->pluck('id');
             StaffRevenueAllocation::query()->whereIn('checkout_line_id', $lineIds)->get()->each->delete();
+            $tenderIds = CheckoutTender::query()->where('checkout_id', $locked->getKey())->pluck('id');
+            CheckoutTenderAllocation::query()->whereIn('checkout_tender_id', $tenderIds)->get()->each->delete();
             CheckoutTender::query()->where('checkout_id', $locked->getKey())->get()->each->delete();
             CheckoutLine::query()->where('checkout_id', $locked->getKey())->get()->each->delete();
 
             return $locked;
+        });
+    }
+
+    /**
+     * 支払内訳を施術等／物販へ明示配分する（Task 11-20）。配分合計は支払額と一致しなければならない。
+     *
+     * @param  array<string, int>  $amounts  allocation_category => 金額
+     */
+    public function allocateTender(CheckoutTender $tender, array $amounts, ?Authenticatable $actor = null): void
+    {
+        DB::transaction(function () use ($tender, $amounts, $actor): void {
+            $lockedTender = CheckoutTender::query()->whereKey($tender->getKey())->lockForUpdate()->firstOrFail();
+            $this->lockDraft($lockedTender->checkout);
+            $sum = 0;
+            foreach ($amounts as $category => $amount) {
+                if (TenderAllocationCategory::tryFrom((string) $category) === null || (int) $amount < 0) {
+                    throw ValidationException::withMessages(['tender_allocations' => __('messages.checkout_entry.tender_allocation_invalid')]);
+                }
+                $sum += (int) $amount;
+            }
+            if ($sum !== (int) $lockedTender->amount) {
+                throw ValidationException::withMessages(['tender_allocations' => __('messages.checkout_entry.tender_allocation_mismatch')]);
+            }
+            CheckoutTenderAllocation::query()->where('checkout_tender_id', $lockedTender->getKey())->get()->each->delete();
+            foreach ($amounts as $category => $amount) {
+                if ((int) $amount > 0) {
+                    CheckoutTenderAllocation::query()->create([
+                        'checkout_tender_id' => $lockedTender->getKey(),
+                        'allocation_category' => $category,
+                        'amount' => (int) $amount,
+                    ]);
+                }
+            }
+            $this->audit->log('checkout.tender_allocated', $lockedTender, '支払を施術等／物販へ配分', $actor);
         });
     }
 
@@ -254,6 +292,8 @@ final class CheckoutService
                 throw ValidationException::withMessages(['tenders' => '有効な支払明細の合計が会計総額と一致しません。']);
             }
 
+            $this->assertTenderAllocations($lines, $tenders);
+
             $locked->forceFill(['status' => CheckoutStatus::Finalized, 'finalized_at' => now()])->save();
             $this->grantPurchasedTickets($locked, $lines, $actor);
             $this->audit->log('checkout.finalized', $locked, '会計を確定', $actor);
@@ -309,6 +349,40 @@ final class CheckoutService
                     __('messages.checkout_entry.ticket_grant_reason', ['id' => $checkout->getKey()]),
                     $actor,
                 );
+            }
+        }
+    }
+
+    /**
+     * 配分が1件でもあれば、支払ごと・配分先ごとの合計が一致することを検証する。
+     * 配分が無い会計（Task 11-20以前・外部取込）は「配分未記録」のまま確定を許可し、推測で配分しない。
+     *
+     * @param  Collection<int, CheckoutLine>  $lines
+     * @param  Collection<int, CheckoutTender>  $tenders
+     */
+    private function assertTenderAllocations($lines, $tenders): void
+    {
+        $received = $tenders->where('status', CheckoutTenderStatus::Received);
+        $allocations = CheckoutTenderAllocation::query()->whereIn('checkout_tender_id', $received->pluck('id'))->lockForUpdate()->get();
+        if ($allocations->isEmpty()) {
+            // 施術等と物販が混在し支払が複数ある会計は、配分を推測できないため明示入力を必須にする。
+            $categories = $lines->map(fn (CheckoutLine $line): TenderAllocationCategory => TenderAllocationCategory::forLineType($line->item_type))->unique();
+            if ($categories->count() > 1 && $received->count() > 1) {
+                throw ValidationException::withMessages(['tender_allocations' => __('messages.checkout_entry.tender_allocation_required')]);
+            }
+
+            return;
+        }
+        foreach ($received as $tender) {
+            if ((int) $allocations->where('checkout_tender_id', $tender->id)->sum('amount') !== (int) $tender->amount) {
+                throw ValidationException::withMessages(['tender_allocations' => __('messages.checkout_entry.tender_allocation_mismatch')]);
+            }
+        }
+        foreach (TenderAllocationCategory::cases() as $category) {
+            $lineTotal = (int) $lines->filter(fn (CheckoutLine $line): bool => TenderAllocationCategory::forLineType($line->item_type) === $category)->sum('gross_amount');
+            $allocated = (int) $allocations->filter(fn (CheckoutTenderAllocation $row): bool => $row->allocation_category === $category)->sum('amount');
+            if ($lineTotal !== $allocated) {
+                throw ValidationException::withMessages(['tender_allocations' => __('messages.checkout_entry.tender_allocation_category_mismatch')]);
             }
         }
     }

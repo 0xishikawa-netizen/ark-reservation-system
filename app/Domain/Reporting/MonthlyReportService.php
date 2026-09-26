@@ -6,6 +6,7 @@ namespace App\Domain\Reporting;
 
 use App\Domain\Business\SalesTargetService;
 use App\Enums\Reporting\SalesBasis;
+use App\Queries\DailyReportQuery;
 use App\Queries\MonthlyReportQuery;
 use App\Support\Business\BusinessTime;
 use Carbon\CarbonImmutable;
@@ -198,7 +199,21 @@ final class MonthlyReportService
         ];
         $payments = [];
         $taxes = [];
+        $split = DailyReportQuery::emptySalesSplit();
+        $paymentCategories = [];
         foreach ($daily as $summary) {
+            foreach ($summary->salesSplit as $category => $amounts) {
+                foreach ($amounts as $amountKey => $amount) {
+                    $split[$category][$amountKey] += $amount;
+                }
+            }
+            foreach ($summary->paymentCategoryTotals as $payment) {
+                $key = (string) $payment['payment_method_id'];
+                $paymentCategories[$key] ??= [...$payment, 'amount' => 0, 'treatment_amount' => 0, 'retail_amount' => 0, 'unallocated_amount' => 0];
+                foreach (['amount', 'treatment_amount', 'retail_amount', 'unallocated_amount'] as $amountKey) {
+                    $paymentCategories[$key][$amountKey] += $payment[$amountKey];
+                }
+            }
             $totals['payment_date_revenue'] += $summary->paymentDateRevenue;
             $totals['treatment_date_revenue'] += $summary->treatmentDateRevenue;
             $totals['direct_treatment_revenue'] += $summary->directTreatmentRevenue;
@@ -236,6 +251,11 @@ final class MonthlyReportService
         $taxTotals = array_values($taxes);
         usort($taxTotals, static fn (array $left, array $right): int => ($left['tax_rate_bps'] ?? -1) <=> ($right['tax_rate_bps'] ?? -1));
         $totals['tax_totals'] = $taxTotals;
+        $totals['sales_split'] = $split;
+        $totals['net_sales'] = $split['treatment']['net'] + $split['retail']['net'];
+        $totals['sales_tax'] = $split['treatment']['tax'] + $split['retail']['tax'];
+        $totals['gross_sales'] = $split['treatment']['gross'] + $split['retail']['gross'];
+        $totals['payment_category_totals'] = array_values($paymentCategories);
 
         return $totals;
     }

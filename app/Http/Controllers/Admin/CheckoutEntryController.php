@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Accounting\CheckoutEntryService;
 use App\Domain\Business\TaxRateService;
 use App\Enums\Accounting\CheckoutStatus;
+use App\Enums\Accounting\TenderAllocationCategory;
 use App\Enums\Visit\VisitStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SaveCheckoutEntryRequest;
@@ -112,7 +113,7 @@ final class CheckoutEntryController extends Controller
     public function showVisit(Visit $visit, TaxRateService $taxRates): Response
     {
         $visit->load(['customer.user:id,name', 'reservation', 'nominations', 'treatments.staffAssignments']);
-        $checkout = Checkout::query()->with(['lines.allocations', 'tenders'])->where('visit_id', $visit->id)->first();
+        $checkout = Checkout::query()->with(['lines.allocations', 'tenders.allocations'])->where('visit_id', $visit->id)->first();
 
         return Inertia::render('Admin/Checkouts/Entry', [
             ...$this->masters($visit->business_date->toDateString(), $taxRates),
@@ -150,7 +151,7 @@ final class CheckoutEntryController extends Controller
         if ($checkout->visit_id !== null) {
             return redirect()->route('admin.visits.checkout.show', $checkout->visit_id);
         }
-        $checkout->load(['customer.user:id,name', 'lines.allocations', 'tenders']);
+        $checkout->load(['customer.user:id,name', 'lines.allocations', 'tenders.allocations']);
 
         return Inertia::render('Admin/Checkouts/Entry', [
             ...$this->masters($checkout->sale_date->toDateString(), $taxRates),
@@ -293,6 +294,8 @@ final class CheckoutEntryController extends Controller
                 'amount' => $tender->amount,
                 'status' => $tender->status->value,
                 'external' => $tender->payment_id !== null,
+                'retail_amount' => $tender->allocations->isEmpty() ? null
+                    : (int) $tender->allocations->where('allocation_category', TenderAllocationCategory::Retail)->sum('amount'),
             ])->values(),
             'editable' => $checkout->status === CheckoutStatus::Draft,
         ];

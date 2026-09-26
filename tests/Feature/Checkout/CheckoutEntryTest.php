@@ -6,10 +6,13 @@ namespace Tests\Feature\Checkout;
 
 use App\Domain\Accounting\TaxAmountCalculator;
 use App\Domain\Reporting\DailyReportService;
+use App\Domain\Reporting\Excel\ReportWorkbookService;
+use App\Domain\Reporting\MonthlyReportService;
 use App\Enums\Accounting\CheckoutStatus;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Visit\VisitStatus;
 use App\Models\Checkout;
+use App\Models\CheckoutTenderAllocation;
 use App\Models\Customer;
 use App\Models\MembershipPlan;
 use App\Models\PaymentMethod;
@@ -101,8 +104,8 @@ class CheckoutEntryTest extends TestCase
                 ['item_type' => 'product', 'product_id' => $product->id, 'quantity' => 2, 'unit_amount' => 110, 'is_staff_allocatable' => false],
             ],
             'tenders' => [
-                ['payment_method_id' => $this->cash->id, 'amount' => 5000],
-                ['payment_method_id' => $this->paypay->id, 'amount' => 4020],
+                ['payment_method_id' => $this->cash->id, 'amount' => 5000, 'retail_amount' => 0],
+                ['payment_method_id' => $this->paypay->id, 'amount' => 4020, 'retail_amount' => 220],
             ],
         ];
         $this->actingAs($admin)->put(route('admin.visits.checkout.update', $visit), $payload)->assertSessionHasNoErrors()->assertRedirect();
@@ -293,6 +296,77 @@ class CheckoutEntryTest extends TestCase
         $this->assertSame(1, $day->visitCount);
         $this->assertSame(1, $day->longVisitCount);
         $this->assertSame(0, app(DailyReportService::class)->forDate('2026-09-15')->paymentDateRevenue);
+    }
+
+    public function test_mixed_checkout_with_multiple_tenders_requires_explicit_retail_allocation(): void
+    {
+        $admin = $this->admin();
+        $service = Service::factory()->create(['price' => 8000, 'tax_category_id' => $this->standard->id]);
+        $product = Product::factory()->create(['price' => 3240, 'tax_category_id' => $this->reduced->id]);
+        $this->actingAs($admin)->post(route('admin.checkouts.store'), ['sale_date' => '2026-09-15', 'customer_id' => Customer::factory()->create()->user_id]);
+        $checkout = Checkout::query()->sole();
+        $lines = [
+            ['item_type' => 'other', 'item_name' => 'レンタル', 'quantity' => 1, 'unit_amount' => 8000, 'tax_category_id' => $this->standard->id],
+            ['item_type' => 'product', 'product_id' => $product->id, 'quantity' => 1, 'unit_amount' => 3240],
+        ];
+        unset($service);
+
+        $this->actingAs($admin)->put(route('admin.checkouts.update', $checkout), ['lines' => $lines, 'tenders' => [
+            ['payment_method_id' => $this->cash->id, 'amount' => 5000],
+            ['payment_method_id' => $this->paypay->id, 'amount' => 6240],
+        ]])->assertSessionHasNoErrors();
+        $this->assertSame(0, CheckoutTenderAllocation::query()->count());
+        $this->actingAs($admin)->post(route('admin.checkouts.finalize', $checkout))->assertSessionHasErrors('tender_allocations');
+
+        // 物販分の合計が物販明細と合わない配分は確定できない。
+        $this->actingAs($admin)->put(route('admin.checkouts.update', $checkout), ['lines' => $lines, 'tenders' => [
+            ['payment_method_id' => $this->cash->id, 'amount' => 5000, 'retail_amount' => 0],
+            ['payment_method_id' => $this->paypay->id, 'amount' => 6240, 'retail_amount' => 1000],
+        ]])->assertSessionHasNoErrors();
+        $this->actingAs($admin)->post(route('admin.checkouts.finalize', $checkout))->assertSessionHasErrors('tender_allocations');
+
+        $this->actingAs($admin)->put(route('admin.checkouts.update', $checkout), ['lines' => $lines, 'tenders' => [
+            ['payment_method_id' => $this->cash->id, 'amount' => 5000, 'retail_amount' => 0],
+            ['payment_method_id' => $this->paypay->id, 'amount' => 6240, 'retail_amount' => 3240],
+        ]])->assertSessionHasNoErrors();
+        $this->actingAs($admin)->post(route('admin.checkouts.finalize', $checkout))->assertSessionHasNoErrors();
+        $this->assertSame(CheckoutStatus::Finalized, $checkout->fresh()->status);
+
+        $month = app(MonthlyReportService::class)->forMonth(2026, 9, asOfDate: '2026-09-15');
+        $methods = collect($month->actualTotals['payment_category_totals'])->keyBy('code');
+        $this->assertSame(['treatment' => 5000, 'retail' => 0], ['treatment' => $methods['cash']['treatment_amount'], 'retail' => $methods['cash']['retail_amount']]);
+        $this->assertSame(['treatment' => 3000, 'retail' => 3240], ['treatment' => $methods['paypay']['treatment_amount'], 'retail' => $methods['paypay']['retail_amount']]);
+        $this->assertSame(0, $methods['paypay']['unallocated_amount']);
+        $this->assertSame(['net' => 7273, 'tax' => 727, 'gross' => 8000], $month->actualTotals['sales_split']['treatment']);
+        $this->assertSame(['net' => 3000, 'tax' => 240, 'gross' => 3240], $month->actualTotals['sales_split']['retail']);
+        $this->assertSame(10273, $month->actualTotals['net_sales']);
+        $this->assertSame(11240, $month->actualTotals['gross_sales']);
+
+        $book = app(ReportWorkbookService::class)->build(2026, 9, asOfDate: '2026-09-15')['workbook'];
+        $sheet = $book->getSheetByName('月計表');
+        $this->assertSame(5000, $sheet->getCell('C17')->getValue());
+        $this->assertSame(3000, $sheet->getCell('D17')->getValue());
+        $this->assertSame(0, $sheet->getCell('K17')->getValue());
+        $this->assertSame(3240, $sheet->getCell('L17')->getValue());
+        $this->assertSame(7273, $sheet->getCell('J17')->getValue());
+        $this->assertSame(3000, $sheet->getCell('P17')->getValue());
+        $this->assertSame(10273, $sheet->getCell('Q17')->getValue());
+        $book->disconnectWorksheets();
+    }
+
+    public function test_single_category_or_single_tender_allocation_is_filled_only_when_unique(): void
+    {
+        $admin = $this->admin();
+        $product = Product::factory()->create(['price' => 1080, 'tax_category_id' => $this->reduced->id]);
+        $this->actingAs($admin)->post(route('admin.checkouts.store'), ['sale_date' => '2026-09-15']);
+        $checkout = Checkout::query()->sole();
+        $this->actingAs($admin)->put(route('admin.checkouts.update', $checkout), [
+            'lines' => [['item_type' => 'product', 'product_id' => $product->id, 'quantity' => 2, 'unit_amount' => 1080]],
+            'tenders' => [['payment_method_id' => $this->cash->id, 'amount' => 1000], ['payment_method_id' => $this->paypay->id, 'amount' => 1160]],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame([1000, 1160], CheckoutTenderAllocation::query()->where('allocation_category', 'retail')->orderBy('id')->pluck('amount')->all());
+        $this->assertSame(0, CheckoutTenderAllocation::query()->where('allocation_category', 'treatment')->count());
     }
 
     public function test_staff_without_checkout_permission_cannot_open_or_save(): void

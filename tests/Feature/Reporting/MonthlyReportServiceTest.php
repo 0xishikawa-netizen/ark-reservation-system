@@ -185,7 +185,8 @@ final class MonthlyReportServiceTest extends TestCase
         $this->report(2026, 10, asOf: '2026-10-31');
         $counting = false;
 
-        $this->assertLessThanOrEqual(12, $queries);
+        // Task 11-20で税抜内訳・支払配分の2本を追加。月の日数に依存しない定数本数であることを確認する。
+        $this->assertLessThanOrEqual(14, $queries);
     }
 
     private function report(int $year, int $month, SalesBasis $basis = SalesBasis::PaymentDate, ?string $asOf = null): MonthlyBusinessSummary

@@ -21,6 +21,9 @@ final class LegacySixSheetCellMap
         'smart_payment' => 'G', 'gift_certificate' => 'H', 'id' => 'I',
     ];
 
+    /** 原本「月計表」K〜Nの物販（8%）決済列。O「予備」は用途不明のため書かない。 */
+    public const RETAIL_PAYMENT_COLUMNS = ['cash' => 'K', 'paypay' => 'L', 'airpay' => 'M', 'id' => 'N'];
+
     private const CATEGORY_COLUMNS = ['M' => 'Y', 'T' => 'Z', 'A' => 'AA', 'M&T' => 'AB', 'A&T' => 'AC'];
 
     /**
@@ -65,17 +68,20 @@ final class LegacySixSheetCellMap
             $this->put($cells, '日報', 'D'.$row, $actual ? $note?->business_condition : null, 'text');
             $this->put($cells, '日報', 'H'.$row, $actual ? $note?->reflection : null, 'text');
 
-            $payments = array_column($daily['payment_method_totals'] ?? [], 'amount', 'code');
+            // C〜I=施術等の決済別、K〜N=物販の決済別（支払配分）。J/P/Qは会計明細snapshotの税抜で、
+            // 旧原本の固定税率式（/1.1・/1.08、P列のN・O漏れ）は再現しない（Task 11-20）。
+            $treatmentPayments = array_column($daily['payment_category_totals'] ?? [], 'treatment_amount', 'code');
+            $retailPayments = array_column($daily['payment_category_totals'] ?? [], 'retail_amount', 'code');
             foreach (self::PAYMENT_COLUMNS as $code => $column) {
-                $this->put($cells, '月計表', $column.$row, $actual ? ($payments[$code] ?? 0) : null);
+                $this->put($cells, '月計表', $column.$row, $actual ? ($treatmentPayments[$code] ?? 0) : null);
             }
-            $mappedPayments = array_sum(array_intersect_key($payments, self::PAYMENT_COLUMNS));
-            $this->put($cells, '月計表', 'J'.$row, $actual ? $mappedPayments : null);
-            $this->put($cells, '月計表', 'Q'.$row, $actual ? $daily['payment_date_revenue'] : null);
-            // 原本P列の旧固定税率式は過去日は保持。未来日には0を表示させない。
-            if (! $actual) {
-                $this->put($cells, '月計表', 'P'.$row, null);
+            foreach (self::RETAIL_PAYMENT_COLUMNS as $code => $column) {
+                $this->put($cells, '月計表', $column.$row, $actual ? ($retailPayments[$code] ?? 0) : null);
             }
+            $split = $daily['sales_split'] ?? null;
+            $this->put($cells, '月計表', 'J'.$row, $actual ? $split['treatment']['net'] : null);
+            $this->put($cells, '月計表', 'P'.$row, $actual ? $split['retail']['net'] : null);
+            $this->put($cells, '月計表', 'Q'.$row, $actual ? $daily['net_sales'] : null);
             foreach (['R' => 'visit_count', 'S' => 'long_visit_count', 'T' => 'future_reservation_count',
                 'V' => 'first_visit_count', 'W' => 'first_visit_reservation_count'] as $column => $key) {
                 $unknown = $actual && (($key === 'future_reservation_count' && $daily['future_reservation_unknown_count'] > 0)
@@ -88,17 +94,23 @@ final class LegacySixSheetCellMap
                 $this->put($cells, '月計表', $column.$row,
                     $actual ? ($daily['analysis_category_visit_counts'][$category] ?? 0) : null);
             }
-            $this->put($cells, '数値', 'K'.$numberRow, $actual ? $daily['payment_date_revenue'] : null);
+            // 原本の数値!Kは月計表!Q（売上金＝税抜）を参照していたため、ARKの税抜売上を書く。
+            $this->put($cells, '数値', 'K'.$numberRow, $actual ? $daily['net_sales'] : null);
             $this->put($cells, '数値', 'M'.$numberRow, $actual ? $daily['visit_count'] : null);
         }
 
         $totals = $monthly->actualTotals;
-        $payments = array_column($totals['payment_method_totals'], 'amount', 'code');
+        $treatmentPayments = array_column($totals['payment_category_totals'], 'treatment_amount', 'code');
+        $retailPayments = array_column($totals['payment_category_totals'], 'retail_amount', 'code');
         foreach (self::PAYMENT_COLUMNS as $code => $column) {
-            $this->put($cells, '月計表', $column.'34', $payments[$code] ?? 0);
+            $this->put($cells, '月計表', $column.'34', $treatmentPayments[$code] ?? 0);
         }
-        $this->put($cells, '月計表', 'J34', array_sum(array_intersect_key($payments, self::PAYMENT_COLUMNS)));
-        $this->put($cells, '月計表', 'Q34', $totals['payment_date_revenue']);
+        foreach (self::RETAIL_PAYMENT_COLUMNS as $code => $column) {
+            $this->put($cells, '月計表', $column.'34', $retailPayments[$code] ?? 0);
+        }
+        $this->put($cells, '月計表', 'J34', $totals['sales_split']['treatment']['net']);
+        $this->put($cells, '月計表', 'P34', $totals['sales_split']['retail']['net']);
+        $this->put($cells, '月計表', 'Q34', $totals['net_sales']);
         foreach (['R' => 'visit_count', 'S' => 'long_visit_count', 'T' => 'future_reservation_count',
             'V' => 'first_visit_count', 'W' => 'first_visit_reservation_count'] as $column => $key) {
             $unknown = ($key === 'future_reservation_count' && $totals['future_reservation_unknown_count'] > 0)
@@ -120,15 +132,15 @@ final class LegacySixSheetCellMap
     public function warnings(MonthlyBusinessSummary $monthly, array $staff): array
     {
         $warnings = [];
-        foreach ($monthly->actualTotals['payment_method_totals'] as $method) {
-            if (! isset(self::PAYMENT_COLUMNS[$method['code']]) && $method['amount'] !== 0) {
-                $warnings[] = 'unmapped payment method: '.$method['code'].' ('.$method['amount'].'円)';
+        foreach ($monthly->actualTotals['payment_category_totals'] as $method) {
+            if (! isset(self::PAYMENT_COLUMNS[$method['code']]) && $method['treatment_amount'] !== 0) {
+                $warnings[] = 'unmapped payment method: '.$method['code'].' ('.$method['treatment_amount'].'円)';
             }
-        }
-        foreach ($monthly->actualTotals['tax_totals'] as $tax) {
-            if ($tax['gross_amount'] !== 0) {
-                $warnings[] = 'unmapped tax category: '.($tax['tax_category_code'] ?? 'unknown')
-                    .' / '.($tax['tax_rate_bps'] ?? 'unknown').' bps';
+            if (! isset(self::RETAIL_PAYMENT_COLUMNS[$method['code']]) && $method['retail_amount'] !== 0) {
+                $warnings[] = 'unmapped retail payment method: '.$method['code'].' ('.$method['retail_amount'].'円)';
+            }
+            if ($method['unallocated_amount'] !== 0) {
+                $warnings[] = 'unallocated tender: '.$method['code'].' ('.$method['unallocated_amount'].'円)';
             }
         }
         if ($monthly->actualTotals['unknown_analysis_category_visit_count'] > 0) {

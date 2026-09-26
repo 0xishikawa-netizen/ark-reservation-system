@@ -43,6 +43,10 @@ final readonly class DailyBusinessSummary implements JsonSerializable
         public array $analysisCategoryVisitCounts,
         public int $unknownAnalysisCategoryVisitCount,
         public int $accountingPendingVisitCount,
+        /** 決済日基準の施術等／物販別 税抜・税額・税込（Task 11-20）。 */
+        public array $salesSplit = ['treatment' => ['net' => 0, 'tax' => 0, 'gross' => 0], 'retail' => ['net' => 0, 'tax' => 0, 'gross' => 0]],
+        /** 決済方法×配分先（施術等／物販／配分未記録）。 */
+        public array $paymentCategoryTotals = [],
     ) {
         if ($futureReservationCount > $visitCount
             || $firstVisitCount > $visitCount
@@ -78,6 +82,11 @@ final readonly class DailyBusinessSummary implements JsonSerializable
             'analysis_category_visit_counts' => $this->analysisCategoryVisitCounts,
             'unknown_analysis_category_visit_count' => $this->unknownAnalysisCategoryVisitCount,
             'accounting_pending_visit_count' => $this->accountingPendingVisitCount,
+            'sales_split' => $this->salesSplit,
+            'net_sales' => $this->salesSplit['treatment']['net'] + $this->salesSplit['retail']['net'],
+            'sales_tax' => $this->salesSplit['treatment']['tax'] + $this->salesSplit['retail']['tax'],
+            'gross_sales' => $this->salesSplit['treatment']['gross'] + $this->salesSplit['retail']['gross'],
+            'payment_category_totals' => $this->paymentCategoryTotals,
         ];
     }
 }

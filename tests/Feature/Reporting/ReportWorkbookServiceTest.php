@@ -65,12 +65,15 @@ final class ReportWorkbookServiceTest extends TestCase
         $this->assertSame('ARK自由が丘店2026.09.xlsx', $export['filename']);
         $month = $book->getSheetByName('月計表');
         $this->assertSame($this->templateHeaders(), $this->headers($month));
+        // Task 11-20: C〜Iは施術等の決済別（税込）、J/P/Qは会計明細snapshotの税抜（旧固定税率式は再現しない）。
         $this->assertSame(1100, $month->getCell('C12')->getValue());
-        $this->assertSame(1100, $month->getCell('J12')->getValue());
-        $this->assertSame(1100, $month->getCell('Q12')->getValue());
+        $this->assertSame(1000, $month->getCell('J12')->getValue());
+        $this->assertSame(0, $month->getCell('K12')->getValue());
+        $this->assertSame(0, $month->getCell('P12')->getValue());
+        $this->assertSame(1000, $month->getCell('Q12')->getValue());
+        $this->assertSame(1000, $book->getSheetByName('数値')->getCell('K13')->getValue());
         $this->assertNull($month->getCell('Q22')->getValue());
         $this->assertNull($month->getCell('A33')->getValue());
-        $this->assertSame('=SUM(K12:M12)/1.08', $month->getCell('P12')->getValue());
         $this->assertNull($month->getCell('P22')->getValue());
         $this->assertSame("午前は静か\n夕方に集中", $book->getSheetByName('日報')->getCell('D12')->getValue());
         $this->assertSame("案内を改善\n明日確認", $book->getSheetByName('日報')->getCell('H12')->getValue());
@@ -78,7 +81,7 @@ final class ReportWorkbookServiceTest extends TestCase
         $this->assertSame('=1+1', $book->getSheetByName('日報')->getCell('H13')->getValue());
         $this->assertFalse($book->getSheetByName('日報')->getCell('H13')->isFormula());
         $this->assertNull($book->getSheetByName('日報')->getCell('B33')->getValue());
-        $this->assertSame(1100, $book->getSheetByName('数値')->getCell('K13')->getValue());
+        $this->assertSame(1000, $book->getSheetByName('数値')->getCell('K13')->getValue());
         $this->assertNull($book->getSheetByName('数値')->getCell('K23')->getValue());
         $this->assertSame('=IF(K4=0,"",K4-H4)', $book->getSheetByName('数値')->getCell('L4')->getValue());
         $this->assertSame('社内売上', $book->getSheetByName('年間計画書 (実数)')->getCell('A5')->getValue());
@@ -142,9 +145,9 @@ final class ReportWorkbookServiceTest extends TestCase
         $this->assertSame('AD', $book->getSheetByName('月計表')->getHighestColumn());
         $this->assertStringNotContainsString('PHASE11_TEST_', implode('|', $this->headers($book->getSheetByName('月計表'))));
         $this->assertContains('unmapped payment method: stripe (1100円)', $export['warnings']);
-        $this->assertContains('unmapped tax category: rate_1000 / 1000 bps', $export['warnings']);
-        $this->assertSame(1100, $book->getSheetByName('月計表')->getCell('Q12')->getValue());
-        $this->assertSame(0, $book->getSheetByName('月計表')->getCell('J12')->getValue());
+        $this->assertSame(1000, $book->getSheetByName('月計表')->getCell('Q12')->getValue());
+        $this->assertSame(1000, $book->getSheetByName('月計表')->getCell('J12')->getValue());
+        $this->assertSame(0, $book->getSheetByName('月計表')->getCell('C12')->getValue());
         $book->disconnectWorksheets();
     }
 

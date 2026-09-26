@@ -487,6 +487,12 @@ UTC半開区間で索引を利用し、JST日付への変換はSELECT/GROUP BY�
 - 会計明細の `item_type` は `service` / `product` / `ticket` / `membership` / `other`（`CheckoutLineItemType`）。税額は明細単位・内税・1円未満切り捨て（`TaxAmountCalculator`）でsnapshotし、集計時に再計算しない。
 - 回数券購入明細は会計確定時に既存 `TicketLedgerService::grant` で数量分付与（dedupe `grant:checkout-line:{line}:{n}`）。月額明細は売上記録のみで利用権は既存月額管理が正本。
 
+### Phase 11 Task 11-20 支払配分
+
+- `checkout_tender_allocations`: `checkout_tender_id` / `allocation_category`（`treatment`=施術・回数券・月額・その他、`retail`=物販。CHECK制約）/ `amount`、UNIQUE(tender, category)。下書き会計でのみ変更可。
+- 確定時: 配分が1件でもあれば、支払ごとの配分合計＝支払額、配分先ごとの合計＝該当明細の税込合計を検証。施術等と物販が混在し支払が複数で配分が無い会計は確定不可（推測しない）。配分の無い既存会計はそのまま（集計では明細が片方の区分だけなら一意に配分先が決まり、混在時だけ「配分未記録」）。
+- 決済日基準の税・税抜・税込（`tax_totals` / `sales_split`）は、会計の受領済み支払の最終受領日時（JST日付）で日付付けする（従来の`finalized_at`から変更。後日入力の会計でも決済別売上と同じ日に揃う）。
+
 ### 外部予約連携（Phase 9・`app/Domain/Integration`）
 
 - `reservation_provider_mappings`：`provider`(32) / `reservation_id` FK cascade / `external_reservation_id`(191) / `external_customer_id`(191) / `fingerprint`(64) / `external_updated_at` / `external_version`(64) / `last_synced_at` / `last_seen_at` / `sync_status`(16 default `in_sync`)。

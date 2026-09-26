@@ -83,6 +83,8 @@ final class DailyReportService
             analysisCategoryVisitCounts: $categoryCounts,
             unknownAnalysisCategoryVisitCount: $facts['unknown_category_visits'],
             accountingPendingVisitCount: $visits['accounting_pending_visit_count'],
+            salesSplit: $facts['sales_split'],
+            paymentCategoryTotals: $facts['payment_categories'],
         );
     }
 
@@ -107,6 +109,8 @@ final class DailyReportService
             'unknown_category_visits' => 0,
             'payment_methods' => [],
             'taxes' => [],
+            'sales_split' => DailyReportQuery::emptySalesSplit(),
+            'payment_categories' => [],
             'direct_treatment_revenue' => 0,
             'allocated_treatment_revenue' => 0,
         ];

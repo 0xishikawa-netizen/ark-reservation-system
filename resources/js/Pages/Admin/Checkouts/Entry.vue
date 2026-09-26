@@ -23,7 +23,7 @@ interface LineRow {
     membership_plan_id: number | null; item_name: string; quantity: number; unit_amount: number;
     tax_category_id: number | null; treatment_index: number | null; is_staff_allocatable: boolean; allocations: Allocation[];
 }
-interface TenderRow { payment_method_id: number | null; amount: number; external?: boolean }
+interface TenderRow { payment_method_id: number | null; amount: number; retail_amount: number | null; external?: boolean }
 interface VisitProps {
     id: number; status: string; reservation_id: number | null; reservation_starts_at: string | null; business_date: string;
     primary_staff_id: number | null; nominations_recorded: boolean; nominated_staff_ids: number[];
@@ -168,6 +168,12 @@ function allocateByMinutes(line: LineRow): void {
     touch();
 }
 
+const retailGross = computed(() => lines.value.filter((l) => l.item_type === 'product').reduce((sum, l) => sum + lineGross(l), 0));
+const treatmentGross = computed(() => lines.value.filter((l) => l.item_type !== 'product').reduce((sum, l) => sum + lineGross(l), 0));
+/** 施術等と物販が混在し支払が複数の時だけ、各支払の物販分を明示入力する（自動按分しない）。 */
+const needsRetailSplit = computed(() => retailGross.value > 0 && treatmentGross.value > 0 && tenders.value.length > 1);
+const retailAllocated = computed(() => tenders.value.reduce((sum, t) => sum + Number(t.retail_amount ?? 0), 0));
+
 const totals = computed(() => {
     let net = 0; let tax = 0; let gross = 0;
     for (const line of lines.value) {
@@ -182,7 +188,11 @@ const totals = computed(() => {
 function payload(): RequestPayload {
     const body: Record<string, unknown> = {
         lines: lines.value.map((line) => ({ ...line, allocations: line.is_staff_allocatable ? line.allocations : [] })),
-        tenders: tenders.value.filter((t) => !t.external).map((t) => ({ payment_method_id: t.payment_method_id, amount: t.amount })),
+        tenders: tenders.value.filter((t) => !t.external).map((t) => ({
+            payment_method_id: t.payment_method_id,
+            amount: t.amount,
+            retail_amount: needsRetailSplit.value ? Number(t.retail_amount ?? 0) : null,
+        })),
     };
     if (visitEditable.value) {
         body.primary_staff_id = primaryStaffId.value;
@@ -348,10 +358,14 @@ const statusText = (status: string | undefined): string => ({
                         density="compact" variant="outlined" hide-details class="field-md" @update:model-value="touch" />
                     <v-text-field v-model.number="tender.amount" type="number" min="1" :label="labels.amount" :readonly="!checkoutEditable || tender.external"
                         density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
+                    <v-text-field v-if="needsRetailSplit" v-model.number="tender.retail_amount" type="number" min="0" :label="labels.retailPortion" :readonly="!checkoutEditable || tender.external"
+                        density="compact" variant="outlined" hide-details class="field-sm" :data-testid="`tender-retail-${index}`" @update:model-value="touch" />
                     <v-btn v-if="checkoutEditable && !tender.external" icon="mdi-close" variant="text" size="small" :aria-label="labels.remove" @click="tenders.splice(index, 1); touch()" />
                 </div>
+                <p v-if="needsRetailSplit" class="hint">{{ labels.retailSplitHint }}</p>
+                <p v-if="needsRetailSplit && retailAllocated !== retailGross" class="warn" role="alert">{{ labels.retailSplitMismatch }}</p>
                 <v-btn v-if="checkoutEditable" size="small" variant="text" prepend-icon="mdi-plus" data-testid="add-tender"
-                    @click="tenders.push({ payment_method_id: paymentMethods[0]?.id ?? null, amount: Math.max(totals.difference, 0) }); touch()">{{ labels.addTender }}</v-btn>
+                    @click="tenders.push({ payment_method_id: paymentMethods[0]?.id ?? null, amount: Math.max(totals.difference, 0), retail_amount: null }); touch()">{{ labels.addTender }}</v-btn>
                 <dl class="summary mt-2">
                     <dt>{{ labels.paid }}</dt><dd><ReportValue :value="totals.paid" format="money" /></dd>
                     <dt>{{ labels.difference }}</dt><dd :class="{ warn: totals.difference !== 0 }"><ReportValue :value="totals.difference" format="money" /></dd>

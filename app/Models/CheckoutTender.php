@@ -9,6 +9,7 @@ use App\Enums\Accounting\CheckoutTenderStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use RuntimeException;
 
 class CheckoutTender extends Model
@@ -30,6 +31,11 @@ class CheckoutTender extends Model
         static::creating($guard);
         static::updating($guard);
         static::deleting($guard);
+    }
+
+    public function allocations(): HasMany
+    {
+        return $this->hasMany(CheckoutTenderAllocation::class);
     }
 
     public function checkout(): BelongsTo

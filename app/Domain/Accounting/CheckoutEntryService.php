@@ -10,10 +10,12 @@ use App\Domain\Visit\VisitCompletionService;
 use App\Domain\Visit\VisitFactService;
 use App\Enums\Accounting\CheckoutLineItemType;
 use App\Enums\Accounting\CheckoutStatus;
+use App\Enums\Accounting\TenderAllocationCategory;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Visit\VisitStatus;
 use App\Models\Checkout;
 use App\Models\CheckoutLine;
+use App\Models\CheckoutTender;
 use App\Models\Customer;
 use App\Models\MembershipPlan;
 use App\Models\PaymentMethod;
@@ -305,13 +307,55 @@ final class CheckoutEntryService
             }
         }
 
+        $created = [];
         foreach (array_values($tenders) as $row) {
             $method = PaymentMethod::query()->where('is_enabled', true)->findOrFail((int) $row['payment_method_id']);
-            $this->checkouts->addTender($checkout, $method, (int) $row['amount'], [
+            $created[] = [$this->checkouts->addTender($checkout, $method, (int) $row['amount'], [
                 'received_at' => $this->receivedAt($date),
-            ], null, $actor);
+            ], null, $actor), $row];
         }
+        $this->allocateTenders($checkout, $created, $actor);
         $this->checkouts->syncTotals($checkout);
+    }
+
+    /**
+     * 支払の施術等／物販への配分（Task 11-20）。画面で入力された物販分を保存する。
+     * 入力が無い場合は、答えが一意に決まる場合（片方の区分しか無い・支払が1件）だけ機械的に埋める。
+     * それ以外は推測せず未配分のまま保存し、確定時に明示入力を求める。
+     *
+     * @param  list<array{0: CheckoutTender, 1: array<string, mixed>}>  $created
+     */
+    private function allocateTenders(Checkout $checkout, array $created, ?Authenticatable $actor): void
+    {
+        if ($created === []) {
+            return;
+        }
+        $lines = CheckoutLine::query()->where('checkout_id', $checkout->getKey())->get();
+        $retailTotal = (int) $lines->filter(fn (CheckoutLine $line): bool => TenderAllocationCategory::forLineType($line->item_type) === TenderAllocationCategory::Retail)->sum('gross_amount');
+        $treatmentTotal = (int) $lines->sum('gross_amount') - $retailTotal;
+        $explicit = collect($created)->every(fn (array $pair): bool => array_key_exists('retail_amount', $pair[1]) && $pair[1]['retail_amount'] !== null);
+
+        foreach ($created as [$tender, $row]) {
+            $amount = (int) $tender->amount;
+            $retail = match (true) {
+                $explicit => (int) $row['retail_amount'],
+                $lines->isEmpty() => null,
+                $retailTotal === 0 => 0,
+                $treatmentTotal === 0 => $amount,
+                count($created) === 1 && $amount === $retailTotal + $treatmentTotal => $retailTotal,
+                default => null,
+            };
+            if ($retail === null) {
+                continue;
+            }
+            if ($retail < 0 || $retail > $amount) {
+                throw ValidationException::withMessages(['tenders' => __('messages.checkout_entry.tender_allocation_invalid')]);
+            }
+            $this->checkouts->allocateTender($tender, [
+                TenderAllocationCategory::Treatment->value => $amount - $retail,
+                TenderAllocationCategory::Retail->value => $retail,
+            ], $actor);
+        }
     }
 
     /**

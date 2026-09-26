@@ -51,6 +51,7 @@ final class SaveCheckoutEntryRequest extends FormRequest
             'tenders' => ['nullable', 'array', 'max:10'],
             'tenders.*.payment_method_id' => ['required', 'integer', 'exists:payment_methods,id'],
             'tenders.*.amount' => ['required', 'integer', 'min:1', 'max:10000000'],
+            'tenders.*.retail_amount' => ['nullable', 'integer', 'min:0', 'max:10000000'],
         ];
     }
 }

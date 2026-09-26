@@ -12,11 +12,15 @@ type SalesBasis = 'payment_date' | 'treatment_date';
 interface Ratio { numerator: number; denominator: number; value: number | null }
 interface PaymentTotal { payment_method_id: number; code: string; name: string; amount: number }
 interface PaymentColumn { payment_method_id: number; code: string; name: string }
+interface PaymentCategoryTotal extends PaymentTotal { treatment_amount: number; retail_amount: number; unallocated_amount: number }
+interface SalesAmounts { net: number; tax: number; gross: number }
+interface SalesSplit { treatment: SalesAmounts; retail: SalesAmounts }
 interface TaxTotal { tax_category_code: string | null; tax_category_name: string | null; tax_rate_bps: number | null; net_amount: number; tax_amount: number; gross_amount: number; line_count: number }
 interface DailyRow {
     business_date: string; day: number; weekday: string; weekday_iso: number; is_closed: boolean; is_future: boolean;
     selected_revenue: number; payment_date_revenue: number; treatment_date_revenue: number;
     payment_method_totals: PaymentTotal[]; tax_totals: TaxTotal[];
+    payment_category_totals: PaymentCategoryTotal[]; sales_split: SalesSplit; net_sales: number; sales_tax: number; gross_sales: number;
     visit_count: number; long_visit_count: number; future_reservation_count: number; future_reservation_unknown_count: number;
     future_reservation_rate: Ratio; first_visit_count: number; first_visit_reservation_count: number;
     first_visit_reservation_unknown_count: number; first_visit_reservation_rate: Ratio;
@@ -25,7 +29,7 @@ interface DailyRow {
 interface MonthlyReport {
     year: number; month: number; month_key: string; as_of_date: string; sales_basis: SalesBasis;
     daily_rows: DailyRow[]; payment_methods: PaymentTotal[]; tax_buckets: TaxTotal[];
-    totals: Record<string, number | PaymentTotal[] | TaxTotal[] | Record<string, number>>;
+    totals: Record<string, number | PaymentTotal[] | TaxTotal[] | PaymentCategoryTotal[] | SalesSplit | Record<string, number>>;
     ratios: { future_reservation_rate: Ratio; first_visit_reservation_rate: Ratio };
     target: number | null;
     progress: { target_amount: number | null; actual_amount: number; difference_amount: number | null; remaining_required_amount: number | null; achievement_rate: number | null; required_daily_average: number | null };
@@ -69,13 +73,30 @@ const paymentColumns = computed<PaymentColumn[]>(() => {
     return columns;
 });
 
+/** 旧月計表K〜Nの物販決済列（現金・PayPay・エアペイ・ID）に、実績のあるその他の手段を後ろに足す。 */
+const RETAIL_CODES = ['cash', 'paypay', 'airpay', 'id'];
+const monthPaymentCategories = computed(() => (report.value.totals.payment_category_totals as PaymentCategoryTotal[] | undefined) ?? []);
+const retailColumns = computed<PaymentColumn[]>(() => {
+    const columns = paymentColumns.value.filter((column) => RETAIL_CODES.includes(column.code));
+    for (const method of monthPaymentCategories.value) {
+        if (method.retail_amount > 0 && !columns.some((column) => column.payment_method_id === method.payment_method_id)) {
+            columns.push({ payment_method_id: method.payment_method_id, code: method.code, name: method.name });
+        }
+    }
+    return columns;
+});
+const hasUnallocated = computed(() => monthPaymentCategories.value.some((method) => method.unallocated_amount > 0));
+const categoryAmount = (row: DailyRow, id: number, key: 'treatment_amount' | 'retail_amount'): number =>
+    (row.payment_category_totals ?? []).find((item) => item.payment_method_id === id)?.[key] ?? 0;
+const unallocated = (row: DailyRow): number => (row.payment_category_totals ?? []).reduce((sum, item) => sum + item.unallocated_amount, 0);
+const categoryTotal = (id: number, key: 'treatment_amount' | 'retail_amount'): number =>
+    monthPaymentCategories.value.find((item) => item.payment_method_id === id)?.[key] ?? 0;
+const monthSplit = computed(() => report.value.totals.sales_split as SalesSplit | undefined);
+
 const hasFacts = (row: DailyRow): boolean => row.visit_count > 0 || row.payment_date_revenue > 0 || row.treatment_date_revenue > 0;
 /** 未来日で実績がない日は、0 ではなく「未実績」として「-」にする。 */
 const isPending = (row: DailyRow): boolean => row.is_future && !hasFacts(row);
-const paymentAmount = (row: DailyRow, id: number): number => row.payment_method_totals.find((item) => item.payment_method_id === id)?.amount ?? 0;
-const paymentTotal = (id: number): number => report.value.payment_methods.find((item) => item.payment_method_id === id)?.amount ?? 0;
 const taxKey = (tax: TaxTotal): string => `${tax.tax_category_code ?? 'unknown'}|${tax.tax_category_name ?? 'unknown'}|${tax.tax_rate_bps ?? 'unknown'}`;
-const taxAmount = (row: DailyRow, bucket: TaxTotal): number => row.tax_totals.find((item) => taxKey(item) === taxKey(bucket))?.tax_amount ?? 0;
 const taxLabel = (tax: TaxTotal): string => tax.tax_rate_bps === null
     ? `${tax.tax_category_name ?? '不明'}（税率不明）`
     : `${tax.tax_category_name ?? tax.tax_category_code ?? '税区分不明'} ${tax.tax_rate_bps / 100}%`;
@@ -164,6 +185,10 @@ function changeBasis(value: SalesBasis): void {
             <ReportValue :value="report.progress.actual_amount" format="money" />
             <template #caption>{{ basisLabel }}</template>
         </ReportKpi>
+        <ReportKpi :label="labels.monthlyNetSales">
+            <ReportValue :value="totalNumber('net_sales') ?? null" format="money" />
+            <template #caption>{{ labels.monthlyGrossSales }} <ReportValue :value="totalNumber('gross_sales') ?? null" format="money" /> / {{ labels.monthlySalesTax }} <ReportValue :value="totalNumber('sales_tax') ?? null" format="money" /></template>
+        </ReportKpi>
         <ReportKpi label="達成率">
             <ReportValue :value="report.progress.achievement_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" />
         </ReportKpi>
@@ -188,23 +213,27 @@ function changeBasis(value: SalesBasis): void {
         </ReportKpi>
     </div>
 
-    <SectionCard title="日別実績" subtitle="原本「月計表」と同じ並び（決済手段 → 税区分 → 売上金 → 来店 → 初診 → 施術分類）で表示します。">
+    <SectionCard title="日別実績" :subtitle="labels.monthlyDailySubtitle">
         <ReportTable :loading="loading" min-width="1800px" sticky-width="56px" data-testid="monthly-daily-table">
             <thead>
                 <tr class="group-row">
                     <th rowspan="2" class="is-sticky">日</th>
                     <th rowspan="2">曜</th>
-                    <th :colspan="paymentColumns.length + 1" class="group-start">決済手段別売上</th>
-                    <th v-if="report.tax_buckets.length > 0" :colspan="report.tax_buckets.length" class="group-start">税区分別 税額</th>
-                    <th rowspan="2" class="num group-start">売上金<br><small>{{ basisLabel }}</small></th>
+                    <th :colspan="paymentColumns.length + 1" class="group-start">{{ labels.monthlyTreatmentPayments }}</th>
+                    <th :colspan="retailColumns.length + 1" class="group-start">{{ labels.monthlyRetailPayments }}</th>
+                    <th v-if="hasUnallocated" rowspan="2" class="num group-start">{{ labels.monthlyUnallocated }}</th>
+                    <th colspan="4" class="group-start">{{ labels.monthlySales }}</th>
                     <th colspan="4" class="group-start">来店</th>
                     <th colspan="3" class="group-start">初診</th>
                     <th :colspan="categories.length + 1" class="group-start">施術分類</th>
                 </tr>
                 <tr>
                     <th v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">{{ method.name }}</th>
-                    <th class="num">計</th>
-                    <th v-for="(tax, index) in report.tax_buckets" :key="taxKey(tax)" class="num" :class="{ 'group-start': index === 0 }">{{ taxLabel(tax) }} 税額</th>
+                    <th class="num">{{ labels.monthlyNetSubtotal }}</th>
+                    <th v-for="(method, index) in retailColumns" :key="`r-${method.payment_method_id}`" class="num" :class="{ 'group-start': index === 0 }">{{ method.name }}</th>
+                    <th class="num" :class="{ 'group-start': retailColumns.length === 0 }">{{ labels.monthlyNetSubtotal }}</th>
+                    <th class="num group-start">{{ labels.monthlyNetSales }}</th><th class="num">{{ labels.monthlySalesTax }}</th><th class="num">{{ labels.monthlyGrossSales }}</th>
+                    <th class="num">{{ labels.monthlySelectedRevenue }}<br><small>{{ basisLabel }}</small></th>
                     <th class="num group-start">来店数</th><th class="num">ロング</th><th class="num">予約</th><th class="num">予約率</th>
                     <th class="num group-start">初診数</th><th class="num">初診予約</th><th class="num">初診予約率</th>
                     <th v-for="(category, index) in categories" :key="category" class="num" :class="{ 'group-start': index === 0 }">{{ category }}</th>
@@ -216,13 +245,18 @@ function changeBasis(value: SalesBasis): void {
                     <th class="is-sticky">{{ row.day }}日</th>
                     <td>{{ row.weekday }}<span v-if="row.is_closed" class="cell-tag">休</span></td>
                     <td v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">
-                        <ReportValue :value="paymentAmount(row, method.payment_method_id)" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" />
+                        <ReportValue :value="categoryAmount(row, method.payment_method_id, 'treatment_amount')" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" />
                     </td>
-                    <td class="num"><ReportValue :value="row.payment_date_revenue" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
-                    <td v-for="(tax, index) in report.tax_buckets" :key="taxKey(tax)" class="num" :class="{ 'group-start': index === 0 }">
-                        <ReportValue :value="taxAmount(row, tax)" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" />
+                    <td class="num"><ReportValue :value="row.sales_split?.treatment.net ?? null" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td v-for="(method, index) in retailColumns" :key="`r-${method.payment_method_id}`" class="num" :class="{ 'group-start': index === 0 }">
+                        <ReportValue :value="categoryAmount(row, method.payment_method_id, 'retail_amount')" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" />
                     </td>
-                    <td class="num group-start"><ReportValue :value="row.selected_revenue" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num" :class="{ 'group-start': retailColumns.length === 0 }"><ReportValue :value="row.sales_split?.retail.net ?? null" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td v-if="hasUnallocated" class="num group-start"><ReportValue :value="unallocated(row)" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num group-start"><ReportValue :value="row.net_sales ?? null" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num"><ReportValue :value="row.sales_tax ?? null" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num"><ReportValue :value="row.gross_sales ?? null" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num"><ReportValue :value="row.selected_revenue" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
                     <td class="num group-start"><ReportValue :value="row.visit_count" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
                     <td class="num"><ReportValue :value="row.long_visit_count" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
                     <td class="num"><ReportValue :value="row.future_reservation_count" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
@@ -241,13 +275,18 @@ function changeBasis(value: SalesBasis): void {
                     <th class="is-sticky">合計</th>
                     <td><EmptyValue /></td>
                     <td v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">
-                        <ReportValue :value="paymentTotal(method.payment_method_id)" format="money" />
+                        <ReportValue :value="categoryTotal(method.payment_method_id, 'treatment_amount')" format="money" />
                     </td>
-                    <td class="num"><ReportValue :value="totalNumber('payment_date_revenue')" format="money" /></td>
-                    <td v-for="(tax, index) in report.tax_buckets" :key="taxKey(tax)" class="num" :class="{ 'group-start': index === 0 }">
-                        <ReportValue :value="tax.tax_amount" format="money" />
+                    <td class="num"><ReportValue :value="monthSplit?.treatment.net ?? null" format="money" /></td>
+                    <td v-for="(method, index) in retailColumns" :key="`r-${method.payment_method_id}`" class="num" :class="{ 'group-start': index === 0 }">
+                        <ReportValue :value="categoryTotal(method.payment_method_id, 'retail_amount')" format="money" />
                     </td>
-                    <td class="num group-start"><ReportValue :value="totalNumber('selected_revenue')" format="money" /></td>
+                    <td class="num" :class="{ 'group-start': retailColumns.length === 0 }"><ReportValue :value="monthSplit?.retail.net ?? null" format="money" /></td>
+                    <td v-if="hasUnallocated" class="num group-start"><ReportValue :value="monthPaymentCategories.reduce((sum, item) => sum + item.unallocated_amount, 0)" format="money" /></td>
+                    <td class="num group-start"><ReportValue :value="totalNumber('net_sales') ?? null" format="money" /></td>
+                    <td class="num"><ReportValue :value="totalNumber('sales_tax') ?? null" format="money" /></td>
+                    <td class="num"><ReportValue :value="totalNumber('gross_sales') ?? null" format="money" /></td>
+                    <td class="num"><ReportValue :value="totalNumber('selected_revenue')" format="money" /></td>
                     <td class="num group-start"><ReportValue :value="totalNumber('visit_count')" /></td>
                     <td class="num"><ReportValue :value="totalNumber('long_visit_count')" /></td>
                     <td class="num"><ReportValue :value="totalNumber('future_reservation_count')" /></td>
@@ -264,6 +303,7 @@ function changeBasis(value: SalesBasis): void {
         </ReportTable>
         <div class="period-summary">
             <span class="period-summary__item">1〜15日 <strong><ReportValue :value="report.periods.first.selected_revenue" format="money" /></strong> / {{ report.periods.first.visit_count }}来店</span>
+            <span v-for="tax in report.tax_buckets" :key="taxKey(tax)" class="period-summary__item">{{ taxLabel(tax) }} {{ labels.monthlyNetSales }} <strong><ReportValue :value="tax.net_amount" format="money" /></strong> / {{ labels.monthlySalesTax }} <ReportValue :value="tax.tax_amount" format="money" /></span>
             <span class="period-summary__item">16日〜月末 <strong><ReportValue :value="report.periods.second.selected_revenue" format="money" /></strong> / {{ report.periods.second.visit_count }}来店</span>
         </div>
     </SectionCard>
@@ -271,8 +311,9 @@ function changeBasis(value: SalesBasis): void {
 
 <style scoped>
 /* KPI 8枚は折り返しで端数が出ないよう 8列 → 4列 → 2列 で並べる。 */
-.monthly-kpis { grid-template-columns: repeat(8, minmax(0, 1fr)); }
-@media (max-width: 1439px) { .monthly-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.monthly-kpis { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+@media (max-width: 1599px) { .monthly-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 1199px) { .monthly-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 599px) { .monthly-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .report-hint {

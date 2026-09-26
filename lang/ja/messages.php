@@ -322,5 +322,9 @@ return [
         'checkout_locked' => '確定済み会計がある来店の施術は変更できません。取消してから入力し直してください。',
         'visit_checkout_elsewhere' => '来店に紐づく会計は来店・会計画面で編集してください。',
         'complete_visit_first' => '先に来店を完了してください。',
+        'tender_allocation_invalid' => '支払の配分が不正です。',
+        'tender_allocation_mismatch' => '支払ごとの施術・物販の配分合計が支払額と一致しません。',
+        'tender_allocation_category_mismatch' => '施術・物販それぞれの支払配分合計が明細の税込額と一致しません。',
+        'tender_allocation_required' => '施術と物販がある会計で支払が複数の場合は、各支払の物販分を入力してください。',
     ],
 ];
