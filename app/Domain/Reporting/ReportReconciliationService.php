@@ -270,18 +270,19 @@ final class ReportReconciliationService
             ->where('h.batch_id', $batchId)->whereNull('h.invalidated_at')
             ->where('h.period_start', $startDate)->where('h.period_end', $endDate)
             ->orderBy('h.metric_code')->orderBy('h.id')
-            ->get(['h.id', 'h.metric_code', 'h.value_integer', 'h.source_row_id',
+            ->get(['h.id', 'h.metric_code', 'h.dimension', 'h.value_integer', 'h.source_row_id',
                 'r.difference_category', 'r.review_status', 'r.reason', 'r.reviewed_at']);
         $comparisons = [];
         foreach ($rows as $row) {
-            $arkValue = $ark[$row->metric_code] ?? null;
+            // 切り口付き（時間帯・スタッフ枠等）の旧値は店舗合計のARK値と直接比較しない。
+            $arkValue = $row->dimension === null ? ($ark[$row->metric_code] ?? null) : null;
             if (! is_int($arkValue)) {
                 $arkValue = null;
             }
             $difference = $arkValue === null ? null : $arkValue - (int) $row->value_integer;
             $comparisons[] = [
                 'historical_metric_value_id' => (int) $row->id, 'source_row_id' => (int) $row->source_row_id,
-                'metric_code' => $row->metric_code, 'source_value' => (int) $row->value_integer,
+                'metric_code' => $row->metric_code, 'dimension' => $row->dimension, 'source_value' => (int) $row->value_integer,
                 'ark_value' => $arkValue, 'difference' => $difference,
                 'comparison_status' => $arkValue === null ? 'not_comparable' : ($difference === 0 ? 'matched' : 'different'),
                 'difference_category' => $row->difference_category,

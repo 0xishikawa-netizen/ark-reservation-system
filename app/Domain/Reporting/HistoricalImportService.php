@@ -32,7 +32,16 @@ final class HistoricalImportService
         'future_reservation_count', 'first_visit_count', 'first_visit_reservation_count',
         'new_customers', 'returning_customers', 'churn_customers', 'reached_2', 'reached_6',
         'reached_10', 'legacy_treatment_count',
+        // Task 11-26: 旧帳票の入力セルから再集計した値（dimension付きを含む）。
+        'net_sales', 'retail_net_sales', 'treatment_payment_amount', 'retail_payment_amount',
+        'staff_occupied_minutes', 'staff_working_minutes', 'staff_patient_count',
+        'staff_reservation_count', 'staff_nomination_count',
+        'band_occupied_minutes', 'band_capacity_minutes', 'band_visit_count',
+        'attendance_working_minutes', 'attendance_break_minutes', 'attendance_days',
     ];
+
+    /** 顧客・来店・勤怠などの明細候補。業務事実へ自動登録せず、手動確認に回す。 */
+    private const DETAIL_TYPES = ['customer_detail', 'legacy_visit_detail', 'legacy_attendance_detail'];
 
     /** @return array<string,mixed> */
     public function preview(UploadedFile $file): array
@@ -186,7 +195,9 @@ final class HistoricalImportService
                 $values = $this->rowValues((int) $row->id);
                 DB::table('historical_metric_values')->insert([
                     'batch_id' => $batchId, 'source_row_id' => $row->id,
-                    'metric_code' => $values['metric_code'], 'period_start' => $values['period_start'],
+                    'metric_code' => $values['metric_code'],
+                    'dimension' => ($values['dimension'] ?? '') === '' ? null : $values['dimension'],
+                    'period_start' => $values['period_start'],
                     'period_end' => $values['period_end'], 'value_integer' => (int) $values['value'],
                     'source_identifier_ciphertext' => $row->source_identifier_ciphertext,
                     'imported_at' => now(), 'created_at' => now(), 'updated_at' => now(),
@@ -317,13 +328,16 @@ final class HistoricalImportService
             if (! preg_match('/^-?\d{1,15}$/', $values['value'] ?? '')) {
                 $errors[] = 'value: integer_required';
             }
-        } elseif ($type === 'customer_detail') {
+            if (mb_strlen($values['dimension'] ?? '') > 100) {
+                $errors[] = 'dimension: too_long';
+            }
+        } elseif (in_array($type, self::DETAIL_TYPES, true)) {
             [$customerId, $matchMethod] = $this->matchCustomer($values);
         } else {
             $errors[] = 'record_type: unsupported';
         }
 
-        return ['status' => $errors !== [] ? 'invalid' : ($type === 'customer_detail' ? 'needs_review' : 'valid'),
+        return ['status' => $errors !== [] ? 'invalid' : (in_array($type, self::DETAIL_TYPES, true) ? 'needs_review' : 'valid'),
             'errors' => $errors, 'type' => $type, 'customer_id' => $customerId, 'match_method' => $matchMethod];
     }
 

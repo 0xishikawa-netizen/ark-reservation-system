@@ -25,3 +25,53 @@
 上限は5 MiB、各シート5,000行・50列、XLSX展開後50 MB・500ファイル。XLSXの式セルは実行も取込もせず拒否する。CSV/XLSXの式らしい文字列は検証エラーにする。暗号化済みの原文と保護コピーについては法定・業務上の保持期間が未確定なので自動pruneしない。削除方針は承認後に定める。
 
 原本サンプル、入力列の実対応、顧客明細の業務意味、保持期限、実データ照合結果は外部資料待ちである。これらを推測して本登録しない。
+
+## Task 11-26 — 旧帳票ブックの変換mapping
+
+実物サンプル（`docs/handoff/2026-09-26-sample-comparison.md`）の確認後、旧ブックを上記中間形式へ変換する読取専用コマンドを追加した。DBへは書かず、出力CSVを従来どおり管理画面でpreview → stage → 手動確認 → commitする。
+
+```
+php artisan ark:legacy-import:convert {kind} {path.xlsx} --output=out.csv \
+  [--fiscal-year=2023] [--staff-label=A] [--course-mapping=mapping.json]
+```
+
+- 旧ブックは`PhpSpreadsheet`で開くだけで保存しない。**数式は実行しない**。式セルはExcelが保存した計算済みキャッシュ（`getOldCalculatedValue`）だけを読み、旧式の結果（率・合計）は取込値にせず`legacy_reported`（比較用）へ分離する。ARK側の値は入力セルから再集計する。
+- 出力CSVには氏名・フリガナ・電話・番地・建物名・紹介者名を含めない。地域は都道府県と市区町村（区・市・町・村まで）だけ、紹介者は`has_referrer`の有無だけ持つ。旧顧客番号は暗号化されるsource identifierとしてだけ保持し、名前で既存顧客へ統合しない。
+- 明細行（`customer_detail` / `legacy_visit_detail` / `legacy_attendance_detail`）は常に`needs_review`でstageし、Visit・Checkout・Customerへ自動登録しない。本登録するのは`historical_aggregate`だけ。
+- `historical_metric_values.dimension`（追加型migration、NULL可）に内訳キー（`channel:hotpepper`、`staff_slot:1`、`band:10_12|weekday`、`method:airpay`、`sheet:R8.9`等）を保存する。dimension付きの値は月合計と比較せず、照合APIでは`not_comparable`とする。
+
+### 種別ごとの対応
+
+| kind | 旧資料 | 取込む集計（metric_code） | 手動確認・警告 |
+|---|---|---|---|
+| `customer_list` | 顧客データ一覧 / 新規統計 | 来店日月別の`new_customers`・`reached_2/6/10`、来店動機・来店目的・性別・年代・初回担当・地域別の内訳（dimension付き） | 日付として読めない来店日、ARKマスタと完全一致しない来店目的、未知の来店動機、コース名（対応表がない限り全件）。新規統計シートの旧値は`legacy_reported`へ（F1/F2/F3の影響を受けるため取込まない） |
+| `staff_utilization` | 稼働率（年度ブック、`--fiscal-year`必須） | 枠別`staff_occupied_minutes`・`staff_working_minutes`・`staff_patient_count`・`staff_reservation_count`・`staff_nomination_count`（`staff_slot:n`） | `#REF!`/`#DIV/0!`枠と空枠はskip（F7）。旧稼働率は比較用のみ |
+| `time_band` | 時間帯別稼働率 | 帯×平日/土日の`band_occupied_minutes`・`band_capacity_minutes`・`band_visit_count` | 入力欄の手計算式（`=15+90+60`）は保存済み結果値を使いwarning（F8）。旧月率は日率平均なので比較用のみ |
+| `attendance` | 出勤簿（`--staff-label`必須） | `attendance_working_minutes`・`attendance_break_minutes`・`attendance_days` | 休憩欄が空の日は労働時間未確定として集計から除外（F9、0分扱いしない） |
+| `daily_ledger` | 日計表 / 分析 | 月別`visit_count`・`long_visit_count`、施術/物販の支払方法別金額、分析シートの`net_sales` | コース名（対応表なし）、未知の支払方法、分析シートの参照列が他月と異なる月（F6） |
+| `monthly_sheet` | 月計表 | 日別入力欄がある場合のみ | テンプレートのみ（実績入力0）の場合は0件と明示し、数式キャッシュ0を実績にしない |
+
+担当欄の`奨(指)`は指名あり、メニュー欄`T45, M15`は分数合計（施術時間）とし、ロングは施術時間60分超で再計算する（ARK日計のロング定義と同じ）。
+
+### コース対応JSON
+
+旧コース名はARKコースへ**明示した対応だけ**変換し、名称の類推はしない。
+
+```json
+{ "8回券60分": "ticket:3", "月額45分4回券": "membership:1", "一般60分": "menu:12" }
+```
+
+値は`ticket:{ticket_product_id}` / `membership:{membership_plan_id}` / `menu:{menu_id}`。対応表にない名称はコード化せず手動確認一覧へ件数付きで出す。対応表の内容は業務承認が必要（Q13）。
+
+### サンプルdry-run結果（2026-09-27、件数のみ）
+
+| kind | aggregate | manual_review | skipped | warning | 主な手動確認 |
+|---|---:|---:|---:|---:|---|
+| customer_list | 663 | 1194 | 0 | 49 | 来店日不明49、コース名6種（全件）、完全一致しない来店目的 |
+| staff_utilization（FY2023） | 240 | 0 | 55 | 0 | 旧値96件すべて再集計値と一致 |
+| time_band | 144 | 0 | 0 | 46 | 手計算式46セル。旧月率（日率平均）32件は比較用 |
+| attendance（A） | 69 | 541 | 1 | 4 | 休憩欄空の4日を除外 |
+| daily_ledger | 70 | 543 | 2 | 2 | コース名29種、分析シートR6.10/R6.11の列揺れ |
+| monthly_sheet（2026.10） | 0 | 0 | 0 | 0 | 実績入力なし |
+
+サンプルExcelと変換後CSVはリポジトリへ含めない。本登録（commit）はローカル検証DBでも行っていない。

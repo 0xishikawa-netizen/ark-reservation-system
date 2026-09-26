@@ -546,4 +546,6 @@ UTC半開区間で索引を利用し、JST日付への変換はSELECT/GROUP BY�
 
 `historical_import_batches`は原本の保護コピー、SHA-256、状態、作成者、取込/無効化日時を保持する。`historical_import_rows`と`historical_import_cells`はsheet/row/cellと暗号化原文・HMAC・validationを保持し、明細の推測backfillを行わない。`historical_metric_values`は出典行を一意参照する過去集計値で、Visit/CheckoutとはFKも集計経路も分離する。詳細は`docs/HISTORICAL_IMPORT.md`。
 
+Task 11-26で`historical_metric_values.dimension`（varchar NULL、追加型migration）を加えた。旧帳票の内訳（来店動機・スタッフ枠・時間帯×平日/土日・支払方法等）を同じmetric codeで保持し、dimension付きの値は月合計と比較しない。
+
 Task 11-13の`historical_metric_reviews`は過去集計値1件につき差異分類・確認状態・理由・確認者・確認日時を1行保持する。元値とARK値は上書きせず、照合時に再計算する。詳細は`docs/PHASE11_RECONCILIATION.md`。
