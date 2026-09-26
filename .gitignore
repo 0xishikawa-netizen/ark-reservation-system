@@ -25,3 +25,6 @@ yarn-error.log
 .env.*.local
 docker-compose.override.yml
 /tools/probe-output*.txt
+
+# ローカル検証で生成した帳票出力（Phase 11 検証証跡。リポジトリには含めない）
+/outputs/

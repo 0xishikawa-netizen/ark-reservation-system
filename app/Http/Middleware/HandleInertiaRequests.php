@@ -57,7 +57,16 @@ class HandleInertiaRequests extends Middleware
                     'settingsManage' => $user?->can('settings.manage') ?? false,
                     'rolesManage' => $user?->can('roles.manage') ?? false,
                     'reportsView' => $user?->can('reports.view') ?? false,
+                    'reportsManage' => $user?->can('reports.manage') ?? false,
                     'salesView' => $user?->can('sales.view') ?? false,
+                ],
+                'reportRoutes' => [
+                    'dailyNotes' => route('admin.reports.daily-notes'),
+                    'monthly' => route('admin.reports.monthly'),
+                    'customers' => route('admin.reports.customers'),
+                    'staffUtilization' => route('admin.reports.staff-utilization'),
+                    'timeBands' => route('admin.reports.time-bands'),
+                    'annual' => route('admin.reports.annual'),
                 ],
             ],
             'flash' => [

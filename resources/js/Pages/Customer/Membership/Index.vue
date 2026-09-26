@@ -132,7 +132,7 @@ function formatPrice(price: number): string {
 }
 
 function formatDate(value: string | null): string {
-    if (!value) return '—';
+    if (!value) return MESSAGES.common.notSet;
 
     return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' })
         .format(new Date(`${value}T00:00:00`));
@@ -324,7 +324,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
                         1回あたり約
                         {{ plan.usage_count_per_period > 0
                             ? formatPrice(Math.round(plan.price / plan.usage_count_per_period))
-                            : '—' }}
+                            : MESSAGES.common.notCalculated }}
                     </div>
                     <v-divider class="my-4" />
                     <div class="text-body-2 text-medium-emphasis">
@@ -454,7 +454,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
                                 <td>{{ item.type }}</td>
                                 <td :class="item.delta > 0 ? 'text-success' : 'text-error'">{{ signed(item.delta) }}</td>
                                 <td>{{ formatDate(item.period_start) }}</td>
-                                <td>{{ item.reservation_id === null ? '—' : `#${item.reservation_id}` }}</td>
+                                <td>{{ item.reservation_id === null ? MESSAGES.common.notLinked : `#${item.reservation_id}` }}</td>
                             </tr>
                         </tbody>
                     </v-table>
@@ -466,7 +466,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
                             </template>
                             <template #subtitle>
                                 {{ formatDateTime(item.created_at) }}<br>
-                                期：{{ formatDate(item.period_start) }} / 予約：{{ item.reservation_id === null ? '—' : `#${item.reservation_id}` }}
+                                期：{{ formatDate(item.period_start) }} / 予約：{{ item.reservation_id === null ? MESSAGES.common.notLinked : `#${item.reservation_id}` }}
                             </template>
                         </v-list-item>
                     </v-list>

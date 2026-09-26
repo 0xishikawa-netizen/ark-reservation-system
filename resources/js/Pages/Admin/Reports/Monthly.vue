@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { PageHeader, SectionCard } from '@/components/ark';
+import { EmptyValue, MonthField, PageHeader, SectionCard } from '@/components/ark';
+import { ReportFilterBar, ReportFilterField, ReportKpi, ReportSelect, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
 
+type SalesBasis = 'payment_date' | 'treatment_date';
 interface Ratio { numerator: number; denominator: number; value: number | null }
 interface PaymentTotal { payment_method_id: number; code: string; name: string; amount: number }
+interface PaymentColumn { payment_method_id: number; code: string; name: string }
 interface TaxTotal { tax_category_code: string | null; tax_category_name: string | null; tax_rate_bps: number | null; net_amount: number; tax_amount: number; gross_amount: number; line_count: number }
 interface DailyRow {
     business_date: string; day: number; weekday: string; weekday_iso: number; is_closed: boolean; is_future: boolean;
@@ -20,7 +23,7 @@ interface DailyRow {
     analysis_category_visit_counts: Record<string, number>; unknown_analysis_category_visit_count: number;
 }
 interface MonthlyReport {
-    year: number; month: number; month_key: string; as_of_date: string; sales_basis: 'payment_date' | 'treatment_date';
+    year: number; month: number; month_key: string; as_of_date: string; sales_basis: SalesBasis;
     daily_rows: DailyRow[]; payment_methods: PaymentTotal[]; tax_buckets: TaxTotal[];
     totals: Record<string, number | PaymentTotal[] | TaxTotal[] | Record<string, number>>;
     ratios: { future_reservation_rate: Ratio; first_visit_reservation_rate: Ratio };
@@ -31,21 +34,46 @@ interface MonthlyReport {
     periods: { first: { selected_revenue: number; visit_count: number }; second: { selected_revenue: number; visit_count: number } };
 }
 
-const props = defineProps<{ report: MonthlyReport; dataEndpoint: string; exportEndpoint?: string | null }>();
+const props = withDefaults(defineProps<{
+    report: MonthlyReport;
+    dataEndpoint: string;
+    exportEndpoint?: string | null;
+    /** 原本「月計表」と同じ並びの決済列（マスタ表示順）。 */
+    paymentMethodColumns?: PaymentColumn[];
+}>(), {
+    exportEndpoint: null,
+    paymentMethodColumns: () => [],
+});
+const labels = MESSAGES.reporting;
 const report = ref(props.report);
 const selectedMonth = ref(props.report.month_key);
-const selectedBasis = ref<'payment_date' | 'treatment_date'>(props.report.sales_basis);
+const selectedBasis = ref<SalesBasis>(props.report.sales_basis);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
+const basisItems: { title: string; value: SalesBasis }[] = [
+    { title: labels.annualPaymentBasis, value: 'payment_date' },
+    { title: labels.annualTreatmentBasis, value: 'treatment_date' },
+];
+const basisLabel = computed(() => (report.value.sales_basis === 'payment_date' ? labels.annualPaymentBasis : labels.annualTreatmentBasis));
 const categories = ['M', 'T', 'A', 'M&T', 'A&T'] as const;
-const money = (value: number | null): string => value === null ? '—' : `${new Intl.NumberFormat('ja-JP').format(Math.round(value))}円`;
-const number = (value: number | null): string => value === null ? '—' : new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 1 }).format(value);
-const percent = (value: number | null): string => value === null ? '—' : `${(value * 100).toFixed(1)}%`;
+
+// 決済列はマスタの表示順（原本と同じ 現金→PayPay→…→ID）で固定し、マスタ外（無効化済み等）で実績がある手段は後ろに足す。
+const paymentColumns = computed<PaymentColumn[]>(() => {
+    const columns = [...props.paymentMethodColumns];
+    for (const method of report.value.payment_methods) {
+        if (!columns.some((column) => column.payment_method_id === method.payment_method_id)) {
+            columns.push({ payment_method_id: method.payment_method_id, code: method.code, name: method.name });
+        }
+    }
+    return columns;
+});
+
 const hasFacts = (row: DailyRow): boolean => row.visit_count > 0 || row.payment_date_revenue > 0 || row.treatment_date_revenue > 0;
-const valueOrFuture = (row: DailyRow, value: number, currency = false): string =>
-    row.is_future && !hasFacts(row) ? MESSAGES.reporting.futureDay : currency ? money(value) : number(value);
+/** 未来日で実績がない日は、0 ではなく「未実績」として「-」にする。 */
+const isPending = (row: DailyRow): boolean => row.is_future && !hasFacts(row);
 const paymentAmount = (row: DailyRow, id: number): number => row.payment_method_totals.find((item) => item.payment_method_id === id)?.amount ?? 0;
+const paymentTotal = (id: number): number => report.value.payment_methods.find((item) => item.payment_method_id === id)?.amount ?? 0;
 const taxKey = (tax: TaxTotal): string => `${tax.tax_category_code ?? 'unknown'}|${tax.tax_category_name ?? 'unknown'}|${tax.tax_rate_bps ?? 'unknown'}`;
 const taxAmount = (row: DailyRow, bucket: TaxTotal): number => row.tax_totals.find((item) => taxKey(item) === taxKey(bucket))?.tax_amount ?? 0;
 const taxLabel = (tax: TaxTotal): string => tax.tax_rate_bps === null
@@ -53,6 +81,7 @@ const taxLabel = (tax: TaxTotal): string => tax.tax_rate_bps === null
     : `${tax.tax_category_name ?? tax.tax_category_code ?? '税区分不明'} ${tax.tax_rate_bps / 100}%`;
 const totalNumber = (key: string): number => report.value.totals[key] as number;
 const categoryTotals = computed(() => report.value.totals.analysis_category_visit_counts as Record<string, number>);
+
 const exportUrl = computed(() => {
     if (!props.exportEndpoint || selectedBasis.value !== 'payment_date') return null;
     const query = new URLSearchParams({ year: String(report.value.year), month: String(report.value.month),
@@ -72,103 +101,208 @@ async function loadReport(): Promise<void> {
         const payload = await response.json() as { data: MonthlyReport };
         report.value = payload.data;
     } catch {
-        error.value = MESSAGES.reporting.monthlyLoadFailed;
+        error.value = labels.monthlyLoadFailed;
     } finally {
         loading.value = false;
     }
+}
+
+function changeMonth(value: string): void {
+    if (value === selectedMonth.value) return;
+    selectedMonth.value = value;
+    void loadReport();
+}
+
+function changeBasis(value: SalesBasis): void {
+    if (value === selectedBasis.value) return;
+    selectedBasis.value = value;
+    void loadReport();
 }
 </script>
 
 <template>
     <Head title="月計" />
-    <PageHeader title="月計" subtitle="日次と同じ事実データから、月の日別実績・目標進捗を集計します。" />
-    <p class="report-link"><a href="/admin/reports/customers">{{ MESSAGES.reporting.customerOpen }}</a></p>
-    <p v-if="exportUrl" class="report-link"><a :href="exportUrl" data-testid="excel-export">{{ MESSAGES.reporting.excelExport }}</a></p>
-    <p v-else-if="exportEndpoint && selectedBasis === 'treatment_date'" class="report-link">{{ MESSAGES.reporting.excelPaymentDateOnly }}</p>
+    <PageHeader title="月計" subtitle="日次と同じ事実データから、月の日別実績・目標進捗を集計します。">
+        <template #actions>
+            <v-btn href="/admin/reports/customers" variant="outlined" color="primary" prepend-icon="mdi-account-group-outline" data-testid="customers-link">
+                {{ labels.customerOpen }}
+            </v-btn>
+            <template v-if="exportEndpoint">
+                <v-btn
+                    :href="exportUrl ?? undefined"
+                    :disabled="exportUrl === null"
+                    color="primary"
+                    variant="flat"
+                    prepend-icon="mdi-microsoft-excel"
+                    :title="labels.excelExportHint"
+                    data-testid="excel-export"
+                >
+                    {{ labels.excelExport }}
+                </v-btn>
+            </template>
+        </template>
+    </PageHeader>
+    <p v-if="exportEndpoint && selectedBasis === 'treatment_date'" class="report-hint" role="note">
+        <v-icon icon="mdi-information-outline" size="16" />{{ labels.excelPaymentDateOnly }}
+    </p>
 
-    <SectionCard title="表示条件" class="mb-5">
-        <div class="report-controls">
-            <label>対象月<input v-model="selectedMonth" data-testid="month-input" type="month" @change="loadReport"></label>
-            <label>売上基準<select v-model="selectedBasis" data-testid="basis-select" @change="loadReport">
-                <option value="payment_date">決済日基準</option>
-                <option value="treatment_date">施術日基準</option>
-            </select></label>
-            <span class="as-of">基準日 {{ report.as_of_date }}</span>
-        </div>
-        <p v-if="loading" class="report-state" role="status">{{ MESSAGES.reporting.monthlyLoading }}</p>
-        <p v-if="error" class="report-state report-state--error" role="alert">{{ error }}</p>
-    </SectionCard>
+    <ReportFilterBar :loading="loading" :loading-text="labels.monthlyLoading" :error="error">
+        <ReportFilterField size="md">
+            <MonthField :model-value="selectedMonth" :label="MESSAGES.calendar.targetMonth" density="compact" data-testid="month-input" @update:model-value="changeMonth" />
+        </ReportFilterField>
+        <ReportFilterField size="md">
+            <ReportSelect :model-value="selectedBasis" :items="basisItems" :label="labels.annualBasis" data-testid="basis-select" @update:model-value="changeBasis" />
+        </ReportFilterField>
+        <template #meta>{{ labels.annualAsOf }} {{ report.as_of_date }}</template>
+    </ReportFilterBar>
 
-    <div class="summary-grid mb-5">
-        <SectionCard title="月間目標"><strong>{{ money(report.progress.target_amount) }}</strong></SectionCard>
-        <SectionCard title="現在実績"><strong>{{ money(report.progress.actual_amount) }}</strong><small>{{ report.sales_basis === 'payment_date' ? '決済日基準' : '施術日基準' }}</small></SectionCard>
-        <SectionCard title="達成率"><strong>{{ percent(report.progress.achievement_rate) }}</strong></SectionCard>
-        <SectionCard title="残必要売上"><strong>{{ money(report.progress.remaining_required_amount) }}</strong><small>差額 {{ money(report.progress.difference_amount) }}</small></SectionCard>
-        <SectionCard title="経過 / 残営業日"><strong>{{ report.business_days.elapsed }} / {{ report.business_days.remaining }}日</strong><small>臨時休業 {{ report.business_days.closed }}日</small></SectionCard>
-        <SectionCard title="残営業日平均"><strong>{{ money(report.progress.required_daily_average) }}</strong></SectionCard>
-        <SectionCard title="平日平均"><strong>{{ number(report.averages.weekday_visits) }}来店</strong><small>{{ money(report.averages.weekday_sales) }}</small></SectionCard>
-        <SectionCard title="土日平均"><strong>{{ number(report.averages.weekend_visits) }}来店</strong><small>{{ money(report.averages.weekend_sales) }}</small></SectionCard>
+    <div class="report-kpi-grid monthly-kpis" :aria-busy="loading">
+        <ReportKpi label="月間目標">
+            <ReportValue :value="report.progress.target_amount" format="money" :empty-label="MESSAGES.common.notSet" />
+        </ReportKpi>
+        <ReportKpi label="現在実績" emphasis>
+            <ReportValue :value="report.progress.actual_amount" format="money" />
+            <template #caption>{{ basisLabel }}</template>
+        </ReportKpi>
+        <ReportKpi label="達成率">
+            <ReportValue :value="report.progress.achievement_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" />
+        </ReportKpi>
+        <ReportKpi label="残必要売上">
+            <ReportValue :value="report.progress.remaining_required_amount" format="money" :empty-label="MESSAGES.common.notCalculated" />
+            <template #caption>差額 <ReportValue :value="report.progress.difference_amount" format="money" :empty-label="MESSAGES.common.notCalculated" /></template>
+        </ReportKpi>
+        <ReportKpi label="経過 / 残営業日">
+            {{ report.business_days.elapsed }} / {{ report.business_days.remaining }}<small>日</small>
+            <template #caption>臨時休業 {{ report.business_days.closed }}日</template>
+        </ReportKpi>
+        <ReportKpi label="残営業日平均">
+            <ReportValue :value="report.progress.required_daily_average" format="money" :empty-label="MESSAGES.common.notCalculated" />
+        </ReportKpi>
+        <ReportKpi label="平日平均">
+            <ReportValue :value="report.averages.weekday_visits" format="decimal" :empty-label="MESSAGES.common.notCalculated" /><small v-if="report.averages.weekday_visits !== null">来店</small>
+            <template #caption><ReportValue :value="report.averages.weekday_sales" format="money" :empty-label="MESSAGES.common.notCalculated" /></template>
+        </ReportKpi>
+        <ReportKpi label="土日平均">
+            <ReportValue :value="report.averages.weekend_visits" format="decimal" :empty-label="MESSAGES.common.notCalculated" /><small v-if="report.averages.weekend_visits !== null">来店</small>
+            <template #caption><ReportValue :value="report.averages.weekend_sales" format="money" :empty-label="MESSAGES.common.notCalculated" /></template>
+        </ReportKpi>
     </div>
 
-    <SectionCard title="日別実績">
-        <div class="monthly-table-wrap" :aria-busy="loading">
-            <table class="monthly-table">
-                <thead><tr>
-                    <th class="sticky-date">日</th><th>曜日</th><th>選択売上</th><th>決済日売上</th><th>施術日売上</th>
-                    <th v-for="method in report.payment_methods" :key="method.payment_method_id">{{ method.name }}</th>
-                    <th v-for="tax in report.tax_buckets" :key="taxKey(tax)">{{ taxLabel(tax) }} 税額</th>
-                    <th>来店</th><th>ロング</th><th>予約人数</th><th>予約率</th><th>初診</th><th>初診予約</th><th>初診予約率</th>
-                    <th v-for="category in categories" :key="category">{{ category }}</th><th>分類不明</th>
-                </tr></thead>
-                <tbody>
-                    <tr v-for="row in report.daily_rows" :key="row.business_date" :class="{ 'future-row': row.is_future, 'closed-row': row.is_closed }">
-                        <th class="sticky-date">{{ row.day }}日</th><td>{{ row.weekday }}<span v-if="row.is_closed" class="closed-label">休</span></td>
-                        <td>{{ valueOrFuture(row, row.selected_revenue, true) }}</td><td>{{ valueOrFuture(row, row.payment_date_revenue, true) }}</td><td>{{ valueOrFuture(row, row.treatment_date_revenue, true) }}</td>
-                        <td v-for="method in report.payment_methods" :key="method.payment_method_id">{{ valueOrFuture(row, paymentAmount(row, method.payment_method_id), true) }}</td>
-                        <td v-for="tax in report.tax_buckets" :key="taxKey(tax)">{{ valueOrFuture(row, taxAmount(row, tax), true) }}</td>
-                        <td>{{ valueOrFuture(row, row.visit_count) }}</td><td>{{ valueOrFuture(row, row.long_visit_count) }}</td><td>{{ valueOrFuture(row, row.future_reservation_count) }}</td>
-                        <td>{{ row.is_future && !hasFacts(row) ? MESSAGES.reporting.futureDay : percent(row.future_reservation_rate.value) }}</td>
-                        <td>{{ valueOrFuture(row, row.first_visit_count) }}</td><td>{{ valueOrFuture(row, row.first_visit_reservation_count) }}</td>
-                        <td>{{ row.is_future && !hasFacts(row) ? MESSAGES.reporting.futureDay : percent(row.first_visit_reservation_rate.value) }}</td>
-                        <td v-for="category in categories" :key="category">{{ valueOrFuture(row, row.analysis_category_visit_counts[category] ?? 0) }}</td>
-                        <td>{{ valueOrFuture(row, row.unknown_analysis_category_visit_count) }}</td>
-                    </tr>
-                </tbody>
-                <tfoot><tr>
-                    <th class="sticky-date">合計</th><td>—</td><td>{{ money(totalNumber('selected_revenue')) }}</td><td>{{ money(totalNumber('payment_date_revenue')) }}</td><td>{{ money(totalNumber('treatment_date_revenue')) }}</td>
-                    <td v-for="method in report.payment_methods" :key="method.payment_method_id">{{ money(method.amount) }}</td>
-                    <td v-for="tax in report.tax_buckets" :key="taxKey(tax)">{{ money(tax.tax_amount) }}</td>
-                    <td>{{ totalNumber('visit_count') }}</td><td>{{ totalNumber('long_visit_count') }}</td><td>{{ totalNumber('future_reservation_count') }}</td><td>{{ percent(report.ratios.future_reservation_rate.value) }}</td>
-                    <td>{{ totalNumber('first_visit_count') }}</td><td>{{ totalNumber('first_visit_reservation_count') }}</td><td>{{ percent(report.ratios.first_visit_reservation_rate.value) }}</td>
-                    <td v-for="category in categories" :key="category">{{ categoryTotals[category] ?? 0 }}</td><td>{{ totalNumber('unknown_analysis_category_visit_count') }}</td>
-                </tr></tfoot>
-            </table>
-        </div>
+    <SectionCard title="日別実績" subtitle="原本「月計表」と同じ並び（決済手段 → 税区分 → 売上金 → 来店 → 初診 → 施術分類）で表示します。">
+        <ReportTable :loading="loading" min-width="1800px" sticky-width="56px" data-testid="monthly-daily-table">
+            <thead>
+                <tr class="group-row">
+                    <th rowspan="2" class="is-sticky">日</th>
+                    <th rowspan="2">曜</th>
+                    <th :colspan="paymentColumns.length + 1" class="group-start">決済手段別売上</th>
+                    <th v-if="report.tax_buckets.length > 0" :colspan="report.tax_buckets.length" class="group-start">税区分別 税額</th>
+                    <th rowspan="2" class="num group-start">売上金<br><small>{{ basisLabel }}</small></th>
+                    <th colspan="4" class="group-start">来店</th>
+                    <th colspan="3" class="group-start">初診</th>
+                    <th :colspan="categories.length + 1" class="group-start">施術分類</th>
+                </tr>
+                <tr>
+                    <th v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">{{ method.name }}</th>
+                    <th class="num">計</th>
+                    <th v-for="(tax, index) in report.tax_buckets" :key="taxKey(tax)" class="num" :class="{ 'group-start': index === 0 }">{{ taxLabel(tax) }} 税額</th>
+                    <th class="num group-start">来店数</th><th class="num">ロング</th><th class="num">予約</th><th class="num">予約率</th>
+                    <th class="num group-start">初診数</th><th class="num">初診予約</th><th class="num">初診予約率</th>
+                    <th v-for="(category, index) in categories" :key="category" class="num" :class="{ 'group-start': index === 0 }">{{ category }}</th>
+                    <th class="num">分類不明</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="row in report.daily_rows" :key="row.business_date" :class="{ 'row-muted': row.is_future, 'row-alert': row.is_closed }">
+                    <th class="is-sticky">{{ row.day }}日</th>
+                    <td>{{ row.weekday }}<span v-if="row.is_closed" class="cell-tag">休</span></td>
+                    <td v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">
+                        <ReportValue :value="paymentAmount(row, method.payment_method_id)" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" />
+                    </td>
+                    <td class="num"><ReportValue :value="row.payment_date_revenue" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td v-for="(tax, index) in report.tax_buckets" :key="taxKey(tax)" class="num" :class="{ 'group-start': index === 0 }">
+                        <ReportValue :value="taxAmount(row, tax)" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" />
+                    </td>
+                    <td class="num group-start"><ReportValue :value="row.selected_revenue" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num group-start"><ReportValue :value="row.visit_count" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num"><ReportValue :value="row.long_visit_count" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num"><ReportValue :value="row.future_reservation_count" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num"><ReportValue :value="row.future_reservation_rate.value" format="percent" :hidden="isPending(row)" :empty-label="isPending(row) ? labels.futureDay : MESSAGES.common.notCalculated" /></td>
+                    <td class="num group-start"><ReportValue :value="row.first_visit_count" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num"><ReportValue :value="row.first_visit_reservation_count" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                    <td class="num"><ReportValue :value="row.first_visit_reservation_rate.value" format="percent" :hidden="isPending(row)" :empty-label="isPending(row) ? labels.futureDay : MESSAGES.common.notCalculated" /></td>
+                    <td v-for="(category, index) in categories" :key="category" class="num" :class="{ 'group-start': index === 0 }">
+                        <ReportValue :value="row.analysis_category_visit_counts[category] ?? 0" :hidden="isPending(row)" :empty-label="labels.futureDay" />
+                    </td>
+                    <td class="num"><ReportValue :value="row.unknown_analysis_category_visit_count" :hidden="isPending(row)" :empty-label="labels.futureDay" /></td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th class="is-sticky">合計</th>
+                    <td><EmptyValue /></td>
+                    <td v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">
+                        <ReportValue :value="paymentTotal(method.payment_method_id)" format="money" />
+                    </td>
+                    <td class="num"><ReportValue :value="totalNumber('payment_date_revenue')" format="money" /></td>
+                    <td v-for="(tax, index) in report.tax_buckets" :key="taxKey(tax)" class="num" :class="{ 'group-start': index === 0 }">
+                        <ReportValue :value="tax.tax_amount" format="money" />
+                    </td>
+                    <td class="num group-start"><ReportValue :value="totalNumber('selected_revenue')" format="money" /></td>
+                    <td class="num group-start"><ReportValue :value="totalNumber('visit_count')" /></td>
+                    <td class="num"><ReportValue :value="totalNumber('long_visit_count')" /></td>
+                    <td class="num"><ReportValue :value="totalNumber('future_reservation_count')" /></td>
+                    <td class="num"><ReportValue :value="report.ratios.future_reservation_rate.value" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                    <td class="num group-start"><ReportValue :value="totalNumber('first_visit_count')" /></td>
+                    <td class="num"><ReportValue :value="totalNumber('first_visit_reservation_count')" /></td>
+                    <td class="num"><ReportValue :value="report.ratios.first_visit_reservation_rate.value" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                    <td v-for="(category, index) in categories" :key="category" class="num" :class="{ 'group-start': index === 0 }">
+                        <ReportValue :value="categoryTotals[category] ?? 0" />
+                    </td>
+                    <td class="num"><ReportValue :value="totalNumber('unknown_analysis_category_visit_count')" /></td>
+                </tr>
+            </tfoot>
+        </ReportTable>
         <div class="period-summary">
-            <span>1〜15日: {{ money(report.periods.first.selected_revenue) }} / {{ report.periods.first.visit_count }}来店</span>
-            <span>16日〜月末: {{ money(report.periods.second.selected_revenue) }} / {{ report.periods.second.visit_count }}来店</span>
+            <span class="period-summary__item">1〜15日 <strong><ReportValue :value="report.periods.first.selected_revenue" format="money" /></strong> / {{ report.periods.first.visit_count }}来店</span>
+            <span class="period-summary__item">16日〜月末 <strong><ReportValue :value="report.periods.second.selected_revenue" format="money" /></strong> / {{ report.periods.second.visit_count }}来店</span>
         </div>
     </SectionCard>
 </template>
 
 <style scoped>
-.report-link { margin: 0 0 16px; }
-.report-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; }
-.report-controls label { display: grid; gap: 6px; color: #495365; font-size: 13px; font-weight: 700; }
-.report-controls input, .report-controls select { min-width: 180px; border: 1px solid #cbd2dc; border-radius: 8px; background: white; padding: 9px 12px; font: inherit; }
-.as-of { margin-left: auto; color: #667085; }
-.report-state { margin: 12px 0 0; color: #526275; }.report-state--error { color: #b42318; }
-.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-.summary-grid strong { display: block; color: #15233d; font-size: 23px; }.summary-grid small { display: block; margin-top: 4px; color: #667085; }
-.monthly-table-wrap { overflow: auto; max-height: 68vh; border: 1px solid #dfe3e8; border-radius: 10px; }
-.monthly-table { border-collapse: separate; border-spacing: 0; min-width: 2200px; width: 100%; font-size: 12px; white-space: nowrap; }
-.monthly-table th, .monthly-table td { border-right: 1px solid #e6e9ee; border-bottom: 1px solid #e6e9ee; padding: 8px 10px; text-align: right; background: white; }
-.monthly-table thead th { position: sticky; top: 0; z-index: 3; background: #edf4f8; color: #253247; }
-.monthly-table .sticky-date { position: sticky; left: 0; z-index: 2; min-width: 58px; text-align: left; background: #f8fafc; }
-.monthly-table thead .sticky-date { z-index: 4; background: #e5eef4; }.monthly-table tfoot .sticky-date { z-index: 2; }
-.monthly-table tfoot th, .monthly-table tfoot td { background: #eaf3f7; font-weight: 800; }
-.future-row td, .future-row .sticky-date { color: #8a94a6; background: #fafbfc; }.closed-row td, .closed-row .sticky-date { background: #fff6f2; }
-.closed-label { display: inline-block; margin-left: 4px; border-radius: 4px; background: #d92d20; color: white; padding: 1px 4px; font-size: 10px; }
-.period-summary { display: flex; gap: 24px; margin-top: 14px; color: #465469; font-weight: 700; }
-@media (max-width: 1100px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* KPI 8枚は折り返しで端数が出ないよう 8列 → 4列 → 2列 で並べる。 */
+.monthly-kpis { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+@media (max-width: 1439px) { .monthly-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 599px) { .monthly-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.report-hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: calc(-1 * var(--ark-space-3)) 0 var(--ark-space-3);
+    color: rgba(var(--v-theme-on-surface), 0.65);
+    font-size: 0.8125rem;
+    justify-content: flex-end;
+}
+
+.period-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ark-space-2);
+    margin-top: var(--ark-space-3);
+}
+
+.period-summary__item {
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: #f3f5f9;
+    color: rgba(var(--v-theme-on-surface), 0.75);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.period-summary__item strong {
+    margin-inline: 4px;
+    color: rgb(var(--v-theme-on-surface));
+}
 </style>

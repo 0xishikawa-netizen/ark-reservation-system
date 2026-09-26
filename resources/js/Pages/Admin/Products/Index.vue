@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -25,9 +25,9 @@ const toggle = (item: Product): void => router.patch(`/admin/products/${item.id}
     </PageHeader>
     <SectionCard title="商品一覧">
         <v-data-table :headers="headers" :items="products" item-value="id" :no-data-text="MESSAGES.product.none">
-            <template #item.code="{ item }">{{ item.code || '—' }}</template>
+            <template #item.code="{ item }"><template v-if="item.code">{{ item.code }}</template><EmptyValue :label="MESSAGES.common.notSet" v-else /></template>
             <template #item.price="{ item }">{{ money(item.price) }}</template>
-            <template #item.tax_category_name="{ item }">{{ item.tax_category_name || '未設定' }}</template>
+            <template #item.tax_category_name="{ item }"><template v-if="item.tax_category_name">{{ item.tax_category_name }}</template><EmptyValue :label="MESSAGES.common.notSet" v-else /></template>
             <template #item.is_active="{ item }"><StatusChip :status="item.is_active ? 'active' : 'canceled'" :label="item.is_active ? '有効' : '無効'" /></template>
             <template #item.actions="{ item }">
                 <v-btn size="small" variant="text" :href="`/admin/products/${item.id}/edit`">編集</v-btn>

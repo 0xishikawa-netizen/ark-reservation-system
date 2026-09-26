@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -169,7 +170,7 @@ const clearCustomerFilter = (): void => {
                 <tbody>
                     <tr v-for="payment in payments.data" :key="payment.id">
                         <td>{{ payment.id }}</td>
-                        <td>{{ payment.customer_name ?? '—' }}</td>
+                        <td>{{ payment.customer_name ?? MESSAGES.common.notEntered }}</td>
                         <td>
                             <span v-if="payment.reservation_id">
                                 #{{ payment.reservation_id }}
@@ -177,11 +178,11 @@ const clearCustomerFilter = (): void => {
                                     {{ payment.reservation_starts_at }}
                                 </span>
                             </span>
-                            <span v-else>—</span>
+                            <span v-else class="text-medium-emphasis">{{ MESSAGES.common.notLinked }}</span>
                         </td>
                         <td class="text-right">{{ payment.amount.toLocaleString() }}</td>
                         <td class="text-right">
-                            {{ payment.refunded_amount > 0 ? payment.refunded_amount.toLocaleString() : '—' }}
+                            {{ payment.refunded_amount.toLocaleString() }}
                         </td>
                         <td>
                             <StatusChip

@@ -66,6 +66,7 @@ final class RolePermissionController extends Controller
             'reports.view' => 'レポート閲覧',
             'sales.view' => '売上閲覧',
             'reports.export' => 'Excel出力',
+            'reports.manage' => '日報編集',
             'reports.reconcile' => '帳票照合',
             'historical_data.import' => '過去データ取込',
         ],

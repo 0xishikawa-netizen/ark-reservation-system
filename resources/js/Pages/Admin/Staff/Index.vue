@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -63,7 +64,7 @@ defineProps<{
                     <td>{{ member.display_name }}</td>
                     <td>{{ member.name }}</td>
                     <td>{{ member.email }}</td>
-                    <td>{{ member.role ?? '未設定' }}</td>
+                    <td><template v-if="member.role">{{ member.role }}</template><EmptyValue v-else :label="MESSAGES.common.notSet" /></td>
                     <td>
                         <span
                             class="d-inline-block rounded-circle mr-2"

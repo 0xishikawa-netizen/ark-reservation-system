@@ -6,7 +6,6 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -34,10 +33,8 @@ final class DevelopmentAdminSeeder extends Seeder
             return;
         }
 
-        // admin ロール（＋権限）が未整備なら先に整える（単体実行にも耐える）。
-        if (Role::query()->where('name', 'admin')->where('guard_name', 'web')->doesntExist()) {
-            $this->call(RolePermissionSeeder::class);
-        }
+        // 既存adminロールにも新規permissionを同期する（単体実行時も旧権限で止めない）。
+        $this->call(RolePermissionSeeder::class);
 
         $email = (string) config('dev_admin.email', 'dev-admin@ark.test');
 

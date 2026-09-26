@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { MESSAGES } from '@/constants/messages';
 
 type DayStatus = 'open' | 'some' | 'full';
 
@@ -245,7 +246,7 @@ const select = (cell: DayCell): void => {
         <footer class="ark-cal__foot">
             <span v-if="loading" class="ark-cal__loading">空き状況を確認中…</span>
             <button type="button" class="ark-cal__today" @click="goToday">
-                今日にもどる
+                {{ MESSAGES.calendar.today }}
             </button>
         </footer>
     </div>

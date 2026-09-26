@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\CustomerAnalyticsController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\CustomerMembershipController as AdminCustomerMembershipController;
 use App\Http\Controllers\Admin\CustomerTicketController;
+use App\Http\Controllers\Admin\DailyBusinessNoteController;
 use App\Http\Controllers\Admin\DailyReportController;
 use App\Http\Controllers\Admin\FailedJobsController;
 use App\Http\Controllers\Admin\HistoricalImportController;
@@ -227,6 +228,10 @@ Route::middleware([
     Route::get('reports/daily', DailyReportController::class)
         ->middleware(['can:reports.view', 'can:sales.view'])
         ->name('reports.daily');
+    Route::get('reports/daily-notes', [DailyBusinessNoteController::class, 'index'])
+        ->middleware('can:reports.view')->name('reports.daily-notes');
+    Route::put('reports/daily-notes/{businessDate}', [DailyBusinessNoteController::class, 'update'])
+        ->middleware('can:reports.manage')->name('reports.daily-notes.update');
     Route::get('reports/monthly', [MonthlyReportController::class, 'index'])
         ->middleware(['can:reports.view', 'can:sales.view'])
         ->name('reports.monthly');

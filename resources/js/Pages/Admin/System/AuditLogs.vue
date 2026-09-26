@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { DateField, EmptyState, PageHeader, SectionCard } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -82,7 +83,7 @@ const formatDateTime = (value: string): string =>
     }).format(new Date(value.replace(' ', 'T')));
 
 const entityLabel = (item: AuditLogRow): string =>
-    `${item.entity_type ?? '—'}${item.entity_id ? ` #${item.entity_id}` : ''}`;
+    `${item.entity_type ?? MESSAGES.common.notRecorded}${item.entity_id ? ` #${item.entity_id}` : ''}`;
 </script>
 
 <template>
@@ -141,7 +142,7 @@ const entityLabel = (item: AuditLogRow): string =>
                     <td>{{ log.action }}</td>
                     <td>{{ entityLabel(log) }}</td>
                     <td>{{ log.summary }}</td>
-                    <td>{{ log.ip ?? '—' }}</td>
+                    <td>{{ log.ip ?? MESSAGES.common.notRecorded }}</td>
                 </tr>
                 <tr v-if="logs.data.length === 0">
                     <td colspan="6">

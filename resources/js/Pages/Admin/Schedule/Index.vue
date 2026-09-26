@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { scheduleTrackHeight } from "@/components/admin/scheduleLayout";
 import { Head, router, usePage } from "@inertiajs/vue3";
 import {
     computed,
@@ -57,6 +58,8 @@ interface ScheduleLane {
     color: string;
     sort_order: number;
     kind: "staff" | "booth";
+    /** 勤務予定外（休みだが予約・予定がある）スタッフ行。 */
+    off_duty?: boolean;
 }
 
 interface Staff {
@@ -64,6 +67,13 @@ interface Staff {
     display_name: string;
     color: string;
     sort_order: number;
+    /** 対象期間に勤務枠がある（false は休みなのに予約・予定が入っている等の矛盾データで表示しているスタッフ）。 */
+    is_working?: boolean;
+}
+
+interface OffStaff {
+    user_id: number;
+    display_name: string;
 }
 
 interface StaffOption {
@@ -168,6 +178,8 @@ interface DailySummary {
 
 const props = defineProps<{
     staff: Staff[];
+    /** 対象期間に出勤予定がないため台帳に出していないスタッフ（ツールバーの「休み」表示用）。 */
+    off_staff?: OffStaff[];
     staff_options: StaffOption[];
     menu_options: MenuOption[];
     booth_options: BoothOption[];
@@ -209,8 +221,14 @@ const staffId = ref<number | null>(props.filters.staff_id);
 const viewMode = ref<ScheduleView>(props.filters.view);
 const axisMode = ref<ScheduleAxis>(props.filters.axis);
 const FIXED_PIXELS_PER_MINUTE = 3.2;
-const timelineTrackHeight = 68;
 const sectionHeaderHeight = 28;
+
+// 日表示の行高（人数に応じて可変）の計算は scheduleLayout.ts。ここでは画面の空きを実測して渡す。
+const TIMELINE_HEADER_HEIGHT = 44;
+const TIMELINE_SCROLLBAR_ALLOWANCE = 14;
+const timelineShellEl = ref<HTMLElement | null>(null);
+const dailySummaryEl = ref<HTMLElement | null>(null);
+const availableTrackSpace = ref(0);
 
 // 「現在時刻へスクロール」（通常の固定ズーム）か「1日全体を表示」（幅に収まるよう自動縮小）かの切替（§追加）。
 const timelineViewMode = ref<"now" | "fit">("fit");
@@ -223,17 +241,47 @@ let timelineResizeObserver: ResizeObserver | null = null;
 // 中身の方が長い時はパネル内でスクロールする。
 const boardPanelEl = ref<HTMLElement | null>(null);
 const boardMainEl = ref<HTMLElement | null>(null);
-const panelMaxHeight = ref("calc(100vh - 120px)");
-function recalcPanelMaxHeight(): void {
-    const main = boardMainEl.value;
+const boardLayoutEl = ref<HTMLElement | null>(null);
+const panelMaxHeight = ref("calc(100dvh - 140px)");
 
-    if (main === null) {
+/** 要素の上端のページ内位置（スクロール量に依存しない）。 */
+function documentTop(el: HTMLElement): number {
+    return el.getBoundingClientRect().top + window.scrollY;
+}
+
+/**
+ * 左パネルは「本日の集計」の高さに合わせず、ブラウザ画面内で使える最下部（画面下端−ページ下余白）まで伸ばす。
+ * 上端位置（ヘッダー＋上部操作領域の高さ）は画面幅で折り返しが変わるため実測し、高さは 100dvh 基準の calc にする。
+ * あわせて日表示の行高の計算に使う「台帳に使える縦の空き」も更新する。
+ */
+function recalcPanelMaxHeight(): void {
+    if (typeof window === "undefined") {
         return;
     }
 
-    if (main.offsetHeight > 0) {
-        panelMaxHeight.value = `${main.offsetHeight}px`;
+    const layout = boardLayoutEl.value;
+
+    if (layout !== null) {
+        panelMaxHeight.value = `calc(100dvh - ${Math.max(Math.round(documentTop(layout)), 0)}px - var(--ark-space-5))`;
     }
+
+    const shell = timelineShellEl.value;
+
+    if (shell === null) {
+        availableTrackSpace.value = 0;
+
+        return;
+    }
+
+    const summaryHeight = dailySummaryEl.value !== null ? dailySummaryEl.value.offsetHeight + 8 : 0;
+    // ページ下余白（v-container の padding 24px）分も残し、ページ全体に余計な縦スクロールを出さない。
+    availableTrackSpace.value =
+        window.innerHeight -
+        documentTop(shell) -
+        TIMELINE_HEADER_HEIGHT -
+        TIMELINE_SCROLLBAR_ALLOWANCE -
+        summaryHeight -
+        24;
 }
 
 /**
@@ -305,6 +353,8 @@ const tickMinutes = computed(() =>
         : 30,
 );
 
+const offStaff = computed<OffStaff[]>(() => props.off_staff ?? []);
+
 function staffLanes(): ScheduleLane[] {
     const result: ScheduleLane[] = props.staff.map((staff) => ({
         id: staff.user_id,
@@ -312,6 +362,7 @@ function staffLanes(): ScheduleLane[] {
         color: staff.color,
         sort_order: staff.sort_order,
         kind: "staff" as const,
+        off_duty: staff.is_working === false,
     }));
 
     if (
@@ -399,6 +450,19 @@ const displayRows = computed<DisplayRow[]>(() => {
         },
         ...boothLanes().map((lane) => ({ kind: "lane" as const, lane })),
     ];
+});
+
+/** 日表示の1行の高さ（px）。見出し行（「両方」表示のスタッフ／ブース見出し）は固定高さのまま。 */
+const timelineTrackHeight = computed(() => {
+    const laneRows = displayRows.value.filter((row) => row.kind === "lane").length;
+
+    return scheduleTrackHeight(
+        laneRows,
+        displayRows.value.length - laneRows,
+        sectionHeaderHeight,
+        availableTrackSpace.value,
+        isNarrowScreen.value,
+    );
 });
 
 const timeTicks = computed(() => {
@@ -1420,6 +1484,14 @@ watch(boardPanelEl, (el) => {
     }
 });
 
+// 日/週・軸・日付の切替や本日の集計の有無で台帳の上端・空きが変わるため、行高と左パネル高さを測り直す。
+watch(
+    [timelineShellEl, dailySummaryEl, () => displayRows.value.length, isNarrowScreen],
+    () => {
+        void nextTick(() => recalcPanelMaxHeight());
+    },
+);
+
 // 性別表示は簡素に「男 / 女」のみ。未登録・その他は表示しない（推測しない）。
 function genderLabel(gender: string | null): string | null {
     if (gender === "male") return "男";
@@ -2218,7 +2290,7 @@ function dragOffsetYPx(reservation: ScheduleReservation): number {
         return 0;
     }
 
-    return (toIndex - fromIndex) * timelineTrackHeight;
+    return (toIndex - fromIndex) * timelineTrackHeight.value;
 }
 
 /** ドラッグ中のカードが属する行だけ、他の行に重なって見えるよう一時的にクリップを外す。 */
@@ -2621,7 +2693,7 @@ function blockDragOffsetYPx(block: ScheduleBlock): number {
         return 0;
     }
 
-    return (toIndex - fromIndex) * timelineTrackHeight;
+    return (toIndex - fromIndex) * timelineTrackHeight.value;
 }
 
 function isBlockDragOriginLane(laneId: number | null): boolean {
@@ -3249,6 +3321,7 @@ function menuSegments(lane: ScheduleLane): {
     </div>
 
     <div
+        ref="boardLayoutEl"
         class="board-layout"
         :class="{
             'board-layout--panel': panelOpen,
@@ -3442,6 +3515,25 @@ function menuSegments(lane: ScheduleLane): {
                         </v-btn-toggle>
                     </div>
 
+                    <!-- 出勤予定がないため台帳に出していないスタッフ（勤務枠・店舗カレンダーが正本）。 -->
+                    <v-tooltip
+                        v-if="axisMode !== 'booth' && offStaff.length > 0"
+                        location="bottom"
+                        :text="offStaff.map((member) => member.display_name).join('、')"
+                    >
+                        <template #activator="{ props: tip }">
+                            <span
+                                v-bind="tip"
+                                class="toolbar-off-staff"
+                                data-testid="off-staff-count"
+                            >
+                                <v-icon icon="mdi-account-off-outline" size="16" />
+                                {{ MESSAGES.schedule.offStaffLabel }}
+                                {{ offStaff.length }}名
+                            </span>
+                        </template>
+                    </v-tooltip>
+
                     <v-btn-toggle
                         v-if="viewMode === 'day' && lanes.length > 0"
                         :model-value="timelineViewMode"
@@ -3475,7 +3567,9 @@ function menuSegments(lane: ScheduleLane): {
                 {{
                     axisMode === "booth"
                         ? MESSAGES.schedule.noVisibleBooths
-                        : MESSAGES.schedule.noBookableStaff
+                        : offStaff.length > 0
+                          ? MESSAGES.schedule.noWorkingStaff
+                          : MESSAGES.schedule.noBookableStaff
                 }}
             </v-alert>
 
@@ -3511,7 +3605,11 @@ function menuSegments(lane: ScheduleLane): {
                 </div>
 
                 <v-card class="schedule-card">
-                    <div v-if="viewMode === 'day'" class="timeline-shell">
+                    <div
+                        v-if="viewMode === 'day'"
+                        ref="timelineShellEl"
+                        class="timeline-shell"
+                    >
                         <div class="timeline-lane-column">
                             <div class="timeline-corner">
                                 {{
@@ -3567,7 +3665,20 @@ function menuSegments(lane: ScheduleLane): {
                                         }"
                                         aria-hidden="true"
                                     />
-                                    <span>{{ row.lane.display_name }}</span>
+                                    <span
+                                        class="timeline-lane-name"
+                                        :title="row.lane.off_duty ? MESSAGES.schedule.offDutyTitle : undefined"
+                                    >
+                                        <span class="timeline-lane-name__text">{{
+                                            row.lane.display_name
+                                        }}</span>
+                                        <span
+                                            v-if="row.lane.off_duty"
+                                            class="lane-off-duty"
+                                            data-testid="lane-off-duty"
+                                            >{{ MESSAGES.schedule.offDutyBadge }}</span
+                                        >
+                                    </span>
                                     <v-icon
                                         icon="mdi-calendar-clock-outline"
                                         size="14"
@@ -3602,7 +3713,20 @@ function menuSegments(lane: ScheduleLane): {
                                         }"
                                         aria-hidden="true"
                                     />
-                                    <span>{{ row.lane.display_name }}</span>
+                                    <span
+                                        class="timeline-lane-name"
+                                        :title="row.lane.off_duty ? MESSAGES.schedule.offDutyTitle : undefined"
+                                    >
+                                        <span class="timeline-lane-name__text">{{
+                                            row.lane.display_name
+                                        }}</span>
+                                        <span
+                                            v-if="row.lane.off_duty"
+                                            class="lane-off-duty"
+                                            data-testid="lane-off-duty"
+                                            >{{ MESSAGES.schedule.offDutyBadge }}</span
+                                        >
+                                    </span>
                                 </div>
                             </template>
                         </div>
@@ -4118,7 +4242,19 @@ function menuSegments(lane: ScheduleLane): {
                                         :style="{ backgroundColor: lane.color }"
                                         aria-hidden="true"
                                     />
-                                    <span>{{ lane.display_name }}</span>
+                                    <span
+                                        class="timeline-lane-name"
+                                        :title="lane.off_duty ? MESSAGES.schedule.offDutyTitle : undefined"
+                                    >
+                                        <span class="timeline-lane-name__text">{{
+                                            lane.display_name
+                                        }}</span>
+                                        <span
+                                            v-if="lane.off_duty"
+                                            class="lane-off-duty"
+                                            >{{ MESSAGES.schedule.offDutyBadge }}</span
+                                        >
+                                    </span>
                                 </div>
 
                                 <div
@@ -4240,8 +4376,8 @@ function menuSegments(lane: ScheduleLane): {
                 </v-card>
 
                 <!-- 本日の集計（§23-24, §48）。台帳の下に置き、上部は操作だけに集中させる。巨大なKPIカードは並べない。 -->
+                <div v-if="summary" ref="dailySummaryEl">
                 <v-card
-                    v-if="summary"
                     variant="outlined"
                     class="daily-summary mt-2"
                 >
@@ -4302,6 +4438,7 @@ function menuSegments(lane: ScheduleLane): {
                         </div>
                     </div>
                 </v-card>
+                </div>
             </template>
         </div>
         <!-- /.board-layout__main -->
@@ -4607,9 +4744,10 @@ function menuSegments(lane: ScheduleLane): {
     width: 352px;
     min-width: 0;
     align-self: flex-start;
-    /* パネルの紺色の背景を右側（本日の集計）の下端まで伸ばすため、高さは右側の高さに
-       合わせて script 側で設定する。中身が少ない時は panel-shell 側が伸びて埋める。
-       長い時は内部スクロールで対応。 */
+    /* 高さは「本日の集計」に合わせず、画面内で使える最下部まで伸ばす（script 側で 100dvh 基準の calc を設定）。
+       中身が少ない時は panel-shell 側が伸びて埋め、長い時はパネル内スクロールにする。
+       極端に低い画面でも操作できるよう最小高さを持たせる。 */
+    min-height: 420px;
     /* 幅はどのパネル種別でも必ず同じにする（中身のnowrap要素等で広がらないようoverflow/min-widthで固定）。 */
     height: calc(100vh - 120px);
     display: flex;
@@ -4882,6 +5020,48 @@ function menuSegments(lane: ScheduleLane): {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* スタッフ名（＋勤務予定外バッジ）。行が高い日も名前は1行で省略表示する。 */
+.timeline-lane-name {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+}
+
+.timeline-lane-name__text {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 休み設定なのに予約・予定が入っているスタッフ行（予約を隠さず、状態だけ知らせる）。 */
+.lane-off-duty {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgb(var(--v-theme-warning), 0.14);
+    color: rgb(151 90 0);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.6;
+    white-space: nowrap;
+}
+
+.toolbar-off-staff {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(var(--v-theme-on-surface), 0.05);
+    color: rgba(var(--v-theme-on-surface), 0.7);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: default;
 }
 
 .timeline-lane-label--unassigned {

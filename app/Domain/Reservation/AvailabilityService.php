@@ -239,6 +239,49 @@ final class AvailabilityService
         return null;
     }
 
+    /**
+     * 期間内の日ごとに「その日に出勤予定のスタッフ」を返す。
+     * 予約可能判定（openStartTimes）と同じ正本を使う: 勤務枠（staff_shifts。通常シフトの自動生成・特別勤務とも
+     * ここに入る）が1つ以上あり、かつ店舗カレンダーで休業日・営業時間なしではない日だけを出勤とみなす。
+     * ブッキングボードのスタッフ行の表示判定はこれを使い、予約可能判定と別の独自ロジックにしない。
+     *
+     * @param  list<int>  $staffIds
+     * @return array<string, list<int>> 'Y-m-d' => スタッフID（期間内の全日付をキーに持つ）
+     */
+    public function workingStaffIdsByDate(array $staffIds, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $calendar = $this->storeCalendar->resolveRange($from, $to);
+        $working = array_fill_keys(array_keys($calendar), []);
+
+        if ($staffIds === []) {
+            return $working;
+        }
+
+        $shifts = StaffShift::query()
+            ->whereIn('staff_id', $staffIds)
+            ->whereBetween('work_date', [$from->toDateString(), $to->toDateString()])
+            ->get(['staff_id', 'work_date']);
+
+        foreach ($shifts as $shift) {
+            $date = CarbonImmutable::parse($shift->work_date)->toDateString();
+            $day = $calendar[$date] ?? null;
+
+            if ($day === null
+                || $day['status'] === StoreCalendarDay::STATUS_CLOSED
+                || $day['opens_at'] === null
+                || $day['closes_at'] === null) {
+                continue;
+            }
+
+            $working[$date][] = (int) $shift->staff_id;
+        }
+
+        return array_map(
+            static fn (array $ids): array => array_values(array_unique($ids)),
+            $working,
+        );
+    }
+
     /** @return list<int> */
     private function staffPool(Service $service, ?int $staffId): array
     {

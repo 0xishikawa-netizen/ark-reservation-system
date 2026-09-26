@@ -84,14 +84,14 @@ const historyHeaders = [
 ] as const;
 
 function formatDate(value: string | null): string {
-    if (!value) return '—';
+    if (!value) return MESSAGES.common.notSet;
 
     return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' })
         .format(new Date(`${value}T00:00:00`));
 }
 
 function formatDateTime(value: string | null): string {
-    if (!value) return '—';
+    if (!value) return MESSAGES.common.notRecorded;
 
     return new Intl.DateTimeFormat('ja-JP', {
         dateStyle: 'medium',
@@ -248,9 +248,9 @@ function syncMembership(): void {
                 <template #item.delta="{ item }">{{ signed(item.delta) }}</template>
                 <template #item.period_start="{ item }">{{ formatDate(item.period_start) }}</template>
                 <template #item.reservation_id="{ item }">
-                    {{ item.reservation_id === null ? '—' : `#${item.reservation_id}` }}
+                    {{ item.reservation_id === null ? MESSAGES.common.notLinked : `#${item.reservation_id}` }}
                 </template>
-                <template #item.reason="{ item }">{{ item.reason || '—' }}</template>
+                <template #item.reason="{ item }">{{ item.reason || MESSAGES.common.notRecorded }}</template>
             </v-data-table>
             </SectionCard>
         </div>

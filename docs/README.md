@@ -11,6 +11,8 @@
 | [OPERATIONS.md](OPERATIONS.md) | バックアップ・リストア・Queue・Webhook・同期失敗・DB 容量・ログ / 自動復旧 vs 人間判断 |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | 症状 → 原因切り分け → 復旧手順 |
 | [PHASE0_REPORT.md](PHASE0_REPORT.md) | Phase 0（環境確認・scaffold）の実測結果と判断 |
+| [REPORTS_UI.md](REPORTS_UI.md) | Reports・ブッキングボード・設定メニューの表示ルール（null表示・共通Filter/DatePicker/Table・スタッフ表示仕様） |
+| [handoff/2026-09-26-cloud-handoff.md](handoff/2026-09-26-cloud-handoff.md) | Claude Cloud への引継ぎ（現在の状態・未解決事項・最初に比較すべき帳票） |
 
 ## 進め方
 

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
-import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -141,10 +142,11 @@ const formatPrice = (price: number): string =>
                 </div>
             </template>
             <template #item.category="{ item }">
-                {{ item.category || '—' }}
+                <template v-if="item.category">{{ item.category }}</template>
+                <EmptyValue :label="MESSAGES.common.notSet" v-else />
             </template>
-            <template #item.analysis_category_name="{ item }">{{ item.analysis_category_name || '未設定' }}</template>
-            <template #item.tax_category_name="{ item }">{{ item.tax_category_name || '未設定' }}</template>
+            <template #item.analysis_category_name="{ item }"><template v-if="item.analysis_category_name">{{ item.analysis_category_name }}</template><EmptyValue :label="MESSAGES.common.notSet" v-else /></template>
+            <template #item.tax_category_name="{ item }"><template v-if="item.tax_category_name">{{ item.tax_category_name }}</template><EmptyValue :label="MESSAGES.common.notSet" v-else /></template>
             <template #item.duration_min="{ item }">
                 {{ item.duration_min }}分
             </template>

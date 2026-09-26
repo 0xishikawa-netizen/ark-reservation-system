@@ -8,6 +8,7 @@ use App\Domain\Reporting\MonthlyBusinessSummary;
 use App\Domain\Reporting\MonthlyReportService;
 use App\Enums\Reporting\SalesBasis;
 use App\Http\Controllers\Controller;
+use App\Models\PaymentMethod;
 use App\Support\Business\BusinessTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,6 +26,19 @@ final class MonthlyReportController extends Controller
             'report' => $this->report($request, $reports, $businessTime),
             'dataEndpoint' => route('admin.reports.monthly.data'),
             'exportEndpoint' => $request->user()?->can('reports.export') ? route('admin.reports.excel') : null,
+            // 日別実績の決済列を原本「月計表」と同じ並び（マスタ表示順）で固定表示するための列定義。
+            // 金額の集計は report 側の既存値だけを使い、ここでは列の並びと名称だけを渡す。
+            'paymentMethodColumns' => PaymentMethod::query()
+                ->where('is_enabled', true)
+                ->orderBy('display_order')
+                ->orderBy('id')
+                ->get(['id', 'code', 'name'])
+                ->map(static fn (PaymentMethod $method): array => [
+                    'payment_method_id' => (int) $method->id,
+                    'code' => (string) $method->code,
+                    'name' => (string) $method->name,
+                ])
+                ->all(),
         ]);
     }
 

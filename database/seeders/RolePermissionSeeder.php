@@ -33,6 +33,7 @@ class RolePermissionSeeder extends Seeder
         'integrations.view',
         'integrations.manage',
         'reports.view',
+        'reports.manage',
         'reports.export',
         'reports.reconcile',
         'historical_data.import',
@@ -65,7 +66,7 @@ class RolePermissionSeeder extends Seeder
 
         // admin と customer は常にこの内容で固定する（admin は全権限の superuser、
         // customer は管理画面権限を一切持たない）。管理画面からのカスタマイズ対象外。
-        $roles['admin']->syncPermissions($permissions->values());
+        $roles['admin']->syncPermissions(Permission::query()->where('guard_name', 'web')->get());
         $roles['customer']->syncPermissions([]);
 
         // staff / manager は「ロール権限管理」画面から管理者が変更できるようにするため、

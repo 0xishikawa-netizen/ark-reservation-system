@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
 
@@ -101,9 +101,9 @@ function retry(row: ActionableRow): void {
                     <StatusChip :status="providerStatusKey(p.status)" :label="p.status" />
                 </div>
                 <v-list density="compact" class="bg-transparent">
-                    <v-list-item title="最終 Inbound" :subtitle="p.last_inbound_at ?? '—'" />
-                    <v-list-item title="最終 Outbound" :subtitle="p.last_outbound_at ?? '—'" />
-                    <v-list-item title="最終 Reconcile" :subtitle="p.last_reconcile_at ?? '—'" />
+                    <v-list-item title="最終 Inbound" :subtitle="p.last_inbound_at ?? MESSAGES.common.notSynced" />
+                    <v-list-item title="最終 Outbound" :subtitle="p.last_outbound_at ?? MESSAGES.common.notSynced" />
+                    <v-list-item title="最終 Reconcile" :subtitle="p.last_reconcile_at ?? MESSAGES.common.notReconciled" />
                     <v-list-item title="送信待ち" :subtitle="String(p.pending_outbox)" />
                     <v-list-item
                         title="要対応（失敗 / 競合）"
@@ -151,12 +151,12 @@ function retry(row: ActionableRow): void {
             </thead>
             <tbody>
                 <tr v-for="row in p.actionable" :key="row.id">
-                    <td>{{ row.at ?? '—' }}</td>
+                    <td>{{ row.at ?? MESSAGES.common.notRecorded }}</td>
                     <td>{{ row.reservation_id }}</td>
                     <td>{{ row.operation }}</td>
                     <td><StatusChip :status="row.status" :label="row.status" /></td>
                     <td>{{ row.attempts }}</td>
-                    <td class="text-medium-emphasis">{{ row.error ?? '—' }}</td>
+                    <td class="text-medium-emphasis"><template v-if="row.error">{{ row.error }}</template><EmptyValue v-else /></td>
                     <td class="text-right">
                         <v-btn
                             size="small"
@@ -196,17 +196,17 @@ function retry(row: ActionableRow): void {
             </thead>
             <tbody>
                 <tr v-for="e in recent_events" :key="e.id">
-                    <td>{{ e.at ?? '—' }}</td>
+                    <td>{{ e.at ?? MESSAGES.common.notRecorded }}</td>
                     <td>{{ e.provider }}</td>
                     <td>{{ e.direction === 'inbound' ? '取込' : '送信' }}</td>
                     <td>{{ e.operation }}</td>
                     <td><StatusChip :status="e.status" :label="e.status" /></td>
-                    <td>{{ e.external_id ?? '—' }}</td>
+                    <td>{{ e.external_id ?? MESSAGES.common.notLinked }}</td>
                     <td>
                         <span v-if="e.error_code" class="text-medium-emphasis">
                             {{ e.error_category }} / {{ e.error_code }}（試行 {{ e.attempt }}）
                         </span>
-                        <span v-else>—</span>
+                        <EmptyValue v-else />
                     </td>
                 </tr>
             </tbody>

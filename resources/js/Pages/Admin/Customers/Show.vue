@@ -101,7 +101,7 @@ const nextReservation = computed<RecentReservation | null>(() => {
     );
 });
 
-const display = (value: string | null): string => value || '—';
+const display = (value: string | null): string => value || MESSAGES.common.notEntered;
 
 const genderLabel = (value: string | null): string => {
     const labels: Record<string, string> = {
@@ -110,7 +110,7 @@ const genderLabel = (value: string | null): string => {
         other: 'その他',
     };
 
-    return value ? (labels[value] ?? value) : '—';
+    return value ? (labels[value] ?? value) : MESSAGES.common.notEntered;
 };
 
 const createdViaLabel = (value: string): string => {

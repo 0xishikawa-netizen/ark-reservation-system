@@ -8,6 +8,7 @@ use App\Models\User;
 use Database\Seeders\DevelopmentAdminSeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 /**
@@ -53,6 +54,18 @@ final class DevelopmentAdminSeederTest extends TestCase
             1,
             User::query()->where('email', config('dev_admin.email'))->count(),
         );
+    }
+
+    public function test_existing_development_admin_receives_new_permission_on_reseed(): void
+    {
+        $this->seed(DevelopmentAdminSeeder::class);
+        Permission::query()->create(['name' => 'future.admin.test', 'guard_name' => 'web']);
+
+        $this->seed(DevelopmentAdminSeeder::class);
+
+        $user = User::query()->where('email', config('dev_admin.email'))->firstOrFail();
+        $this->assertTrue($user->can('future.admin.test'));
+        $this->assertTrue($user->can('reports.view'));
     }
 
     public function test_password_matches_the_configured_dev_password(): void

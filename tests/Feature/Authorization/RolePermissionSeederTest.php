@@ -7,6 +7,7 @@ namespace Tests\Feature\Authorization;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class RolePermissionSeederTest extends TestCase
@@ -23,8 +24,8 @@ class RolePermissionSeederTest extends TestCase
 
         $this->assertSame($firstCounts, $this->permissionTableCounts());
         $this->assertSame(4, $firstCounts['roles']);
-        $this->assertSame(25, $firstCounts['permissions']);
-        $this->assertSame(39, $firstCounts['role_has_permissions']);
+        $this->assertSame(26, $firstCounts['permissions']);
+        $this->assertSame(40, $firstCounts['role_has_permissions']);
         $this->assertTrue($this->roleHasPermission('admin', 'roles.manage'));
         $this->assertFalse($this->roleHasPermission('manager', 'roles.manage'));
         $this->assertFalse($this->roleHasPermission('staff', 'roles.manage'));
@@ -36,6 +37,9 @@ class RolePermissionSeederTest extends TestCase
         $this->assertFalse($this->roleHasPermission('manager', 'integrations.manage'));
         $this->assertFalse($this->roleHasPermission('staff', 'integrations.view'));
         $this->assertTrue($this->roleHasPermission('admin', 'reports.view'));
+        $this->assertTrue($this->roleHasPermission('admin', 'reports.manage'));
+        $this->assertFalse($this->roleHasPermission('manager', 'reports.manage'));
+        $this->assertFalse($this->roleHasPermission('staff', 'reports.manage'));
         $this->assertTrue($this->roleHasPermission('admin', 'reports.export'));
         $this->assertTrue($this->roleHasPermission('admin', 'reports.reconcile'));
         $this->assertTrue($this->roleHasPermission('admin', 'historical_data.import'));
@@ -78,6 +82,19 @@ class RolePermissionSeederTest extends TestCase
         $this->assertFalse($this->roleHasPermission('manager', 'ticket_products.manage'));
         $this->assertFalse($this->roleHasPermission('staff', 'ticket_products.manage'));
         $this->assertFalse($this->roleHasPermission('customer', 'ticket_products.manage'));
+    }
+
+    public function test_new_web_permission_is_synced_only_to_admin_superuser(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        Permission::query()->create(['name' => 'future.admin.test', 'guard_name' => 'web']);
+
+        $this->seed(RolePermissionSeeder::class);
+
+        $this->assertTrue($this->roleHasPermission('admin', 'future.admin.test'));
+        $this->assertFalse($this->roleHasPermission('manager', 'future.admin.test'));
+        $this->assertFalse($this->roleHasPermission('staff', 'future.admin.test'));
+        $this->assertFalse($this->roleHasPermission('customer', 'future.admin.test'));
     }
 
     /** @return array{roles: int, permissions: int, role_has_permissions: int} */

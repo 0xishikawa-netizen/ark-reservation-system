@@ -274,9 +274,9 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
             <template #item.type="{ item }">{{ transactionLabel(item.type) }}</template>
             <template #item.delta="{ item }">{{ signed(item.delta) }}</template>
             <template #item.reservation_id="{ item }">
-                {{ item.reservation_id === null ? '—' : `#${item.reservation_id}` }}
+                {{ item.reservation_id === null ? MESSAGES.common.notLinked : `#${item.reservation_id}` }}
             </template>
-            <template #item.reason="{ item }">{{ item.reason || '—' }}</template>
+            <template #item.reason="{ item }">{{ item.reason || MESSAGES.common.notRecorded }}</template>
         </v-data-table>
         <v-card-actions>
             <v-btn variant="text" :href="`/admin/customers/${customer.user_id}`">

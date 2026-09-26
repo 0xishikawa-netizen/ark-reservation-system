@@ -5,21 +5,30 @@ declare(strict_types=1);
 namespace App\Domain\Reporting\Excel;
 
 use App\Domain\Reporting\MonthlyBusinessSummary;
+use App\Models\DailyBusinessNote;
 use Carbon\CarbonImmutable;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use RuntimeException;
 
-/** 2026.10実原本の表示セルだけを対応付ける。業務計算はReportingのread modelが所有する。 */
+/** 2026年10月原本のセル位置が正本。見出し・原本予算・非対象数式は書き換えない。 */
 final class LegacySixSheetCellMap
 {
     public const SHEETS = ['数値', '日報', '月計表', '稼働率（社員）', '稼働率（アルバイト）', '年間計画書 (実数)'];
 
+    /** 原本「月計表」2行目の固定決済列。新規マスタで列を増やさない。 */
+    public const PAYMENT_COLUMNS = [
+        'cash' => 'C', 'paypay' => 'D', 'airpay' => 'E', 'square' => 'F',
+        'smart_payment' => 'G', 'gift_certificate' => 'H', 'id' => 'I',
+    ];
+
+    private const CATEGORY_COLUMNS = ['M' => 'Y', 'T' => 'Z', 'A' => 'AA', 'M&T' => 'AB', 'A&T' => 'AC'];
+
     /**
-     * @param  array<int,array<string,mixed>>  $annualByYear
      * @param  array<string,mixed>  $staff
+     * @param  array<string,DailyBusinessNote>  $notes
      * @return array<string,array<string,array{value:string|int|float|null,kind:string}>>
      */
-    public function cells(MonthlyBusinessSummary $monthly, array $annualByYear, array $staff): array
+    public function cells(MonthlyBusinessSummary $monthly, array $staff, array $notes): array
     {
         $cells = array_fill_keys(self::SHEETS, []);
         $this->put($cells, '数値', 'A3', $monthly->year);
@@ -29,158 +38,113 @@ final class LegacySixSheetCellMap
         $this->put($cells, '月計表', 'C1', $monthly->year);
         $this->put($cells, '月計表', 'D1', $monthly->month);
 
-        // 原本の固定8万円/日と2種類の月目標は矛盾するため、ARKにない日目標は空欄にする。
-        for ($day = 1; $day <= 31; $day++) {
-            $this->put($cells, '数値', 'H'.($day + 3), null);
-        }
-        $this->put($cells, '数値', 'C6', $monthly->target);
-        $this->put($cells, '数値', 'D6', $monthly->actualTotals['payment_date_revenue']);
-        $this->put($cells, '数値', 'H35', $monthly->target);
-        $this->put($cells, '数値', 'K35', $monthly->actualTotals['payment_date_revenue']);
-        $this->put($cells, '数値', 'M35', $monthly->actualTotals['visit_count']);
-        $this->put($cells, '数値', 'L35', $monthly->target === null ? null : $monthly->actualTotals['payment_date_revenue'] - $monthly->target);
-
-        $methods = $monthly->actualTotals['payment_method_totals'];
-        if (count($methods) > 7) {
-            throw new RuntimeException('原本の支払方法欄は7列までです。帳票を欠落させずに出力するにはセル対応の更新が必要です。');
-        }
-        $taxes = $monthly->actualTotals['tax_totals'];
-        if (count($taxes) > 5) {
-            throw new RuntimeException('原本の税区分欄は5列までです。帳票を欠落させずに出力するにはセル対応の更新が必要です。');
-        }
-        foreach (range(3, 9) as $index => $column) {
-            $this->put($cells, '月計表', Coordinate::stringFromColumnIndex($column).'2', $methods[$index]['name'] ?? null, 'text');
-        }
-        foreach (range(11, 15) as $index => $column) {
-            $this->put($cells, '月計表', Coordinate::stringFromColumnIndex($column).'2', $taxes[$index]['tax_category_name'] ?? null, 'text');
-        }
-        $this->put($cells, '月計表', 'J2', '税込計', 'text');
-        $this->put($cells, '月計表', 'P2', '税額計', 'text');
-        $this->put($cells, '月計表', 'Q2', '税込売上', 'text');
-        $this->put($cells, '月計表', 'AD2', '未分類', 'text');
+        // 数値シートの予算・経費・日目標と年間計画書の計画値は原本所有。
+        // ARKに対応する日別売上・来店だけを直接書き、残りの原本数式は保持する。
         $this->put($cells, '月計表', 'C36', $monthly->target);
         $this->put($cells, '月計表', 'C37', $monthly->businessDays['input_days']);
         $this->put($cells, '月計表', 'C38', $monthly->businessDays['remaining']);
         $this->put($cells, '月計表', 'C39', $monthly->progress['required_daily_average']);
-        $this->put($cells, '月計表', 'Q38', $monthly->averages['weekday_sales']);
-        $this->put($cells, '月計表', 'Q39', $monthly->averages['weekend_sales']);
 
-        foreach ($monthly->dailyRows as $day) {
-            $date = $day['business_date'];
-            $number = (int) substr($date, -2);
-            $row = $number + 2;
-            $this->put($cells, '月計表', 'A'.$row, $number);
-            $this->put($cells, '月計表', 'B'.$row, $day['weekday'], 'text');
-            $this->put($cells, '日報', 'B'.$row, $number);
-            $this->put($cells, '日報', 'C'.$row, $day['weekday'], 'text');
-            $numberRow = $number + 3;
-            $this->put($cells, '数値', 'F'.$numberRow, $number);
-            $this->put($cells, '数値', 'G'.$numberRow, $day['weekday'], 'text');
-
-            foreach (range(3, 9) as $index => $column) {
-                $amount = null;
-                if (! $day['is_future'] && isset($methods[$index])) {
-                    $amount = 0;
-                    foreach ($day['payment_method_totals'] as $payment) {
-                        if ($payment['payment_method_id'] === $methods[$index]['payment_method_id']) {
-                            $amount = $payment['amount'];
-                        }
-                    }
-                }
-                $this->put($cells, '月計表', Coordinate::stringFromColumnIndex($column).$row, $amount);
-            }
-            $dailyTax = $day['payment_date_revenue'] > 0 && $day['tax_totals'] === [] ? null : 0;
-            foreach (range(11, 15) as $index => $column) {
-                $amount = null;
-                if (! $day['is_future'] && isset($taxes[$index])) {
-                    $amount = 0;
-                    foreach ($day['tax_totals'] as $tax) {
-                        if ($tax['tax_category_code'] === $taxes[$index]['tax_category_code']
-                            && $tax['tax_category_name'] === $taxes[$index]['tax_category_name']
-                            && $tax['tax_rate_bps'] === $taxes[$index]['tax_rate_bps']) {
-                            $amount += $tax['tax_amount'];
-                        }
-                    }
-                    if ($dailyTax !== null) {
-                        $dailyTax += $amount;
-                    }
-                }
-                $this->put($cells, '月計表', Coordinate::stringFromColumnIndex($column).$row, $amount);
-            }
-            $this->put($cells, '月計表', 'P'.$row, $day['is_future'] ? null : $dailyTax);
-            $values = [
-                'J' => 'payment_date_revenue', 'Q' => 'payment_date_revenue',
-                'R' => 'visit_count', 'S' => 'long_visit_count', 'T' => 'future_reservation_count',
-                'U' => 'future_reservation_rate', 'V' => 'first_visit_count',
-                'W' => 'first_visit_reservation_count', 'X' => 'first_visit_reservation_rate',
-            ];
-            foreach ($values as $column => $key) {
-                $value = $day['is_future'] ? null : match ($key) {
-                    'future_reservation_rate' => $day['visit_count'] === 0 || $day['future_reservation_unknown_count'] > 0
-                        ? null : $day['future_reservation_count'] / $day['visit_count'],
-                    'first_visit_reservation_rate' => $day['first_visit_count'] === 0 || $day['first_visit_reservation_unknown_count'] > 0
-                        ? null : $day['first_visit_reservation_count'] / $day['first_visit_count'],
-                    'future_reservation_count' => $day['future_reservation_unknown_count'] > 0 ? null : $day[$key],
-                    'first_visit_reservation_count' => $day['first_visit_reservation_unknown_count'] > 0 ? null : $day[$key],
-                    default => $day[$key],
-                };
-                $this->put($cells, '月計表', $column.$row, $value, in_array($column, ['U', 'X'], true) ? 'rate' : 'number');
-            }
-            foreach (['M' => 'Y', 'T' => 'Z', 'A' => 'AA', 'M&T' => 'AB', 'A&T' => 'AC'] as $category => $column) {
-                $this->put($cells, '月計表', $column.$row,
-                    $day['is_future'] ? null : $day['analysis_category_visit_counts'][$category]);
-            }
-            $this->put($cells, '月計表', 'AD'.$row,
-                $day['is_future'] ? null : $day['unknown_analysis_category_visit_count']);
-            $this->put($cells, '数値', 'K'.$numberRow, $day['is_future'] ? null : $day['payment_date_revenue']);
-            $this->put($cells, '数値', 'M'.$numberRow, $day['is_future'] ? null : $day['visit_count']);
-        }
-        // 28/29/30日月の余剰行も原本の10月値を残さない。
-        for ($day = count($monthly->dailyRows) + 1; $day <= 31; $day++) {
+        for ($day = 1; $day <= 31; $day++) {
             $row = $day + 2;
-            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC', 'AD'] as $column) {
-                $this->put($cells, '月計表', $column.$row, null);
+            $numberRow = $day + 3;
+            $daily = $monthly->dailyRows[$day - 1] ?? null;
+            $exists = $daily !== null;
+            $actual = $exists && ! $daily['is_future'];
+            $date = $daily['business_date'] ?? null;
+            $weekday = $daily['weekday'] ?? null;
+
+            $this->put($cells, '月計表', 'A'.$row, $exists ? $day : null);
+            $this->put($cells, '月計表', 'B'.$row, $weekday, 'text');
+            $this->put($cells, '日報', 'B'.$row, $exists ? $day : null);
+            $this->put($cells, '日報', 'C'.$row, $weekday, 'text');
+            $this->put($cells, '数値', 'F'.$numberRow, $exists ? $day : null);
+            $this->put($cells, '数値', 'G'.$numberRow, $weekday, 'text');
+
+            $note = $date === null ? null : ($notes[$date] ?? null);
+            $this->put($cells, '日報', 'D'.$row, $actual ? $note?->business_condition : null, 'text');
+            $this->put($cells, '日報', 'H'.$row, $actual ? $note?->reflection : null, 'text');
+
+            $payments = array_column($daily['payment_method_totals'] ?? [], 'amount', 'code');
+            foreach (self::PAYMENT_COLUMNS as $code => $column) {
+                $this->put($cells, '月計表', $column.$row, $actual ? ($payments[$code] ?? 0) : null);
             }
-            $this->put($cells, '日報', 'B'.$row, null);
-            $this->put($cells, '日報', 'C'.$row, null);
-            $this->put($cells, '数値', 'F'.($day + 3), null);
-            $this->put($cells, '数値', 'G'.($day + 3), null);
+            $mappedPayments = array_sum(array_intersect_key($payments, self::PAYMENT_COLUMNS));
+            $this->put($cells, '月計表', 'J'.$row, $actual ? $mappedPayments : null);
+            $this->put($cells, '月計表', 'Q'.$row, $actual ? $daily['payment_date_revenue'] : null);
+            // 原本P列の旧固定税率式は過去日は保持。未来日には0を表示させない。
+            if (! $actual) {
+                $this->put($cells, '月計表', 'P'.$row, null);
+            }
+            foreach (['R' => 'visit_count', 'S' => 'long_visit_count', 'T' => 'future_reservation_count',
+                'V' => 'first_visit_count', 'W' => 'first_visit_reservation_count'] as $column => $key) {
+                $unknown = $actual && (($key === 'future_reservation_count' && $daily['future_reservation_unknown_count'] > 0)
+                    || ($key === 'first_visit_reservation_count' && $daily['first_visit_reservation_unknown_count'] > 0));
+                $this->put($cells, '月計表', $column.$row, $actual && ! $unknown ? $daily[$key] : null);
+            }
+            $this->put($cells, '月計表', 'U'.$row, $actual ? $daily['future_reservation_rate']->value : null, 'rate');
+            $this->put($cells, '月計表', 'X'.$row, $actual ? $daily['first_visit_reservation_rate']->value : null, 'rate');
+            foreach (self::CATEGORY_COLUMNS as $category => $column) {
+                $this->put($cells, '月計表', $column.$row,
+                    $actual ? ($daily['analysis_category_visit_counts'][$category] ?? 0) : null);
+            }
+            $this->put($cells, '数値', 'K'.$numberRow, $actual ? $daily['payment_date_revenue'] : null);
+            $this->put($cells, '数値', 'M'.$numberRow, $actual ? $daily['visit_count'] : null);
         }
-        foreach ($methods as $index => $method) {
-            $this->put($cells, '月計表', Coordinate::stringFromColumnIndex($index + 3).'34', $method['amount']);
+
+        $totals = $monthly->actualTotals;
+        $payments = array_column($totals['payment_method_totals'], 'amount', 'code');
+        foreach (self::PAYMENT_COLUMNS as $code => $column) {
+            $this->put($cells, '月計表', $column.'34', $payments[$code] ?? 0);
         }
-        foreach ($taxes as $index => $tax) {
-            $this->put($cells, '月計表', Coordinate::stringFromColumnIndex($index + 11).'34', $tax['tax_amount']);
-        }
-        $this->put($cells, '月計表', 'P34', $monthly->actualTotals['payment_date_revenue'] > 0 && $taxes === []
-            ? null : array_sum(array_column($taxes, 'tax_amount')));
-        foreach (['J' => 'payment_date_revenue', 'Q' => 'payment_date_revenue', 'R' => 'visit_count',
-            'S' => 'long_visit_count', 'T' => 'future_reservation_count', 'V' => 'first_visit_count',
-            'W' => 'first_visit_reservation_count'] as $column => $key) {
-            $value = match ($key) {
-                'future_reservation_count' => $monthly->actualTotals['future_reservation_unknown_count'] > 0
-                    ? null : $monthly->actualTotals[$key],
-                'first_visit_reservation_count' => $monthly->actualTotals['first_visit_reservation_unknown_count'] > 0
-                    ? null : $monthly->actualTotals[$key],
-                default => $monthly->actualTotals[$key],
-            };
-            $this->put($cells, '月計表', $column.'34', $value);
+        $this->put($cells, '月計表', 'J34', array_sum(array_intersect_key($payments, self::PAYMENT_COLUMNS)));
+        $this->put($cells, '月計表', 'Q34', $totals['payment_date_revenue']);
+        foreach (['R' => 'visit_count', 'S' => 'long_visit_count', 'T' => 'future_reservation_count',
+            'V' => 'first_visit_count', 'W' => 'first_visit_reservation_count'] as $column => $key) {
+            $unknown = ($key === 'future_reservation_count' && $totals['future_reservation_unknown_count'] > 0)
+                || ($key === 'first_visit_reservation_count' && $totals['first_visit_reservation_unknown_count'] > 0);
+            $this->put($cells, '月計表', $column.'34', $unknown ? null : $totals[$key]);
         }
         $this->put($cells, '月計表', 'U34', $monthly->actualRatios['future_reservation_rate']->value, 'rate');
         $this->put($cells, '月計表', 'X34', $monthly->actualRatios['first_visit_reservation_rate']->value, 'rate');
-        foreach (['M' => 'Y', 'T' => 'Z', 'A' => 'AA', 'M&T' => 'AB', 'A&T' => 'AC'] as $category => $column) {
-            $this->put($cells, '月計表', $column.'34', $monthly->actualTotals['analysis_category_visit_counts'][$category]);
+        foreach (self::CATEGORY_COLUMNS as $category => $column) {
+            $this->put($cells, '月計表', $column.'34', $totals['analysis_category_visit_counts'][$category] ?? 0);
         }
-        $this->put($cells, '月計表', 'AD34', $monthly->actualTotals['unknown_analysis_category_visit_count']);
 
-        $this->staffSheets($cells, $staff, $monthly->year, $monthly->month);
-        $this->annualSheet($cells, $monthly, $annualByYear);
+        $this->staffSheets($cells, $staff, $monthly->year, $monthly->month, $monthly->asOfDate);
 
         return $cells;
     }
 
+    /** @param array<string,mixed> $staff @return list<string> */
+    public function warnings(MonthlyBusinessSummary $monthly, array $staff): array
+    {
+        $warnings = [];
+        foreach ($monthly->actualTotals['payment_method_totals'] as $method) {
+            if (! isset(self::PAYMENT_COLUMNS[$method['code']]) && $method['amount'] !== 0) {
+                $warnings[] = 'unmapped payment method: '.$method['code'].' ('.$method['amount'].'円)';
+            }
+        }
+        foreach ($monthly->actualTotals['tax_totals'] as $tax) {
+            if ($tax['gross_amount'] !== 0) {
+                $warnings[] = 'unmapped tax category: '.($tax['tax_category_code'] ?? 'unknown')
+                    .' / '.($tax['tax_rate_bps'] ?? 'unknown').' bps';
+            }
+        }
+        if ($monthly->actualTotals['unknown_analysis_category_visit_count'] > 0) {
+            $warnings[] = 'unmapped analysis category: '.$monthly->actualTotals['unknown_analysis_category_visit_count'].' visits';
+        }
+        foreach ($staff['monthly_rows'] as $entry) {
+            if (! in_array($entry['employment_type_code'], ['employee', 'part_time'], true)) {
+                $warnings[] = 'unmapped employment type: '.($entry['employment_type_code'] ?? 'unknown');
+            }
+        }
+
+        return array_values(array_unique($warnings));
+    }
+
     /** @param array<string,array<string,array{value:string|int|float|null,kind:string}>> $cells @param array<string,mixed> $staff */
-    private function staffSheets(array &$cells, array $staff, int $year, int $month): void
+    private function staffSheets(array &$cells, array $staff, int $year, int $month, string $asOfDate): void
     {
         $daysInMonth = CarbonImmutable::create($year, $month, 1)->daysInMonth;
         foreach (['employee' => '稼働率（社員）', 'part_time' => '稼働率（アルバイト）'] as $employment => $sheet) {
@@ -196,7 +160,6 @@ final class LegacySixSheetCellMap
             }
             for ($slot = 0; $slot < 4; $slot++) {
                 $base = 3 + $slot * 8;
-                $nameCell = Coordinate::stringFromColumnIndex($base).'3';
                 $staffId = $ids[$slot] ?? null;
                 $name = null;
                 foreach ($staff['staff'] as $member) {
@@ -204,18 +167,19 @@ final class LegacySixSheetCellMap
                         $name = $member['name'];
                     }
                 }
-                $this->put($cells, $sheet, $nameCell, $name, 'text');
+                $this->put($cells, $sheet, Coordinate::stringFromColumnIndex($base).'3', $name, 'text');
                 for ($day = 1; $day <= 31; $day++) {
-                    $row = $day + 4;
                     $entry = null;
-                    foreach ($staff['daily_rows'] as $candidate) {
-                        if ($candidate['staff_id'] === $staffId && $candidate['employment_type_code'] === $employment
-                            && (int) substr($candidate['business_date'], -2) === $day) {
-                            $entry = $candidate;
-                            break;
+                    if ($staffId !== null && $day <= $daysInMonth && sprintf('%04d-%02d-%02d', $year, $month, $day) <= $asOfDate) {
+                        foreach ($staff['daily_rows'] as $candidate) {
+                            if ($candidate['staff_id'] === $staffId && $candidate['employment_type_code'] === $employment
+                                && (int) substr($candidate['business_date'], -2) === $day) {
+                                $entry = $candidate;
+                                break;
+                            }
                         }
                     }
-                    $this->staffRow($cells, $sheet, $base, $row, $entry);
+                    $this->staffRow($cells, $sheet, $base, $day + 4, $entry);
                 }
                 $total = null;
                 foreach ($staff['monthly_rows'] as $candidate) {
@@ -226,13 +190,15 @@ final class LegacySixSheetCellMap
                 $this->staffRow($cells, $sheet, $base, 36, $total);
             }
             for ($day = 1; $day <= 31; $day++) {
-                $row = $day + 4;
-                $this->put($cells, $sheet, 'B'.$row, $day <= $daysInMonth ? $day : null);
-                $dailyEntries = array_values(array_filter($staff['daily_rows'], static fn (array $entry): bool => $entry['employment_type_code'] === $employment
-                    && (int) substr($entry['business_date'], -2) === $day));
-                $this->staffRow($cells, $sheet, 35, $row, $this->aggregateStaff($dailyEntries));
+                $date = $day <= $daysInMonth ? sprintf('%04d-%02d-%02d', $year, $month, $day) : null;
+                $this->put($cells, $sheet, 'B'.($day + 4), $date === null ? null : $day);
+                $dailyEntries = $date === null || $date > $asOfDate ? [] : array_values(array_filter($staff['daily_rows'],
+                    static fn (array $entry): bool => $entry['employment_type_code'] === $employment
+                        && $entry['business_date'] === $date));
+                $this->staffRow($cells, $sheet, 35, $day + 4, $this->aggregateStaff($dailyEntries));
             }
-            $monthEntries = array_values(array_filter($staff['monthly_rows'], static fn (array $entry): bool => $entry['employment_type_code'] === $employment));
+            $monthEntries = array_values(array_filter($staff['monthly_rows'],
+                static fn (array $entry): bool => $entry['employment_type_code'] === $employment));
             $this->staffRow($cells, $sheet, 35, 36, $this->aggregateStaff($monthEntries));
         }
     }
@@ -271,48 +237,9 @@ final class LegacySixSheetCellMap
     {
         foreach (['occupied_minutes', 'patient_count', 'working_minutes', 'future_reservation_count',
             'nomination_count', 'reservation_rate', 'nomination_rate', 'legacy_utilization_rate'] as $offset => $key) {
-            $coordinate = Coordinate::stringFromColumnIndex($base + $offset).$row;
-            $this->put($cells, $sheet, $coordinate, $entry[$key] ?? null, $offset >= 5 ? 'rate' : 'number');
+            $this->put($cells, $sheet, Coordinate::stringFromColumnIndex($base + $offset).$row,
+                $entry[$key] ?? null, $offset >= 5 ? 'rate' : 'number');
         }
-    }
-
-    /** @param array<string,array<string,array{value:string|int|float|null,kind:string}>> $cells @param array<int,array<string,mixed>> $annualByYear */
-    private function annualSheet(array &$cells, MonthlyBusinessSummary $monthly, array $annualByYear): void
-    {
-        $sheet = '年間計画書 (実数)';
-        $fiscalStart = $monthly->month >= 4 ? $monthly->year : $monthly->year - 1;
-        $this->put($cells, $sheet, 'A1', sprintf('ARK自由が丘店 %d年度計画・実績', $fiscalStart), 'text');
-        $this->put($cells, $sheet, 'A5', '実績売上', 'text');
-        $this->put($cells, $sheet, 'A6', '来店数', 'text');
-        $targetTotal = 0;
-        $actualTotal = 0;
-        $visitTotal = 0;
-        $targetUnknown = false;
-        foreach (range(0, 11) as $index) {
-            $fiscalMonth = (($index + 3) % 12) + 1;
-            $calendarYear = $index < 9 ? $fiscalStart : $fiscalStart + 1;
-            $entry = $annualByYear[$calendarYear]['months'][$fiscalMonth - 1];
-            $column = Coordinate::stringFromColumnIndex(3 + $index * 2);
-            $ratioColumn = Coordinate::stringFromColumnIndex(4 + $index * 2);
-            $target = $entry['target_amount'];
-            $actual = $entry['is_future'] ? null : $entry['actual_totals']['payment_date_revenue'];
-            $visits = $entry['is_future'] ? null : $entry['actual_totals']['visit_count'];
-            $this->put($cells, $sheet, $column.'4', $target);
-            $this->put($cells, $sheet, $column.'5', $actual);
-            $this->put($cells, $sheet, $column.'6', $visits);
-            $this->put($cells, $sheet, $ratioColumn.'5', $target === null || $target === 0 || $actual === null ? null : $actual / $target, 'rate');
-            if ($target === null) {
-                $targetUnknown = true;
-            } else {
-                $targetTotal += $target;
-            }
-            $actualTotal += $actual ?? 0;
-            $visitTotal += $visits ?? 0;
-        }
-        $this->put($cells, $sheet, 'AA4', $targetUnknown ? null : $targetTotal);
-        $this->put($cells, $sheet, 'AA5', $actualTotal);
-        $this->put($cells, $sheet, 'AA6', $visitTotal);
-        $this->put($cells, $sheet, 'AB5', $targetUnknown || $targetTotal === 0 ? null : $actualTotal / $targetTotal, 'rate');
     }
 
     /** @param array<string,array<string,array{value:string|int|float|null,kind:string}>> $cells */

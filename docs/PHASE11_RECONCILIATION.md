@@ -61,8 +61,8 @@ Task 11-12のstagingから登録した`historical_metric_values`を指定する�
 
 ## 最終自動検証結果（2026-09-25）
 
-- Task 11-13 focused PHP: 7 tests / 92 assertions 成功。
-- Phase 11を含む全PHP回帰: 1069 tests / 6408 assertions 成功。既存予約、顧客、Stripe、返金、回数券、月額、商品、シフト、Availability、店舗カレンダーの回帰を含む。
+- Task 11-11/13 focused PHP: 14 tests / 141 assertions 成功。
+- Phase 11を含む全PHP回帰: 1073 tests / 6482 assertions 成功（最終書式修正後に再実行）。既存予約、顧客、Stripe、返金、回数券、月額、商品、シフト、Availability、店舗カレンダーの回帰を含む。
 - Frontend全テスト: 14 files / 63 tests 成功。`vue-tsc --noEmit`とproduction Vite build成功。Pintと`git diff --check`成功。
 - 旧原本による実データ比較: 未実施（提供Excelは実績未入力、Google Sheets未提供、ARK側対象期間の事実なし）。fixture比較のみ成功。6シートのセル配置・書式・ファイル名規則はTask 11-11で確認済み。
 

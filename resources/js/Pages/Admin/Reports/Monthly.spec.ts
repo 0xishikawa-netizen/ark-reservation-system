@@ -1,5 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import MonthField from '@/components/ark/MonthField.vue';
 import Monthly from './Monthly.vue';
 
 vi.mock('@inertiajs/vue3', () => ({ Head: { template: '<div />' } }));
@@ -34,20 +35,45 @@ const report = () => ({
 let wrapper: VueWrapper | null = null;
 afterEach(() => { wrapper?.unmount(); wrapper = null; vi.restoreAllMocks(); });
 
+const paymentMethodColumns = [
+    { payment_method_id: 1, code: 'cash', name: '現金' },
+    { payment_method_id: 2, code: 'paypay', name: 'PayPay' },
+    { payment_method_id: 7, code: 'id', name: 'iD' },
+];
+
 function render() {
-    wrapper = mount(Monthly, { props: { report: report(), dataEndpoint: '/admin/reports/monthly/data' } });
+    wrapper = mount(Monthly, { props: { report: report(), dataEndpoint: '/admin/reports/monthly/data', paymentMethodColumns } });
     return wrapper;
 }
 
+const changeMonth = (page: VueWrapper, value: string) => page.getComponent(MonthField).vm.$emit('update:modelValue', value);
+const changeBasis = (page: VueWrapper, value: string) => page.getComponent({ name: 'ReportSelect' }).vm.$emit('update:modelValue', value);
+
 describe('Monthly report page', () => {
-    it('renders data, dynamic columns, zero, nullable values and future state distinctly', () => {
+    it('renders zero as 0 and nullable / future values as a muted hyphen keeping their meaning', () => {
         const page = render();
-        expect(page.text()).toContain('現金');
+        const table = page.get('[data-testid="monthly-daily-table"]');
         expect(page.text()).toContain('標準 10% 税額');
         expect(page.text()).toContain('31日');
-        expect(page.text()).toContain('0.0%');
-        expect(page.text()).toContain('—');
-        expect(page.text()).toContain('未実績');
+        expect(table.text()).toContain('0.0%');
+        expect(table.text()).toContain('0円');
+        expect(page.text()).not.toContain('算出不可');
+        expect(page.text()).not.toContain('未実績');
+        expect(page.text()).not.toContain('未設定');
+        expect(table.findAll('.ark-empty-value[aria-label="算出不可"]').length).toBeGreaterThan(0);
+        expect(table.findAll('.ark-empty-value[aria-label="未実績"]').length).toBeGreaterThan(0);
+        expect(table.get('tfoot .ark-empty-value[aria-label="該当なし"]').text()).toBe('-');
+        expect(page.get('.ark-empty-value[aria-label="未設定"]').text()).toBe('-');
+    });
+
+    it('orders daily columns like the canonical 月計表 (payments → 計 → tax → 売上金 → visits → first visit → categories)', () => {
+        const page = render();
+        const headers = page.findAll('[data-testid="monthly-daily-table"] thead tr:nth-child(2) th').map((cell) => cell.text());
+        expect(headers).toEqual(['現金', 'PayPay', 'iD', '計', '標準 10% 税額', '来店数', 'ロング', '予約', '予約率', '初診数', '初診予約', '初診予約率', 'M', 'T', 'A', 'M&T', 'A&T', '分類不明']);
+        const groups = page.findAll('[data-testid="monthly-daily-table"] thead tr.group-row th').map((cell) => cell.text());
+        expect(groups).toEqual(['日', '曜', '決済手段別売上', '税区分別 税額', '売上金決済日基準', '来店', '初診', '施術分類']);
+        const firstRow = page.findAll('[data-testid="monthly-daily-table"] tbody tr')[0].findAll('td').map((cell) => cell.text());
+        expect(firstRow.slice(1, 6)).toEqual(['1,100円', '0円', '0円', '1,100円', '100円']);
     });
 
     it('reloads for month and sales basis changes and displays loading', async () => {
@@ -55,13 +81,14 @@ describe('Monthly report page', () => {
         const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(() => new Promise((resolve) => { resolveFetch = resolve; }));
         const page = render();
 
-        await page.get('[data-testid="month-input"]').setValue('2026-11');
+        changeMonth(page, '2026-11');
+        await flushPromises();
         expect(page.text()).toContain('月計を読み込んでいます');
         expect(fetchMock.mock.calls[0][0]).toContain('year=2026&month=11&basis=payment_date');
         resolveFetch({ ok: true, json: async () => ({ data: report() }) } as Response);
         await flushPromises();
 
-        await page.get('[data-testid="basis-select"]').setValue('treatment_date');
+        changeBasis(page, 'treatment_date');
         expect(fetchMock.mock.calls[1][0]).toContain('basis=treatment_date');
         resolveFetch({ ok: true, json: async () => ({ data: { ...report(), sales_basis: 'treatment_date' } }) } as Response);
         await flushPromises();
@@ -71,21 +98,33 @@ describe('Monthly report page', () => {
     it('shows the shared API error message', async () => {
         vi.spyOn(window, 'fetch').mockRejectedValue(new Error('network'));
         const page = render();
-        await page.get('[data-testid="basis-select"]').setValue('treatment_date');
+        changeBasis(page, 'treatment_date');
         await flushPromises();
 
         expect(page.get('[role="alert"]').text()).toBe('月計を読み込めませんでした。時間をおいて再度お試しください。');
     });
 
-    it('shows a permission-gated export link only for the compatible payment-date basis', async () => {
+    it('shows report navigation as buttons', () => {
+        const page = render();
+        const customers = page.get('[data-testid="customers-link"]');
+        expect(customers.element.tagName).toBe('A');
+        expect(customers.classes()).toContain('v-btn');
+        expect(customers.attributes('href')).toBe('/admin/reports/customers');
+        expect(customers.text()).toBe('顧客統計を見る');
+    });
+
+    it('shows a permission-gated download button only for the compatible payment-date basis', async () => {
         const allowed = mount(Monthly, { props: { report: report(), dataEndpoint: '/admin/reports/monthly/data',
             exportEndpoint: '/admin/reports/excel' } });
-        expect(allowed.get('[data-testid="excel-export"]').attributes('href'))
-            .toContain('year=2026&month=10&basis=payment_date&as_of_date=2026-10-15');
+        const button = allowed.get('[data-testid="excel-export"]');
+        expect(button.text()).toBe('月計表をダウンロード');
+        expect(button.classes()).toContain('v-btn');
+        expect(button.attributes('href')).toContain('year=2026&month=10&basis=payment_date&as_of_date=2026-10-15');
         vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ data: { ...report(), sales_basis: 'treatment_date' } }) } as Response);
-        await allowed.get('[data-testid="basis-select"]').setValue('treatment_date');
+        changeBasis(allowed, 'treatment_date');
         await flushPromises();
-        expect(allowed.find('[data-testid="excel-export"]').exists()).toBe(false);
+        expect(allowed.get('[data-testid="excel-export"]').attributes('href')).toBeUndefined();
+        expect(allowed.get('[data-testid="excel-export"]').classes()).toContain('v-btn--disabled');
         expect(allowed.text()).toContain('原本形式のExcel出力は決済日基準のみ対応しています。');
         allowed.unmount();
         const denied = render();

@@ -201,10 +201,16 @@ final class VisitCompletionService
                 1,
                 (int) $reservation->starts_at->diffInMinutes($reservation->ends_at) - (int) $reservation->buffer_min,
             );
+            // 予約台帳のstarts_atはJSTの壁時計値。施術実績はUTC instantで保存し、
+            // 時間帯別稼働率が9時間ずれて集計されないようにする。
+            $actualStart = CarbonImmutable::parse(
+                $reservation->starts_at->format('Y-m-d H:i:s'),
+                $this->businessTime->timezone(),
+            )->utc();
             $treatments = collect([$this->visitFacts->addTreatment($visit, $reservation->service, [
                 'actual_minutes' => $scheduledMinutes,
-                'actual_started_at' => $reservation->starts_at,
-                'actual_ended_at' => $reservation->starts_at->copy()->addMinutes($scheduledMinutes),
+                'actual_started_at' => $actualStart,
+                'actual_ended_at' => $actualStart->addMinutes($scheduledMinutes),
                 'sort_order' => 0,
                 'operation_key' => "visit-completion:{$operationId}:treatment:0",
             ], $actor)]);

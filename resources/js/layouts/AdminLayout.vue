@@ -2,6 +2,8 @@
 import { router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { MESSAGES } from '@/constants/messages';
+import { reportNavigationItems } from './reportNavigation';
+import { settingsNavigationItems, settingsSections } from './settingsNavigation';
 
 const navigationGroupTitles = [
     // 店舗業務のメイン画面。ヘッダー左端（ダッシュボードより前）に単独タブで出す。
@@ -73,42 +75,8 @@ const navigationItems = computed<NavigationItem[]>(() => {
         ...(can.reservationsView
             ? [{ title: 'ブッキングボード', href: '/admin/schedule', disabled: false, icon: 'mdi-calendar-month-outline', group: 'ボード' as const }]
             : []),
-        ...(can.reportsView && can.salesView
-            ? [{ title: '月計', href: '/admin/reports/monthly', disabled: false, icon: 'mdi-chart-box-outline', group: '集計' as const }]
-            : []),
-        ...(can.reportsView && can.salesView
-            ? [{ title: MESSAGES.reporting.annualTitle, href: '/admin/reports/annual', disabled: false, icon: 'mdi-calendar-range', group: '集計' as const }]
-            : []),
-        ...(can.reportsView
-            ? [{ title: MESSAGES.reporting.customerTitle, href: '/admin/reports/customers', disabled: false, icon: 'mdi-account-group-outline', group: '集計' as const }]
-            : []),
-        ...(can.reportsView
-            ? [{ title: MESSAGES.reporting.staffTitle, href: '/admin/reports/staff-utilization', disabled: false, icon: 'mdi-chart-timeline-variant', group: '集計' as const }]
-            : []),
-        ...(can.reportsView
-            ? [{ title: MESSAGES.reporting.bandTitle, href: '/admin/reports/time-bands', disabled: false, icon: 'mdi-clock-outline', group: '集計' as const }]
-            : []),
-        ...(can.staffManage
-            ? [{ title: 'スタッフ', href: '/admin/staff', disabled: false, icon: 'mdi-account-group-outline', group: '設定' as const, subgroup: '店舗設定' }]
-            : []),
-        ...(can.servicesManage
-            ? [{ title: 'メニュー', href: '/admin/services', disabled: false, icon: 'mdi-clipboard-text-outline', group: '設定' as const, subgroup: '店舗設定' }]
-            : []),
-        ...(can.settingsManage
-            ? [
-                  { title: '商品', href: '/admin/products', disabled: false, icon: 'mdi-package-variant-closed', group: '設定' as const, subgroup: '店舗設定' },
-                  { title: '業務マスタ', href: '/admin/settings/business-masters', disabled: false, icon: 'mdi-database-cog-outline', group: '設定' as const, subgroup: '店舗設定' },
-              ]
-            : []),
-        ...(can.boothsManage
-            ? [{ title: 'ブース', href: '/admin/booths', disabled: false, icon: 'mdi-door-open', group: '設定' as const, subgroup: '店舗設定' }]
-            : []),
-        ...(can.ticketProductsManage
-            ? [{ title: '回数券商品', href: '/admin/ticket-products', disabled: false, icon: 'mdi-ticket-confirmation-outline', group: '設定' as const, subgroup: '回数券関連' }]
-            : []),
-        ...(can.membershipManage
-            ? [{ title: '月額プラン', href: '/admin/membership-plans', disabled: false, icon: 'mdi-card-account-details-outline', group: '設定' as const, subgroup: '月額プラン（サブスク）関連' }]
-            : []),
+        ...reportNavigationItems(can, page.props.auth.reportRoutes),
+        ...settingsNavigationItems(can),
         ...(can.customersView
             ? [{ title: '顧客', href: '/admin/customers', disabled: false, icon: 'mdi-account-multiple-outline', group: '顧客' as const }]
             : []),
@@ -117,9 +85,6 @@ const navigationItems = computed<NavigationItem[]>(() => {
                   { title: '予約', href: '/admin/reservations', disabled: false, icon: 'mdi-format-list-bulleted', group: '予約' as const },
                   { title: '決済', href: '/admin/payments', disabled: false, icon: 'mdi-credit-card-outline', group: '支払い' as const },
               ]
-            : []),
-        ...(can.shiftsManage
-            ? [{ title: '勤務枠', href: '/admin/staff-shifts', disabled: false, icon: 'mdi-calendar-clock-outline', group: '設定' as const, subgroup: '店舗設定' }]
             : []),
         ...(can.failedJobsView
             ? [
@@ -132,18 +97,6 @@ const navigationItems = computed<NavigationItem[]>(() => {
             : []),
         ...(can.integrationsView
             ? [{ title: '外部予約連携', href: '/admin/integrations/reservations', disabled: false, icon: 'mdi-sync', group: 'システム' as const }]
-            : []),
-        ...(can.ticketPolicyManage
-            ? [{ title: '回数券運用設定', href: '/admin/settings/tickets', disabled: false, icon: 'mdi-tune-variant', group: '設定' as const, subgroup: '回数券関連' }]
-            : []),
-        ...(can.settingsManage
-            ? [{ title: '予約ポリシー', href: '/admin/settings/reservation', disabled: false, icon: 'mdi-calendar-alert-outline', group: '設定' as const, subgroup: '予約設定' }]
-            : []),
-        ...(can.settingsManage
-            ? [{ title: '通知設定', href: '/admin/settings/notifications', disabled: false, icon: 'mdi-bell-ring-outline', group: '設定' as const, subgroup: '予約設定' }]
-            : []),
-        ...(can.rolesManage
-            ? [{ title: 'ロール権限', href: '/admin/settings/roles', disabled: false, icon: 'mdi-shield-account-outline', group: '設定' as const, subgroup: '権限管理' }]
             : []),
     ];
 });
@@ -159,14 +112,28 @@ const navigationGroups = computed<NavigationGroup[]>(() =>
 
 interface NavigationSection {
     label: string | null;
+    /** カテゴリのアイコン（ネストするカテゴリのみ）。 */
+    icon: string | null;
+    /** true のとき、カテゴリを第1階層に置き、項目は右側のサブメニューに出す。 */
+    nested: boolean;
     items: NavigationItem[];
 }
 
 /**
  * ドロップダウン内の項目を責務ごとの小見出し（subgroup）でまとめる。
+ * 「設定」は第1階層をカテゴリに統一し、項目が1つのカテゴリも含めて必ずネストする。
  * subgroup を持たない項目は見出しなしのセクションにまとめる。
  */
 const groupSections = (items: NavigationItem[]): NavigationSection[] => {
+    if (items.length > 0 && items.every((item) => item.group === '設定')) {
+        return settingsSections(items).map((section) => ({
+            label: section.title,
+            icon: section.icon,
+            nested: true,
+            items: section.items,
+        }));
+    }
+
     const order: (string | null)[] = [];
     const buckets = new Map<string | null, NavigationItem[]>();
 
@@ -181,7 +148,7 @@ const groupSections = (items: NavigationItem[]): NavigationSection[] => {
         buckets.get(key)!.push(item);
     }
 
-    return order.map((label) => ({ label, items: buckets.get(label)! }));
+    return order.map((label) => ({ label, icon: null, nested: false, items: buckets.get(label)! }));
 };
 
 const currentPath = computed(() => page.url.split(/[?#]/, 1)[0] || '/');
@@ -317,11 +284,10 @@ onBeforeUnmount(() => {
                         </template>
                         <v-list density="compact" nav slim>
                             <template v-for="section in groupSections(group.items)" :key="section.label ?? '_'">
-                                <!-- 責務ごとの小見出し（例: 店舗設定）はクリック／フォーカスで
-                                     横（右側）にフライアウトするサブメニューにする。
-                                     項目が1つしかないカテゴリはネストする意味がないため素の項目として出す。 -->
+                                <!-- 「設定」のカテゴリ（例: 店舗設定）は第1階層に並べ、hover／クリック／フォーカスで
+                                     横（右側）にフライアウトするサブメニューにする。項目が1つのカテゴリも同じ形にそろえる。 -->
                                 <v-menu
-                                    v-if="section.label && section.items.length > 1"
+                                    v-if="section.nested"
                                     submenu
                                     location="end top"
                                     open-on-hover
@@ -332,10 +298,16 @@ onBeforeUnmount(() => {
                                     <template #activator="{ props: subProps }">
                                         <v-list-item
                                             v-bind="subProps"
-                                            :title="section.label"
+                                            :title="section.label ?? ''"
                                             class="ark-topnav-menu__group-activator"
+                                            :active="section.items.some((item) => isActive(item))"
+                                            color="primary"
+                                            data-testid="settings-category"
                                             @click.stop
                                         >
+                                            <template #prepend>
+                                                <v-icon :icon="section.icon ?? 'mdi-folder-outline'" size="18" />
+                                            </template>
                                             <template #append>
                                                 <v-icon icon="mdi-chevron-right" size="16" />
                                             </template>
@@ -410,9 +382,10 @@ onBeforeUnmount(() => {
                     <v-list-subheader class="text-overline">{{ group.title }}</v-list-subheader>
                     <template v-for="section in groupSections(group.items)" :key="section.label ?? '_'">
                         <v-list-subheader
-                            v-if="section.label && section.items.length > 1"
+                            v-if="section.label"
                             class="ark-mobilenav__subheader"
                         >
+                            <v-icon v-if="section.icon" :icon="section.icon" size="14" class="mr-1" />
                             {{ section.label }}
                         </v-list-subheader>
                         <v-list-item
@@ -559,16 +532,23 @@ onBeforeUnmount(() => {
     opacity: 0.6;
 }
 
+/* カテゴリ行も項目行と同じ高さ・余白・アイコン幅にそろえ、太さだけで階層を示す。 */
 .ark-topnav-menu__group-activator .v-list-item-title {
-    font-size: 0.75rem;
     font-weight: 700;
-    letter-spacing: 0.02em;
-    opacity: 0.85;
+}
+
+.ark-topnav-menu .v-list-item__append .v-icon {
+    opacity: 0.55;
 }
 
 .ark-topnav-menu .v-list-item {
-    min-height: 34px !important;
+    min-height: 36px !important;
     padding-inline: 12px !important;
+    border-radius: 6px;
+}
+
+.ark-topnav-menu .v-list--nav {
+    padding-inline: 4px;
 }
 
 .ark-topnav-menu .v-list-item-title {

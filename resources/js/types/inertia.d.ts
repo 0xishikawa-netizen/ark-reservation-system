@@ -29,6 +29,7 @@ interface AuthPermissions {
     settingsManage: boolean;
     rolesManage: boolean;
     reportsView: boolean;
+    reportsManage: boolean;
     salesView: boolean;
 }
 
@@ -37,6 +38,14 @@ interface SharedPageProps {
     auth: {
         user: AuthUser | null;
         can: AuthPermissions;
+        reportRoutes: {
+            dailyNotes: string;
+            monthly: string;
+            customers: string;
+            staffUtilization: string;
+            timeBands: string;
+            annual: string;
+        };
     };
     flash: {
         success?: string;

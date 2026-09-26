@@ -371,7 +371,7 @@ const saveBooking = (): void => {
 
 const formatJpDate = (iso: string | null): string => {
     if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-        return '—';
+        return MESSAGES.common.notSet;
     }
     const [y, m, d] = iso.split('-').map(Number);
 
@@ -442,7 +442,7 @@ const horizonSummary = computed(() => {
                 <p v-if="staffId === null">{{ MESSAGES.attendance.selectStaff }}</p>
                 <template v-else>
                     <div class="d-flex flex-wrap ga-3 mb-3">
-                        <v-text-field v-model="attendanceForm.business_date" type="date" :label="MESSAGES.attendance.date" style="max-width: 190px" />
+                        <DateField v-model="attendanceForm.business_date" :label="MESSAGES.attendance.date" :clearable="false" :hide-details="false" density="default" style="max-width: 220px" />
                         <v-text-field v-model="attendanceForm.clock_in_at" type="datetime-local" :label="MESSAGES.attendance.clockIn" style="max-width: 240px" />
                         <v-text-field v-model="attendanceForm.clock_out_at" type="datetime-local" :label="MESSAGES.attendance.clockOut" style="max-width: 240px" />
                     </div>
@@ -468,9 +468,9 @@ const horizonSummary = computed(() => {
                 <v-table v-else>
                     <tbody>
                         <tr v-for="entry in attendances" :key="entry.id">
-                            <td>{{ entry.business_date }}</td><td>{{ entry.clock_in_at ?? '—' }} 〜 {{ entry.clock_out_at ?? '—' }}</td>
+                            <td>{{ entry.business_date }}</td><td>{{ entry.clock_in_at ?? MESSAGES.common.notRecorded }} 〜 {{ entry.clock_out_at ?? MESSAGES.common.notRecorded }}</td>
                             <td>{{ entry.status === 'confirmed' ? MESSAGES.attendance.confirmed : MESSAGES.attendance.draft }}</td>
-                            <td>{{ entry.note ?? '—' }}</td>
+                            <td>{{ entry.note ?? MESSAGES.common.notEntered }}</td>
                             <td><v-btn variant="text" @click="editAttendance(entry)">{{ MESSAGES.attendance.edit }}</v-btn></td>
                         </tr>
                     </tbody>
@@ -701,7 +701,7 @@ const horizonSummary = computed(() => {
                                         {{ e.is_off ? '休み' : '時間変更' }}
                                     </v-chip>
                                 </td>
-                                <td class="text-medium-emphasis">{{ e.note ?? '—' }}</td>
+                                <td class="text-medium-emphasis">{{ e.note ?? MESSAGES.common.notEntered }}</td>
                                 <td class="text-right">
                                     <v-btn size="small" variant="text" @click="clearException(e.id)">
                                         解除

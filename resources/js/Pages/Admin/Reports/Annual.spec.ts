@@ -1,5 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import DateField from '@/components/ark/DateField.vue';
+import YearField from '@/components/ark/YearField.vue';
 import Annual from './Annual.vue';
 
 vi.mock('@inertiajs/vue3', () => ({ Head: { template: '<div />' } }));
@@ -39,22 +41,31 @@ describe('annual report', () => {
         const table = wrapper.get('[data-testid="annual-table"]').text();
         expect(table).toContain('1,000円');
         expect(table).toContain('50.0%');
-        expect(table).toContain('未実績');
         expect(table).toContain('年間合計');
+        expect(table).not.toContain('未実績');
+        expect(table).not.toContain('未設定');
+        const tableEl = wrapper.get('[data-testid="annual-table"]');
+        // 未来月は「-」（未実績）。0 実績は 0 のまま。
+        expect(tableEl.findAll('.ark-empty-value[aria-label="未実績"]').length).toBeGreaterThan(0);
+        expect(tableEl.findAll('.ark-empty-value[aria-label="未設定"]').length).toBeGreaterThan(0);
+        expect(tableEl.findAll('tbody tr')[0].text()).toContain('0');
+        expect(tableEl.findAll('thead tr.group-row th').map((cell) => cell.text())).toEqual(['月', '売上', '来店・予約', '初診', '顧客', '到達', '稼働率']);
+        expect(wrapper.find('input[type="number"]').exists()).toBe(false);
+        expect(wrapper.find('input[type="date"]').exists()).toBe(false);
     });
 
     it('reloads year, basis, and as-of and preserves result on failure', async () => {
         const fetchMock = vi.spyOn(window, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ data: report() }) } as Response);
         wrapper = mount(Annual, { props: { report: report(), dataEndpoint: '/admin/reports/annual/data' } });
-        await wrapper.get('[data-testid="year-input"]').setValue('2027');
+        wrapper.getComponent(YearField).vm.$emit('update:modelValue', 2027);
         await flushPromises();
         expect(fetchMock.mock.calls[0][0]).toContain('year=2027');
         expect(fetchMock.mock.calls[0][0]).not.toContain('as_of_date');
-        await wrapper.get('[data-testid="basis-select"]').setValue('treatment_date');
+        wrapper.getComponent({ name: 'ReportSelect' }).vm.$emit('update:modelValue', 'treatment_date');
         await flushPromises();
         expect(fetchMock.mock.calls[1][0]).toContain('basis=treatment_date');
         fetchMock.mockRejectedValueOnce(new Error('network'));
-        await wrapper.get('[data-testid="as-of-input"]').setValue('2027-02-28');
+        wrapper.getComponent(DateField).vm.$emit('update:modelValue', '2027-02-28');
         await flushPromises();
         expect(wrapper.get('[role="alert"]').text()).toContain('読み込めませんでした');
         expect(wrapper.get('[data-testid="annual-table"]').text()).toContain('1,000円');

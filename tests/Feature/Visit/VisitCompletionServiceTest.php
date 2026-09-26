@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Visit;
 
+use App\Domain\Reporting\TimeBandUtilizationService;
 use App\Domain\Visit\VisitCompletionService;
 use App\Enums\Accounting\CheckoutStatus;
 use App\Enums\Membership\MembershipNoShowPolicy;
@@ -82,6 +83,27 @@ class VisitCompletionServiceTest extends TestCase
             'action' => 'reservation.completed',
             'entity_id' => (string) $reservation->id,
         ]);
+    }
+
+    public function test_default_treatment_uses_reservation_wall_clock_as_tokyo_time_for_time_bands(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-15 03:00:00', 'UTC'));
+        $staff = Staff::factory()->create();
+        $reservation = $this->reservation(
+            service: Service::factory()->create(['duration_min' => 60]),
+            staff: $staff,
+            startsAt: '2026-09-15 11:30:00',
+        );
+
+        $visit = $this->completion()->completeReservation($reservation)->visit;
+        $treatment = $visit->treatments()->sole();
+        $this->assertSame('2026-09-15 02:30', $treatment->actual_started_at->utc()->format('Y-m-d H:i'));
+        $this->assertSame('2026-09-15 03:30', $treatment->actual_ended_at->utc()->format('Y-m-d H:i'));
+
+        $rows = collect(app(TimeBandUtilizationService::class)->forMonth(2026, 9, $staff->user_id, '2026-09-15')['daily_rows'])
+            ->where('business_date', '2026-09-15')->keyBy('band_code');
+        $this->assertSame(30, $rows['10_12']['occupied_minutes']);
+        $this->assertSame(30, $rows['12_15']['occupied_minutes']);
     }
 
     public function test_explicit_staff_request_is_snapshotted_without_assuming_assigned_staff_means_nomination(): void

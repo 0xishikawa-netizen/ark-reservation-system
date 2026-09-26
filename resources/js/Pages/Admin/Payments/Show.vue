@@ -122,7 +122,7 @@ const syncFromStripe = (): void => {
             >
                 <div class="font-weight-medium">要対応</div>
                 <div class="text-body-2">
-                    Stripe との結果が確定していない可能性があります（{{ payment.failure_code ?? '—' }}）。
+                    Stripe との結果が確定していない可能性があります（{{ payment.failure_code ?? MESSAGES.common.notRecorded }}）。
                     「同期」ボタンで現在の状態を取り込んでから対応してください。
                     <strong>{{ MESSAGES.payment.doNotRetryUnknown }}</strong>
                 </div>
@@ -137,10 +137,10 @@ const syncFromStripe = (): void => {
                             <tr><td>返金済額</td><td class="text-right">{{ payment.refunded_amount.toLocaleString() }} 円</td></tr>
                             <tr><td>返金可能額</td><td class="text-right">{{ payment.refundable_amount.toLocaleString() }} 円</td></tr>
                             <tr><td>請求方法</td><td class="text-right">{{ captureMethodLabels[payment.capture_method] ?? payment.capture_method }}</td></tr>
-                            <tr><td>仮押さえ日時</td><td class="text-right">{{ payment.authorized_at ?? '—' }}</td></tr>
-                            <tr><td>請求日時</td><td class="text-right">{{ payment.paid_at ?? '—' }}</td></tr>
-                            <tr><td>取消日時</td><td class="text-right">{{ payment.voided_at ?? '—' }}</td></tr>
-                            <tr><td>最終同期日時</td><td class="text-right">{{ payment.last_synced_at ?? '—' }}</td></tr>
+                            <tr><td>仮押さえ日時</td><td class="text-right">{{ payment.authorized_at ?? MESSAGES.common.notRecorded }}</td></tr>
+                            <tr><td>請求日時</td><td class="text-right">{{ payment.paid_at ?? MESSAGES.common.notRecorded }}</td></tr>
+                            <tr><td>取消日時</td><td class="text-right">{{ payment.voided_at ?? MESSAGES.common.notRecorded }}</td></tr>
+                            <tr><td>最終同期日時</td><td class="text-right">{{ payment.last_synced_at ?? MESSAGES.common.notSynced }}</td></tr>
                         </tbody>
                     </v-table>
                 </SectionCard>
@@ -150,24 +150,24 @@ const syncFromStripe = (): void => {
                 <SectionCard title="予約情報" variant="outlined" height="100%" class="ark-table-section">
                     <v-table density="compact">
                         <tbody>
-                            <tr><td>顧客</td><td class="text-right">{{ payment.customer_name ?? '—' }}</td></tr>
+                            <tr><td>顧客</td><td class="text-right">{{ payment.customer_name ?? MESSAGES.common.notEntered }}</td></tr>
                             <tr>
                                 <td>予約</td>
                                 <td class="text-right">
                                     <span v-if="payment.reservation_id">
                                         #{{ payment.reservation_id }} / {{ payment.reservation_starts_at }}
                                     </span>
-                                    <span v-else>—</span>
+                                    <span v-else class="text-medium-emphasis">{{ MESSAGES.common.notLinked }}</span>
                                 </td>
                             </tr>
-                            <tr><td>予約状況</td><td class="text-right">{{ reservationStatusLabels[payment.reservation_status ?? ''] ?? payment.reservation_status ?? '—' }}</td></tr>
+                            <tr><td>予約状況</td><td class="text-right">{{ reservationStatusLabels[payment.reservation_status ?? ''] ?? payment.reservation_status ?? MESSAGES.common.notLinked }}</td></tr>
                             <tr>
                                 <td>決済ID<br><span class="text-caption text-medium-emphasis">照会用</span></td>
-                                <td class="text-right text-caption">{{ payment.stripe_payment_intent_id ?? '—' }}</td>
+                                <td class="text-right text-caption">{{ payment.stripe_payment_intent_id ?? MESSAGES.common.notRecorded }}</td>
                             </tr>
                             <tr>
                                 <td>請求ID<br><span class="text-caption text-medium-emphasis">返金対象</span></td>
-                                <td class="text-right text-caption">{{ payment.stripe_charge_id ?? '—' }}</td>
+                                <td class="text-right text-caption">{{ payment.stripe_charge_id ?? MESSAGES.common.notRecorded }}</td>
                             </tr>
                         </tbody>
                     </v-table>
@@ -200,7 +200,7 @@ const syncFromStripe = (): void => {
                         <td class="text-right">{{ refund.amount.toLocaleString() }}</td>
                         <td><StatusChip :status="refund.status" :label="refund.status" /></td>
                         <td>{{ refund.reason }}</td>
-                        <td>{{ refund.created_by ?? '—' }}</td>
+                        <td>{{ refund.created_by ?? MESSAGES.common.notRecorded }}</td>
                         <td class="text-caption">{{ refund.created_at }}</td>
                     </tr>
                     <tr v-if="payment.refunds.length === 0">

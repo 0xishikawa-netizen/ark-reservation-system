@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
-import { PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { DateField, EmptyValue, MonthField, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -73,7 +74,7 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
         <v-window-item value="tax"><SectionCard title="税区分と適用期間">
             <div v-for="category in taxCategories" :key="category.id" class="mb-5"><div class="d-flex align-center ga-3"><strong>{{ category.name }} ({{ category.code }})</strong><StatusChip :status="category.is_active ? 'active' : 'canceled'" :label="category.is_active ? '有効' : '無効'" /><v-btn size="small" variant="text" @click="toggleMaster(category, '/admin/settings/business-masters/tax-categories')">{{ category.is_active ? '無効化' : '有効化' }}</v-btn></div><div v-for="rate in category.rates" :key="rate.id" class="text-body-2 ml-4">{{ rate.effective_from }} 〜 {{ rate.effective_to || '期限なし' }}: {{ (rate.rate_bps / 100).toFixed(2) }}% <v-btn size="x-small" variant="text" @click="editRate(rate)">編集</v-btn></div></div>
             <v-form class="inline-form" @submit.prevent="taxCategoryForm.post('/admin/settings/business-masters/tax-categories', { preserveScroll: true, onSuccess: () => taxCategoryForm.reset() })"><v-text-field v-model="taxCategoryForm.code" label="税区分コード" /><v-text-field v-model="taxCategoryForm.name" label="名称" /><v-text-field v-model.number="taxCategoryForm.sort_order" label="表示順" type="number" /><v-btn type="submit" color="primary">税区分追加</v-btn></v-form>
-            <v-divider class="my-5" /><v-form class="inline-form" @submit.prevent="saveRate"><v-select v-model="rateForm.tax_category_id" :items="taxCategories" item-title="name" item-value="id" label="税区分" /><v-text-field v-model.number="rateForm.rate_bps" label="税率(bp)" type="number" /><v-text-field v-model="rateForm.effective_from" label="開始日" type="date" /><v-text-field v-model="rateForm.effective_to" label="終了日（当日含まず）" type="date" clearable /><v-btn type="submit" color="primary">{{ editingRateId === null ? '税率追加' : '税率更新' }}</v-btn></v-form>
+            <v-divider class="my-5" /><v-form class="inline-form" @submit.prevent="saveRate"><v-select v-model="rateForm.tax_category_id" :items="taxCategories" item-title="name" item-value="id" label="税区分" /><v-text-field v-model.number="rateForm.rate_bps" label="税率(bp)" type="number" /><DateField v-model="rateForm.effective_from" label="開始日" :clearable="false" /><DateField :model-value="rateForm.effective_to ?? ''" label="終了日（当日含まず）" @update:model-value="rateForm.effective_to = $event || null" /><v-btn type="submit" color="primary">{{ editingRateId === null ? '税率追加' : '税率更新' }}</v-btn></v-form>
         </SectionCard></v-window-item>
         <v-window-item value="payment"><SectionCard title="決済方法">
             <v-table><thead><tr><th>表示順</th><th>コード</th><th>名称</th><th>状態</th><th></th></tr></thead><tbody><tr v-for="item in paymentMethods" :key="item.id"><td>{{ item.display_order }}</td><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.is_enabled ? '有効' : '無効' }}</td><td><v-btn size="small" variant="text" @click="editPayment(item)">編集</v-btn><v-btn size="small" variant="text" @click="togglePayment(item)">{{ item.is_enabled ? '無効化' : '有効化' }}</v-btn></td></tr></tbody></v-table>
@@ -81,12 +82,27 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
         </SectionCard></v-window-item>
         <v-window-item value="calendar"><SectionCard title="店舗カレンダー">
             <p class="text-body-2 mb-4">通常営業 {{ business.default_opens_at }}〜{{ business.default_closes_at }}。例外日のみ登録します。</p>
-            <v-form class="inline-form" @submit.prevent="calendarForm.put('/admin/settings/business-masters/calendar', { preserveScroll: true, onSuccess: () => calendarForm.reset() })"><v-text-field v-model="calendarForm.business_date" label="営業日" type="date" /><v-select v-model="calendarForm.status" label="状態" :items="[{title:'休業',value:'closed'},{title:'特別営業時間',value:'special_hours'}]" /><v-text-field v-if="calendarForm.status === 'special_hours'" v-model="calendarForm.opens_at" label="開店" type="time" /><v-text-field v-if="calendarForm.status === 'special_hours'" v-model="calendarForm.closes_at" label="閉店" type="time" /><v-text-field v-model="calendarForm.note" label="備考" /><v-btn type="submit" color="primary">保存</v-btn></v-form>
-            <v-table class="mt-5"><thead><tr><th>日付</th><th>状態</th><th>時間</th><th>備考</th><th></th></tr></thead><tbody><tr v-for="day in calendarDays" :key="day.id"><td>{{ day.business_date }}</td><td>{{ day.status === 'closed' ? '休業' : '特別営業' }}</td><td>{{ day.opens_at && day.closes_at ? `${day.opens_at}〜${day.closes_at}` : '—' }}</td><td>{{ day.note || '—' }}</td><td><v-btn size="small" variant="text" @click="router.delete(`/admin/settings/business-masters/calendar/${day.id}`, { preserveScroll: true })">通常営業に戻す</v-btn></td></tr></tbody></v-table>
+            <v-form class="inline-form" @submit.prevent="calendarForm.put('/admin/settings/business-masters/calendar', { preserveScroll: true, onSuccess: () => calendarForm.reset() })"><DateField v-model="calendarForm.business_date" label="営業日" :clearable="false" /><v-select v-model="calendarForm.status" label="状態" :items="[{title:'休業',value:'closed'},{title:'特別営業時間',value:'special_hours'}]" /><v-text-field v-if="calendarForm.status === 'special_hours'" v-model="calendarForm.opens_at" label="開店" type="time" /><v-text-field v-if="calendarForm.status === 'special_hours'" v-model="calendarForm.closes_at" label="閉店" type="time" /><v-text-field v-model="calendarForm.note" label="備考" /><v-btn type="submit" color="primary">保存</v-btn></v-form>
+            <v-table class="mt-5">
+                <thead><tr><th>日付</th><th>状態</th><th>時間</th><th>備考</th><th></th></tr></thead>
+                <tbody>
+                    <tr v-for="day in calendarDays" :key="day.id">
+                        <td>{{ day.business_date }}</td>
+                        <td>{{ day.status === 'closed' ? '休業' : '特別営業' }}</td>
+                        <td>
+                            <span v-if="day.opens_at && day.closes_at">{{ day.opens_at }}〜{{ day.closes_at }}</span>
+                            <EmptyValue v-else-if="day.status === 'closed'" />
+                            <span v-else>{{ MESSAGES.common.notEntered }}</span>
+                        </td>
+                        <td>{{ day.note || MESSAGES.common.notEntered }}</td>
+                        <td><v-btn size="small" variant="text" @click="router.delete(`/admin/settings/business-masters/calendar/${day.id}`, { preserveScroll: true })">通常営業に戻す</v-btn></td>
+                    </tr>
+                </tbody>
+            </v-table>
         </SectionCard></v-window-item>
         <v-window-item value="target"><SectionCard title="売上目標">
             <v-form class="inline-form" @submit.prevent="defaultTargetForm.put('/admin/settings/business-masters/sales-target/default', { preserveScroll: true })"><v-text-field v-model.number="defaultTargetForm.target_amount" label="デフォルト月間目標（円）" type="number" min="0" /><v-btn type="submit" color="primary">保存</v-btn></v-form>
-            <v-form class="inline-form mt-5" @submit.prevent="monthlyTargetForm.put('/admin/settings/business-masters/sales-target/monthly', { preserveScroll: true, onSuccess: () => monthlyTargetForm.reset() })"><v-text-field v-model="monthlyTargetForm.target_month" label="対象月" type="month" /><v-text-field v-model.number="monthlyTargetForm.target_amount" label="月別目標（円）" type="number" min="0" /><v-btn type="submit" color="primary">月別設定</v-btn></v-form>
+            <v-form class="inline-form mt-5" @submit.prevent="monthlyTargetForm.put('/admin/settings/business-masters/sales-target/monthly', { preserveScroll: true, onSuccess: () => monthlyTargetForm.reset() })"><MonthField v-model="monthlyTargetForm.target_month" :label="MESSAGES.calendar.targetMonth" /><v-text-field v-model.number="monthlyTargetForm.target_amount" label="月別目標（円）" type="number" min="0" /><v-btn type="submit" color="primary">月別設定</v-btn></v-form>
             <v-list><v-list-item v-for="item in salesTargets.monthly" :key="item.id" :title="item.target_month" :subtitle="`${money(item.target_amount)}円`"><template #append><v-btn size="small" variant="text" @click="router.delete(`/admin/settings/business-masters/sales-target/monthly/${item.id}`, { preserveScroll: true })">削除</v-btn></template></v-list-item></v-list>
         </SectionCard></v-window-item>
         <v-window-item value="employment"><SectionCard title="雇用形態">

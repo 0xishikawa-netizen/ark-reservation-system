@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
-import { DateField, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { DateField, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import {
     reservationSourceColor,
@@ -383,7 +383,7 @@ function submitAdjustment(): void {
             </div>
             <div class="reservation-hero__fact">
                 <div class="text-caption text-medium-emphasis">ブース</div>
-                <div class="font-weight-medium">{{ reservation.booth_name ?? '—' }}</div>
+                <div class="font-weight-medium"><template v-if="reservation.booth_name">{{ reservation.booth_name }}</template><EmptyValue :label="MESSAGES.common.notSet" v-else /></div>
             </div>
         </div>
     </SectionCard>
@@ -557,7 +557,7 @@ function submitAdjustment(): void {
             <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">決済確定額</div><div>{{ formatMoney(payment_summary.captured_total) }}</div></v-col>
             <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">返金総額</div><div>{{ formatMoney(payment_summary.refunded_total) }}</div></v-col>
             <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">実質受領額</div><div class="font-weight-bold">{{ formatMoney(payment_summary.net_received) }}</div></v-col>
-            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">最終施術金額</div><div>{{ payment_summary.final_amount === null ? '未設定' : formatMoney(payment_summary.final_amount) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">最終施術金額</div><div><EmptyValue v-if="payment_summary.final_amount === null" :label="MESSAGES.common.notSet" /><template v-else>{{ formatMoney(payment_summary.final_amount) }}</template></div></v-col>
             <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">差額</div><div>{{ formatMoney(payment_summary.delta) }}</div></v-col>
         </v-row>
 
@@ -597,15 +597,15 @@ function submitAdjustment(): void {
                         </td>
                         <td class="text-right">{{ formatMoney(payment.amount) }}</td>
                         <td><StatusChip :status="payment.status" :label="payment.status_label" /></td>
-                        <td class="text-caption">{{ payment.stripe_payment_intent_id ?? '—' }}</td>
-                        <td class="text-caption">{{ payment.stripe_charge_id ?? '—' }}</td>
+                        <td class="text-caption">{{ payment.stripe_payment_intent_id ?? MESSAGES.common.notRecorded }}</td>
+                        <td class="text-caption">{{ payment.stripe_charge_id ?? MESSAGES.common.notRecorded }}</td>
                         <td class="text-right">{{ formatMoney(payment.refunded_amount) }}</td>
                     </tr>
                     <tr v-for="(refund, index) in payment.refunds" :key="`${payment.id}-refund-${index}`" class="bg-surface-light">
                         <td class="pl-8 text-caption">↳ 返金：{{ refund.reason }}</td>
                         <td class="text-right text-caption">-{{ formatMoney(refund.amount) }}</td>
                         <td><StatusChip :status="refund.status" :label="refund.status" /></td>
-                        <td colspan="3" class="text-caption">{{ refund.created_at ?? '—' }}</td>
+                        <td colspan="3" class="text-caption">{{ refund.created_at ?? MESSAGES.common.notRecorded }}</td>
                     </tr>
                 </template>
                 <tr v-if="payment_summary.payments.length === 0">

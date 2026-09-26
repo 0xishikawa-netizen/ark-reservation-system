@@ -473,7 +473,11 @@ UTC半開区間で索引を利用し、JST日付への変換はSELECT/GROUP BY�
 
 ### Phase 11 Task 11-11 Excel出力
 
-DB変更なし。`MonthlyBusinessSummary.actual_totals/actual_ratios`と`AnnualReportService.as_of_totals`は保存済み日次事実からの基準日時点read model。6シートの暫定cell mappingと原本依存範囲は`docs/EXCEL_EXPORT.md`。
+`MonthlyBusinessSummary.actual_totals/actual_ratios`と`AnnualReportService.as_of_totals`は保存済み日次事実からの基準日時点read model。6シートの原本固定cell mappingは`docs/EXCEL_EXPORT.md`。
+
+### Phase 11 Task 11-16 日別営業記録
+
+`daily_business_notes`: `id`、`business_date` date UNIQUE、`business_condition` nullable TEXT（営業の様子）、`reflection` nullable TEXT（振り返り）、`created_by` / `updated_by` nullable users FK（ユーザー削除時はNULL）、timestamps。同一日1行で、未入力はNULL。単一店舗のためstore列は設けない。文章はmanual narrative dataであり、売上・来店等のReporting factsへ混ぜない。更新履歴は既存`audit_logs`で追跡する。原本Excelの日報D/H列へ書くが、原本からの推測backfillはしない。
 
 ### 外部予約連携（Phase 9・`app/Domain/Integration`）
 
