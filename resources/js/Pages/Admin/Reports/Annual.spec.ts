@@ -61,7 +61,7 @@ describe('annual report', () => {
         await flushPromises();
         expect(fetchMock.mock.calls[0][0]).toContain('year=2027');
         expect(fetchMock.mock.calls[0][0]).not.toContain('as_of_date');
-        wrapper.getComponent({ name: 'ReportSelect' }).vm.$emit('update:modelValue', 'treatment_date');
+        wrapper.findAllComponents({ name: 'ReportSelect' })[1].vm.$emit('update:modelValue', 'treatment_date');
         await flushPromises();
         expect(fetchMock.mock.calls[1][0]).toContain('basis=treatment_date');
         fetchMock.mockRejectedValueOnce(new Error('network'));
@@ -69,5 +69,14 @@ describe('annual report', () => {
         await flushPromises();
         expect(wrapper.get('[role="alert"]').text()).toContain('読み込めませんでした');
         expect(wrapper.get('[data-testid="annual-table"]').text()).toContain('1,000円');
+    });
+
+    it('switches between fiscal year and calendar year', async () => {
+        const fetchMock = vi.spyOn(window, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: { ...report(), period: 'fiscal' } }), { status: 200 }));
+        wrapper = mount(Annual, { props: { report: report(), dataEndpoint: '/admin/reports/annual/data' } });
+        wrapper.findAllComponents({ name: 'ReportSelect' })[0].vm.$emit('update:modelValue', 'fiscal');
+        await flushPromises();
+        expect(fetchMock.mock.calls[0][0]).toContain('period=fiscal');
+        expect(wrapper.text()).toContain('年度');
     });
 });

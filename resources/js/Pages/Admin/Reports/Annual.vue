@@ -9,10 +9,11 @@ import AdminLayout from '@/layouts/AdminLayout.vue';
 defineOptions({ layout: AdminLayout });
 
 type SalesBasis = 'payment_date' | 'treatment_date';
+type Period = 'fiscal' | 'calendar';
 type NumericRow = Record<string, unknown>;
-interface MonthRow extends NumericRow { month: number; month_key: string; is_future: boolean }
+interface MonthRow extends NumericRow { year?: number; month: number; month_key: string; is_future: boolean }
 interface AnnualReport {
-    year: number; as_of_date: string; sales_basis: SalesBasis;
+    year: number; as_of_date: string; sales_basis: SalesBasis; period?: Period; period_start?: string; period_end?: string;
     months: MonthRow[]; totals: NumericRow;
 }
 interface Column { key: string; title: string; type: ReportValueFormat }
@@ -23,6 +24,13 @@ const labels = MESSAGES.reporting;
 const report = ref(props.report);
 const year = ref(props.report.year);
 const basis = ref<SalesBasis>(props.report.sales_basis);
+const period = ref<Period>(props.report.period ?? 'calendar');
+const periodItems: { title: string; value: Period }[] = [
+    { title: labels.annualFiscal, value: 'fiscal' },
+    { title: labels.annualCalendar, value: 'calendar' },
+];
+/** 事業年度は4月〜翌3月（2026年度＝2026年4月〜2027年3月）。 */
+const periodTitle = computed(() => (report.value.period === 'fiscal' ? `${report.value.year}年度` : `${report.value.year}年`));
 const asOfDate = ref(props.report.as_of_date);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -72,8 +80,8 @@ const groups: ColumnGroup[] = [
 const columns = computed(() => groups.flatMap((group) => group.columns.map((column, index) => ({ ...column, groupStart: index === 0 }))));
 
 // 基準日はサーバーの検証範囲（対象年内・未来年は前年末日も可）に合わせて選べる日を絞る。
-const asOfMin = computed(() => `${year.value - 1}-12-31`);
-const asOfMax = computed(() => `${year.value}-12-31`);
+const asOfMin = computed(() => (period.value === 'fiscal' ? `${year.value}-03-31` : `${year.value - 1}-12-31`));
+const asOfMax = computed(() => (period.value === 'fiscal' ? `${year.value + 1}-03-31` : `${year.value}-12-31`));
 const numericValue = (row: NumericRow, key: string): number | null => (typeof row[key] === 'number' ? row[key] as number : null);
 /** 値がない理由。未来月は「未実績」（目標だけは未来月でも表示する）、目標は「未設定」、それ以外は「算出不可」。 */
 const emptyLabel = (key: string, future: boolean): string => {
@@ -86,7 +94,7 @@ async function loadReport(resetAsOf = false): Promise<void> {
     loading.value = true;
     error.value = null;
     try {
-        const query = new URLSearchParams({ year: String(year.value), basis: basis.value });
+        const query = new URLSearchParams({ year: String(year.value), basis: basis.value, period: period.value });
         if (asOfDate.value) query.set('as_of_date', asOfDate.value);
         const response = await fetch(`${props.dataEndpoint}?${query}`, { headers: { Accept: 'application/json' } });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -103,6 +111,12 @@ async function loadReport(resetAsOf = false): Promise<void> {
 function changeYear(value: number): void {
     if (value === year.value) return;
     year.value = value;
+    void loadReport(true);
+}
+
+function changePeriod(value: Period): void {
+    if (value === period.value) return;
+    period.value = value;
     void loadReport(true);
 }
 
@@ -124,8 +138,11 @@ function changeAsOf(value: string): void {
     <PageHeader :title="labels.annualTitle" :subtitle="labels.annualSubtitle" />
 
     <ReportFilterBar :loading="loading" :loading-text="labels.annualLoading" :error="error">
+        <ReportFilterField size="md">
+            <ReportSelect :model-value="period" :items="periodItems" :label="labels.annualPeriod" data-testid="period-select" @update:model-value="changePeriod" />
+        </ReportFilterField>
         <ReportFilterField size="sm">
-            <YearField :model-value="year" :label="labels.annualYear" density="compact" data-testid="year-input" @update:model-value="changeYear" />
+            <YearField :model-value="year" :label="period === 'fiscal' ? labels.annualFiscalYear : labels.annualYear" density="compact" data-testid="year-input" @update:model-value="changeYear" />
         </ReportFilterField>
         <ReportFilterField size="md">
             <ReportSelect :model-value="basis" :items="basisItems" :label="labels.annualBasis" data-testid="basis-select" @update:model-value="changeBasis" />
@@ -136,7 +153,7 @@ function changeAsOf(value: string): void {
         <template #meta>{{ labels.annualAsOfMeta }}</template>
     </ReportFilterBar>
 
-    <SectionCard :title="`${report.year}年 ${labels.annualTitle}`" :subtitle="basis === 'payment_date' ? labels.annualPaymentBasis : labels.annualTreatmentBasis">
+    <SectionCard :title="`${periodTitle} ${labels.annualTitle}`" :subtitle="basis === 'payment_date' ? labels.annualPaymentBasis : labels.annualTreatmentBasis">
         <ReportTable :loading="loading" min-width="2100px" sticky-width="64px" max-height="none" data-testid="annual-table">
             <thead>
                 <tr class="group-row">
@@ -149,7 +166,7 @@ function changeAsOf(value: string): void {
             </thead>
             <tbody>
                 <tr v-for="row in report.months" :key="row.month_key" :class="{ 'row-muted': row.is_future }">
-                    <th class="is-sticky">{{ row.month }}月</th>
+                    <th class="is-sticky"><template v-if="report.period === 'fiscal' && (row.month === 1 || row.month === 4)">{{ row.year }}/</template>{{ row.month }}月</th>
                     <td v-for="column in columns" :key="column.key" class="num" :class="{ 'group-start': column.groupStart }">
                         <ReportValue
                             :value="numericValue(row, column.key)"

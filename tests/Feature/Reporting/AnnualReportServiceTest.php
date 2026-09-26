@@ -129,6 +129,33 @@ final class AnnualReportServiceTest extends TestCase
         $this->assertSame(0.5, $report['time_bands'][0]['bookable_utilization_rate']);
     }
 
+    public function test_fiscal_year_runs_april_to_march_and_each_month_matches_monthly(): void
+    {
+        $customer = Customer::factory()->create();
+        $this->visit($customer, '2026-03-31', 1, false);
+        $this->visit($customer, '2026-04-01', 2, true);
+        $this->visit($customer, '2027-03-31', 3, false);
+        $this->visit($customer, '2027-04-01', 4, false);
+
+        $fiscal = app(AnnualReportService::class)->forYear(2026, asOfDate: '2027-03-31', period: AnnualReportService::PERIOD_FISCAL);
+        $this->assertSame('fiscal', $fiscal['period']);
+        $this->assertSame(['2026-04-01', '2027-03-31'], [$fiscal['period_start'], $fiscal['period_end']]);
+        $this->assertSame(['2026-04', '2027-03'], [$fiscal['months'][0]['month_key'], $fiscal['months'][11]['month_key']]);
+        $this->assertSame(2, $fiscal['totals']['visit_count']);
+        $this->assertSame(1, $fiscal['totals']['future_reservation_count']);
+        foreach ($fiscal['months'] as $row) {
+            $monthly = app(MonthlyReportService::class)->forMonth($row['year'], $row['month'], asOfDate: $row['as_of_date']);
+            $this->assertSame($monthly->totals['visit_count'], $row['visit_count']);
+        }
+
+        $calendar = app(AnnualReportService::class)->forYear(2026, asOfDate: '2026-12-31');
+        $this->assertSame('calendar', $calendar['period']);
+        $this->assertSame(2, $calendar['totals']['visit_count']);
+
+        $this->expectException(\InvalidArgumentException::class);
+        app(AnnualReportService::class)->forYear(2026, asOfDate: '2026-03-30', period: AnnualReportService::PERIOD_FISCAL);
+    }
+
     /** @return array<string,mixed> */
     private function report(int $year, string $asOf): array
     {

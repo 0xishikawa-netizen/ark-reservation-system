@@ -38,10 +38,16 @@ final class AnnualReportController extends Controller
             'year' => ['nullable', 'integer', 'between:2000,2100'],
             'basis' => ['nullable', Rule::enum(SalesBasis::class)],
             'as_of_date' => ['nullable', 'date_format:Y-m-d'],
+            'period' => ['nullable', Rule::in([AnnualReportService::PERIOD_FISCAL, AnnualReportService::PERIOD_CALENDAR])],
         ]);
+        // 既定は事業年度（4月〜翌3月）。今日が1〜3月なら前年度（Task 11-24）。
+        $period = (string) ($input['period'] ?? AnnualReportService::PERIOD_FISCAL);
+        $today = $time->businessDate();
+        $defaultYear = $period === AnnualReportService::PERIOD_FISCAL && $today->month < AnnualReportService::FISCAL_START_MONTH
+            ? $today->year - 1 : $today->year;
         try {
-            return $reports->forYear((int) ($input['year'] ?? $time->businessDate()->year),
-                (string) ($input['basis'] ?? SalesBasis::PaymentDate->value), $input['as_of_date'] ?? null);
+            return $reports->forYear((int) ($input['year'] ?? $defaultYear),
+                (string) ($input['basis'] ?? SalesBasis::PaymentDate->value), $input['as_of_date'] ?? null, $period);
         } catch (InvalidArgumentException $e) {
             throw ValidationException::withMessages(['year' => $e->getMessage()]);
         }

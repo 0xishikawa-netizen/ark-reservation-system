@@ -20,9 +20,24 @@ final class AnnualReportService
         private readonly BusinessTime $time,
     ) {}
 
-    /** @return array<string,mixed> */
-    public function forYear(int $year, SalesBasis|string $basis = SalesBasis::PaymentDate, ?string $asOfDate = null): array
+    public const PERIOD_CALENDAR = 'calendar';
+
+    public const PERIOD_FISCAL = 'fiscal';
+
+    /** 事業年度の開始月（4月1日〜翌年3月31日。2026年度＝2026-04-01〜2027-03-31）。 */
+    public const FISCAL_START_MONTH = 4;
+
+    /**
+     * 年間集計。period=calendar は1〜12月、fiscal は year年4月〜翌年3月（Task 11-24）。
+     * どちらも各月は同じ月計・顧客・稼働のread modelで、年率は分子合計/分母合計。
+     *
+     * @return array<string,mixed>
+     */
+    public function forYear(int $year, SalesBasis|string $basis = SalesBasis::PaymentDate, ?string $asOfDate = null, string $period = self::PERIOD_CALENDAR): array
     {
+        if (! in_array($period, [self::PERIOD_CALENDAR, self::PERIOD_FISCAL], true)) {
+            throw new InvalidArgumentException('集計期間の指定が不正です。');
+        }
         if ($year < 2000 || $year > 2100) {
             throw new InvalidArgumentException('年の指定が不正です。');
         }
@@ -30,14 +45,15 @@ final class AnnualReportService
         if ($salesBasis === null) {
             throw new InvalidArgumentException('売上基準の指定が不正です。');
         }
-        $yearStart = CarbonImmutable::create($year, 1, 1, 0, 0, 0, $this->time->timezone());
-        $yearEnd = $yearStart->endOfYear()->startOfDay();
+        $startMonth = $period === self::PERIOD_FISCAL ? self::FISCAL_START_MONTH : 1;
+        $yearStart = CarbonImmutable::create($year, $startMonth, 1, 0, 0, 0, $this->time->timezone());
+        $yearEnd = $yearStart->addYear()->subDay()->startOfDay();
         $today = $this->time->businessDate();
         $asOf = $asOfDate === null ? ($today->lt($yearStart) ? $yearStart->subDay() : ($today->lt($yearEnd) ? $today : $yearEnd))
             : CarbonImmutable::createFromFormat('!Y-m-d', $asOfDate, $this->time->timezone());
         if ($asOf === false || ($asOfDate !== null && $asOf->toDateString() !== $asOfDate)
             || $asOf->lt($yearStart->subDay()) || $asOf->gt($yearEnd)) {
-            throw new InvalidArgumentException('as_of_dateは対象年内（未来年は前年末日も可）で指定してください。');
+            throw new InvalidArgumentException('as_of_dateは対象期間内（未来の期間は開始前日も可）で指定してください。');
         }
 
         $rows = [];
@@ -62,18 +78,20 @@ final class AnnualReportService
                 'bookable_minutes' => 0, 'working_known_minutes' => 0, 'working_unknown_months' => 0];
         }
 
-        for ($month = 1; $month <= 12; $month++) {
-            $monthStart = $yearStart->setMonth($month);
+        for ($offset = 0; $offset < 12; $offset++) {
+            $monthStart = $yearStart->addMonths($offset);
+            $calendarYear = $monthStart->year;
+            $month = $monthStart->month;
             $monthEnd = $monthStart->endOfMonth()->startOfDay();
             $monthAsOf = $asOf->lt($monthStart) ? $monthStart->subDay() : ($asOf->gt($monthEnd) ? $monthEnd : $asOf);
             $monthDate = $monthAsOf->toDateString();
-            $business = $this->monthly->forMonth($year, $month, $salesBasis, $monthDate);
-            $customer = $this->customers->forMonth($year, $month, $asOf->toDateString());
-            $staff = $this->staff->forMonth($year, $month, asOfDate: $monthDate);
-            $bands = $this->timeBands->forMonth($year, $month, asOfDate: $monthDate);
+            $business = $this->monthly->forMonth($calendarYear, $month, $salesBasis, $monthDate);
+            $customer = $this->customers->forMonth($calendarYear, $month, $asOf->toDateString());
+            $staff = $this->staff->forMonth($calendarYear, $month, asOfDate: $monthDate);
+            $bands = $this->timeBands->forMonth($calendarYear, $month, asOfDate: $monthDate);
             $staffValues = $this->staffTotals($staff['monthly_rows']);
             $row = [
-                'month' => $month, 'month_key' => $business->monthKey, 'as_of_date' => $monthDate,
+                'year' => $calendarYear, 'month' => $month, 'month_key' => $business->monthKey, 'as_of_date' => $monthDate,
                 'is_future' => $monthAsOf->lt($monthStart),
                 'actual_totals' => $business->actualTotals,
                 'payment_date_revenue' => $business->totals['payment_date_revenue'],
@@ -153,7 +171,8 @@ final class AnnualReportService
         }
         unset($band);
 
-        return ['year' => $year, 'as_of_date' => $asOf->toDateString(), 'sales_basis' => $salesBasis->value,
+        return ['year' => $year, 'period' => $period, 'period_start' => $yearStart->toDateString(), 'period_end' => $yearEnd->toDateString(),
+            'as_of_date' => $asOf->toDateString(), 'sales_basis' => $salesBasis->value,
             'months' => $rows, 'totals' => $total, 'as_of_totals' => $asOfTotals,
             'time_bands' => array_values($annualBands)];
     }

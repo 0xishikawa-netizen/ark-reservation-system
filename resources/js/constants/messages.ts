@@ -198,6 +198,10 @@ export const MESSAGES = {
     },
     /** 集計 */
     reporting: {
+        annualPeriod: '集計期間',
+        annualFiscal: '事業年度（4月〜翌3月）',
+        annualCalendar: '暦年（1月〜12月）',
+        annualFiscalYear: '年度',
         bandVisits: '人数',
         bandVisitsHint: '人数は、その時間帯に実担当時間が1分以上重なった完了来店の数です（店舗全体は来店単位、スタッフ別はスタッフ×来店単位で重複を除く）。',
         bandVisitsUnknown: '担当時刻が未記録の来店',
