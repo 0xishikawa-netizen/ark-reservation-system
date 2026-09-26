@@ -109,7 +109,9 @@ final class CustomerAnalyticsServiceTest extends TestCase
         $this->assertSame(1, $this->bucketCount($summary->breakdowns['course']['buckets'], 'M'));
         $this->assertSame(1, $this->bucketCount($summary->breakdowns['future_reservation']['buckets'], 'true'));
         $this->assertSame(1, $this->bucketCount($summary->breakdowns['future_reservation']['buckets'], null));
-        $this->assertSame('not_captured', $summary->breakdowns['prefecture']['status']);
+        // Task 11-21: 初診カルテsnapshotが無い旧Visitは未取得としてunknownに残る（0や「その他」にしない）。
+        $this->assertSame('available', $summary->breakdowns['prefecture']['status']);
+        $this->assertSame('first_visit_karte_snapshot', $summary->breakdowns['prefecture']['basis']);
         $this->assertSame(2, $this->bucketCount($summary->breakdowns['prefecture']['buckets'], null));
     }
 

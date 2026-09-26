@@ -185,6 +185,25 @@ final class VisitCompletionService
 
         [$staffRequested, $requestedStaffId, $recordedAt] = $this->nominationSnapshot($visit, $reservation, $completedAt);
 
+        // 初診時のカルテ分析項目をsnapshotする（Task 11-21）。後日の顧客情報変更で過去の新規統計を変えない。
+        $karte = [
+            'first_visit_karte_snapshot_at' => null, 'first_visit_acquisition_channel_id' => null,
+            'first_visit_referred' => null, 'first_visit_prefecture' => null, 'first_visit_city' => null,
+        ];
+        if ($sequence === 1) {
+            $karte = [
+                'first_visit_karte_snapshot_at' => $completedAt,
+                'first_visit_acquisition_channel_id' => $customer->acquisition_channel_id,
+                'first_visit_referred' => $this->referredSnapshot($customer),
+                'first_visit_prefecture' => $customer->prefecture,
+                'first_visit_city' => $customer->city,
+            ];
+            $purposeIds = DB::table('customer_visit_purpose')->where('customer_id', $customer->getKey())->pluck('visit_purpose_id');
+            DB::table('visit_first_purposes')->insertOrIgnore($purposeIds->map(fn ($id): array => [
+                'visit_id' => $visit->id, 'visit_purpose_id' => (int) $id,
+            ])->all());
+        }
+
         $visit->forceFill([
             'status' => VisitStatus::Completed,
             'completed_at' => $completedAt,
@@ -196,6 +215,7 @@ final class VisitCompletionService
             'staff_requested_at_checkout' => $staffRequested,
             'requested_staff_id_at_checkout' => $requestedStaffId,
             'nominations_recorded_at' => $recordedAt,
+            ...$karte,
         ])->save();
     }
 
@@ -229,6 +249,22 @@ final class VisitCompletionService
             $reservation->is_staff_requested ? $reservation->staff_id : null,
             $completedAt,
         ];
+    }
+
+    /**
+     * 紹介の有無。紹介者の記録または来店動機「紹介」ならtrue、来店動機が別の値ならfalse、
+     * どちらも未入力ならNULL（未入力を「紹介なし」と混同しない）。
+     */
+    private function referredSnapshot(Customer $customer): ?bool
+    {
+        if ($customer->referrer_customer_id !== null || trim((string) $customer->referrer_name) !== '') {
+            return true;
+        }
+        if ($customer->acquisition_channel_id === null) {
+            return null;
+        }
+
+        return DB::table('acquisition_channels')->where('id', $customer->acquisition_channel_id)->value('code') === 'referral';
     }
 
     private function completedResult(Reservation $reservation): VisitCompletionResult

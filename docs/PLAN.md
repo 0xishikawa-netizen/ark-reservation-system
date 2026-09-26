@@ -6,8 +6,8 @@
 ## Current execution status
 
 - **Current Phase**: Phase 11 — Reporting / Business Automation（実装・原本書式互換・ローカル実操作確認は完了、旧資料との実数値照合のみ外部資料待ち）
-- **Current Task**: Task 11-21（顧客カルテ項目・顧客統計）
-- **Task status**: Task 11-11 DONE。Task 11-13 BLOCKED（旧Excel / Google Sheetsの実数値照合のみ）。Task 11-14 DONE。Task 11-15 DONE。Task 11-16 DONE。Task 11-17 DONE（2026-09-26）。Task 11-18 DONE（2026-09-26、Reports・ブッキングボード・設定メニューのUI/UX統一。`docs/REPORTS_UI.md`）。Task 11-19 DONE（2026-09-27、来店・会計入力）。Task 11-20 DONE（支払配分・税抜・物販）。2026-09-27にユーザーが11-19〜11-26と11-13再開を一括承認（1 Taskずつ順に実施）。
+- **Current Task**: Task 11-22（スタッフ別売上・指名売上）
+- **Task status**: Task 11-11 DONE。Task 11-13 BLOCKED（旧Excel / Google Sheetsの実数値照合のみ）。Task 11-14 DONE。Task 11-15 DONE。Task 11-16 DONE。Task 11-17 DONE（2026-09-26）。Task 11-18 DONE（2026-09-26、Reports・ブッキングボード・設定メニューのUI/UX統一。`docs/REPORTS_UI.md`）。Task 11-19 DONE（2026-09-27、来店・会計入力）。Task 11-20 DONE（支払配分・税抜・物販）。Task 11-21 DONE（顧客カルテ・顧客統計）。2026-09-27にユーザーが11-19〜11-26と11-13再開を一括承認（1 Taskずつ順に実施）。
 - **Task specification**: `docs/tasks/phase-11.md`
 - Phase 11 全体の一括実装は許可しない。現在承認済みの実装Taskはない。次回以降は実物帳票サンプルとの比較結果を踏まえて新Taskを承認してから着手する（Cloud引継ぎ: `docs/handoff/2026-09-26-cloud-handoff.md`）。Task 11-13の実原本との実数値照合は資料受領後に再承認・再開する。ローカル実操作・自動検証の証跡は`docs/PHASE11_OPERATIONAL_VERIFICATION.md`および`docs/EXCEL_EXPORT.md`。
 

@@ -25,12 +25,16 @@ final class CustomerAnalyticsQuery
             ->selectRaw('reached.customer_id, MAX(reached.visit_sequence) AS max_sequence');
 
         return $cohort->leftJoinSub($maxSequences, 'reach', 'reach.customer_id', '=', 'first.customer_id')
+            ->leftJoin('acquisition_channels as channel', 'channel.id', '=', 'first.first_visit_acquisition_channel_id')
             ->orderBy('first.id')
             ->get([
                 'first.id', 'first.customer_id', 'first.business_date',
                 'first.first_visit_gender_snapshot', 'first.first_visit_age_years_snapshot',
                 'first.primary_staff_id', 'first.primary_staff_name_snapshot',
                 'first.future_reservation_exists_at_checkout', 'reach.max_sequence',
+                'first.first_visit_karte_snapshot_at', 'first.first_visit_acquisition_channel_id',
+                'channel.name as acquisition_channel_name', 'channel.sort_order as acquisition_channel_sort',
+                'first.first_visit_referred', 'first.first_visit_prefecture', 'first.first_visit_city',
             ]);
     }
 
@@ -45,6 +49,20 @@ final class CustomerAnalyticsQuery
             ->whereIn('visit_id', $visitIds)
             ->where('status', VisitTreatmentStatus::Completed->value)
             ->get(['visit_id', 'analysis_category_code_snapshot']);
+    }
+
+    /** 初診時snapshotの来店目的（複数選択）。 @param list<int> $visitIds @return Collection<int, object> */
+    public function firstVisitPurposes(array $visitIds): Collection
+    {
+        if ($visitIds === []) {
+            return collect();
+        }
+
+        return DB::table('visit_first_purposes as vfp')
+            ->join('visit_purposes as vp', 'vp.id', '=', 'vfp.visit_purpose_id')
+            ->whereIn('vfp.visit_id', $visitIds)
+            ->orderBy('vp.sort_order')->orderBy('vp.id')
+            ->get(['vfp.visit_id', 'vp.id as purpose_id', 'vp.name as purpose_name']);
     }
 
     public function returningCount(string $start, string $endExclusive, string $previousStart, string $oldEnd): int

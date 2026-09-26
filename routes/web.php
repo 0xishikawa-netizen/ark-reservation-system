@@ -378,6 +378,10 @@ Route::middleware([
         ->name('customers.edit');
     Route::put('customers/{customer}', [CustomerController::class, 'update'])
         ->name('customers.update');
+    // 顧客カルテの分析項目（Task 11-21）。
+    Route::put('customers/{customer}/karte', [CustomerController::class, 'updateKarte'])
+        ->middleware('can:customers.manage')
+        ->name('customers.karte.update');
     // 台帳の顧客・予約詳細パネルからメモだけを素早く追加・編集する（§8）。
     Route::patch('customers/{customer}/note', [CustomerController::class, 'updateNote'])
         ->name('customers.update-note');
@@ -452,6 +456,10 @@ Route::middleware([
             ->name('settings.business-masters.tax-rates.store');
         Route::put('settings/business-masters/tax-rates/{taxRate}', [BusinessMasterSettingsController::class, 'updateTaxRate'])
             ->name('settings.business-masters.tax-rates.update');
+        Route::post('settings/business-masters/karte/{kind}', [BusinessMasterSettingsController::class, 'storeKarteMaster'])
+            ->whereIn('kind', ['acquisition-channels', 'visit-purposes'])->name('settings.business-masters.karte.store');
+        Route::put('settings/business-masters/karte/{kind}/{id}', [BusinessMasterSettingsController::class, 'updateKarteMaster'])
+            ->whereIn('kind', ['acquisition-channels', 'visit-purposes'])->whereNumber('id')->name('settings.business-masters.karte.update');
         Route::post('settings/business-masters/payment-methods', [BusinessMasterSettingsController::class, 'storePaymentMethod'])
             ->name('settings.business-masters.payment-methods.store');
         Route::put('settings/business-masters/payment-methods/{paymentMethod}', [BusinessMasterSettingsController::class, 'updatePaymentMethod'])

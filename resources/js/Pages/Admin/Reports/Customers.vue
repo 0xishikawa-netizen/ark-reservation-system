@@ -2,7 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { DateField, EmptyValue, MonthField, PageHeader } from '@/components/ark';
-import { ReportFilterBar, ReportFilterField, ReportKpi, ReportValue } from '@/components/reports';
+import { ReportFilterBar, ReportFilterField, ReportKpi, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -17,7 +17,9 @@ interface CustomerReport {
     new_customers: number; returning_customers: number; churn_customers: number | null;
     reach: Record<'2' | '6' | '10', Reach>;
     breakdowns: Record<Dimension, Breakdown>;
+    cross_tabs?: { motivation: CrossRow[]; first_staff: CrossRow[] };
 }
+interface CrossRow { value: string | null; label: string | null; new_customers: number; reached_2: number; reached_2_rate: number | null }
 interface BreakdownSection { key: string; title: string; icon: string; dimensions: Dimension[] }
 
 const props = defineProps<{ report: CustomerReport; dataEndpoint: string; monthlyReportUrl: string }>();
@@ -38,7 +40,13 @@ const sections: BreakdownSection[] = [
     { key: 'acquisition', title: labels.customerSectionAcquisition, icon: 'mdi-bullhorn-outline', dimensions: ['motivation', 'referrer'] },
     { key: 'region', title: labels.customerSectionRegion, icon: 'mdi-map-marker-outline', dimensions: ['prefecture', 'municipality'] },
 ];
-const booleanDimensions: Dimension[] = ['future_reservation', 'reached_2', 'reached_6', 'reached_10'];
+const booleanDimensions: Dimension[] = ['future_reservation', 'reached_2', 'reached_6', 'reached_10', 'referrer'];
+/** 複数選択の属性は人数の合計が新規人数を超えるため合計を出さない。 */
+const multiSelect = (dimension: Dimension): boolean => report.value.breakdowns[dimension].basis === 'first_visit_karte_snapshot_multi_select';
+const crossTables = [
+    { key: 'motivation' as const, title: labels.customerCrossMotivation },
+    { key: 'first_staff' as const, title: labels.customerCrossFirstStaff },
+];
 
 const bucketLabel = (dimension: Dimension, bucket: Bucket): string => {
     if (bucket.value === null) return labels.customerUnknown;
@@ -133,7 +141,8 @@ function changeAsOf(value: string): void {
                 <article v-for="dimension in section.dimensions" :key="dimension" class="breakdown" :data-testid="`breakdown-${dimension}`">
                     <div class="breakdown__head">
                         <h4>{{ labels.customerDimension[dimension] }}</h4>
-                        <span v-if="report.breakdowns[dimension].status === 'available'" class="breakdown__total">{{ bucketTotal(dimension) }}人</span>
+                        <span v-if="report.breakdowns[dimension].status === 'available' && multiSelect(dimension)" class="breakdown__total">{{ labels.customerMultiSelect }}</span>
+                        <span v-else-if="report.breakdowns[dimension].status === 'available'" class="breakdown__total">{{ bucketTotal(dimension) }}人</span>
                     </div>
                     <p v-if="report.breakdowns[dimension].status === 'not_captured'" class="breakdown__empty">
                         <EmptyValue :label="labels.customerNotCaptured" />
@@ -150,9 +159,30 @@ function changeAsOf(value: string): void {
             </div>
         </section>
     </div>
+
+    <h2 class="breakdown-heading">{{ labels.customerCrossHeading }}</h2>
+    <div class="cross-layout">
+        <section v-for="table in crossTables" :key="table.key" class="breakdown-section" :data-testid="`cross-${table.key}`">
+            <header class="breakdown-section__head"><h3>{{ table.title }}</h3></header>
+            <ReportTable max-height="none" min-width="420px">
+                <thead><tr><th>{{ table.title }}</th><th class="num">{{ labels.customerCrossNew }}</th><th class="num">{{ labels.customerCrossReached2 }}</th><th class="num">{{ labels.customerCrossRate }}</th></tr></thead>
+                <tbody>
+                    <tr v-for="row in report.cross_tabs?.[table.key] ?? []" :key="row.value ?? 'unknown'" :class="{ 'row-muted': row.value === null }">
+                        <td>{{ row.value === null ? labels.customerUnknown : (row.label ?? row.value) }}</td>
+                        <td class="num"><ReportValue :value="row.new_customers" /></td>
+                        <td class="num"><ReportValue :value="row.reached_2" /></td>
+                        <td class="num"><ReportValue :value="row.reached_2_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                    </tr>
+                    <tr v-if="(report.cross_tabs?.[table.key] ?? []).length === 0"><td colspan="4" class="empty-cell">{{ labels.customerNoData }}</td></tr>
+                </tbody>
+            </ReportTable>
+        </section>
+    </div>
 </template>
 
 <style scoped>
+.cross-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 959px) { .cross-layout { grid-template-columns: 1fr; } }
 .customer-kpis {
     grid-template-columns: repeat(6, minmax(0, 1fr));
     margin-bottom: var(--ark-space-2);

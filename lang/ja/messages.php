@@ -180,6 +180,7 @@ return [
         'deactivated' => '商品を無効にしました。',
     ],
     'business' => [
+        'karte_master_saved' => 'カルテ選択肢を保存しました。',
         'analysis_category_saved' => '分析カテゴリを保存しました。',
         'tax_category_saved' => '税区分を保存しました。',
         'tax_rate_saved' => '税率期間を保存しました。',
@@ -210,6 +211,8 @@ return [
 
     // 顧客
     'customer' => [
+        'karte_updated' => 'カルテ項目を更新しました。',
+        'referrer_self' => '本人を紹介者に指定できません。',
         'note_updated' => 'メモを更新しました。',
         'profile_updated' => '顧客プロフィールを更新しました。',
         'own_profile_updated' => 'プロフィールを更新しました。',

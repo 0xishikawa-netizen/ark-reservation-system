@@ -9,6 +9,7 @@ use App\Domain\Business\SalesTargetService;
 use App\Domain\Business\StoreCalendarService;
 use App\Domain\Business\TaxRateService;
 use App\Http\Controllers\Controller;
+use App\Models\AcquisitionChannel;
 use App\Models\EmploymentType;
 use App\Models\MonthlySalesTarget;
 use App\Models\PaymentMethod;
@@ -16,8 +17,10 @@ use App\Models\ServiceAnalysisCategory;
 use App\Models\StoreCalendarDay;
 use App\Models\TaxCategory;
 use App\Models\TaxRate;
+use App\Models\VisitPurpose;
 use App\Support\Business\BusinessTime;
 use App\Support\Settings\Settings;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -57,6 +60,8 @@ final class BusinessMasterSettingsController extends Controller
                         'target_amount' => (int) $target->target_amount,
                     ]),
             ],
+            'acquisitionChannels' => AcquisitionChannel::query()->orderBy('sort_order')->orderBy('id')->get(),
+            'visitPurposes' => VisitPurpose::query()->orderBy('sort_order')->orderBy('id')->get(),
             'employmentTypes' => EmploymentType::query()
                 ->orderBy('sort_order')->orderBy('id')->get(),
             'business' => [
@@ -86,6 +91,33 @@ final class BusinessMasterSettingsController extends Controller
         );
 
         return back()->with('success', __('messages.business.analysis_category_saved'));
+    }
+
+    public function storeKarteMaster(Request $request, string $kind, BusinessMasterService $service): RedirectResponse
+    {
+        [$model, $table] = $this->karteMaster($kind);
+        $service->createKarteMaster($model, $this->masterData($request, $table), $request->user());
+
+        return back()->with('success', __('messages.business.karte_master_saved'));
+    }
+
+    public function updateKarteMaster(Request $request, string $kind, int $id, BusinessMasterService $service): RedirectResponse
+    {
+        [$model, $table] = $this->karteMaster($kind);
+        $record = $model::query()->findOrFail($id);
+        $service->updateKarteMaster($record, $this->masterData($request, $table, $id), $request->user());
+
+        return back()->with('success', __('messages.business.karte_master_saved'));
+    }
+
+    /** @return array{0: class-string<Model>, 1: string} */
+    private function karteMaster(string $kind): array
+    {
+        return match ($kind) {
+            'acquisition-channels' => [AcquisitionChannel::class, 'acquisition_channels'],
+            'visit-purposes' => [VisitPurpose::class, 'visit_purposes'],
+            default => abort(404),
+        };
     }
 
     public function storeTaxCategory(Request $request, BusinessMasterService $service): RedirectResponse

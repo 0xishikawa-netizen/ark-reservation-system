@@ -30,4 +30,25 @@
 
 管理画面`/admin/reports/customers`、JSON API`/admin/reports/customers/data?year=...&month=...&as_of_date=...`は`reports.view`を要求する。月計画面と相互導線を持つ。現行結果はVisitが蓄積された範囲のみであり、過去Excel/Google Sheets原本との照合や取込はTask 11-12/13で行う。
 
-来店目的・動機・紹介者・地域の入力元および初診時snapshotの設計は、原本確認・承認後に別Taskで確定する。Google Sheets実書込、SALON BOARD、外部予約サイト同期は本Taskの対象外。
+来店目的・動機・紹介者・地域はTask 11-21で入力元と初診時snapshotを実装した（下記）。Google Sheets実書込、SALON BOARD、外部予約サイト同期は本Taskの対象外。
+
+## Task 11-21 顧客カルテ項目
+
+**入力元**: 管理画面の顧客編集「カルテ（分析項目）」（`PUT /admin/customers/{customer}/karte`、`customers.manage`、監査は変更項目名のみで値を残さない）。
+旧運用では「新規統計」ブックの「顧客データ一覧」に手入力し、日計表がIMPORTRANGEで参照していた。
+
+| 項目 | 保存先 | 選択肢の正本 |
+|---|---|---|
+| 来店動機 | `customers.acquisition_channel_id`（＋その他記入 `acquisition_note`） | `acquisition_channels`（業務マスタ「カルテ選択肢」で追加・無効化・並び替え）。`reservations.inflow_channel`（Web予約の流入元）とは別概念 |
+| 来店目的 | `customer_visit_purpose`（複数選択）＋補足 `visit_purpose_note` | `visit_purposes` |
+| 紹介者 | `customers.referrer_customer_id`（任意の既存顧客）または `referrer_name`（顧客以外の記入） | — |
+| 都道府県・市区町村 | `customers.prefecture`（47都道府県から選択）/ `city`（数字を含む番地らしい値は拒否） | 番地・建物名は分析データとして持たない |
+
+**初診snapshot**: 初診（`visit_sequence=1`）完了時に `visits.first_visit_karte_snapshot_at`、`first_visit_acquisition_channel_id`、`first_visit_referred`、`first_visit_prefecture`、`first_visit_city`、`visit_first_purposes` を保存する。後日の顧客情報変更で過去の新規統計は変わらない。snapshot前の旧Visitと未入力はunknown（0や「その他」にしない）。紹介の有無は「紹介者の記録あり、または来店動機=紹介」ならtrue、来店動機が別の値ならfalse、どちらも未入力ならNULL。
+
+**統計**: 顧客統計の来店動機・来店目的（複数選択のため合計は新規人数を超え得る）・紹介・都道府県・市区町村を `available` とした。加えて `cross_tabs.motivation`（来店動機別の新規数・2回目到達数・到達率）と `cross_tabs.first_staff`（初回担当別）を返す。到達の定義・観察期間は既存の2/6/10回到達と同じ（as_of_dateまでの完了Visit）。紹介者の氏名は統計に出さない。
+
+**選択肢の根拠（旧資料のdistinct値）**:
+
+- 来店動機: 顧客データ一覧（ホトぺ315 / EPARK170 / 紹介114 / HP92 / チラシ90 / その他47 / OZmall5）、日計表の予約媒体（EPARK / HP / チラシ / 紹介 / ホトぺ / 都立 / 看板 / OZmall / その他）、新規統計（Hotpepper、旧シートは「ホットペッパー」）。「ホトぺ」「Hotpepper」「ホットペッパー」は同一媒体の表記違いとして「ホットペッパー」に統一した。「都立」の意味は資料から判断できないため表記のまま残した。
+- 来店目的: 完全一致で繰り返し使われた「痛みを取りたい」（40）「リラクゼーション」（21）「根本的に治したい」（15）「運動不足解消」（7）と「その他」だけをマスタにした。次の値は同義か判断できないため統合せず、**手動確認対象**とする: 痛み取りたい（6）、痛み改善（5）、症状改善（3）、ダイエット（3）、疲れ（3）、姿勢改善（2）、筋肥大（2）、痛みとりたい（2）、複数目的を読点で連結した値（例「痛みを取りたい、根本的に治したい」）、その他の自由記述（1件ずつ）。必要なら業務マスタで選択肢を追加し、過去取込時（Task 11-26）に対応表を承認して割り当てる。

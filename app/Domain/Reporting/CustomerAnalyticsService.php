@@ -32,6 +32,8 @@ final class CustomerAnalyticsService
         $cohort = $this->query->newCohort($start->toDateString(), $next->toDateString(), $asOfExclusive);
         $visitIds = $cohort->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
         $categories = $this->query->firstVisitCategories($visitIds)->groupBy('visit_id');
+        $purposes = $this->query->firstVisitPurposes($visitIds)->groupBy('visit_id');
+        $cross = ['motivation' => [], 'first_staff' => []];
         $count = $cohort->count();
         $reached = [2 => 0, 6 => 0, 10 => 0];
         $dimensions = ['course', 'visit_purpose', 'gender', 'age_at_first_visit', 'age_decade',
@@ -58,9 +60,24 @@ final class CustomerAnalyticsService
             $reservation = $first->future_reservation_exists_at_checkout;
             $this->addBucket($buckets, 'future_reservation', $reservation === null ? null : ((int) $reservation === 1 ? 'true' : 'false'));
             $this->addBucket($buckets, 'course', $this->courseFor($categories->get($first->id)));
-            foreach (['visit_purpose', 'motivation', 'referrer', 'prefecture', 'municipality'] as $unsupported) {
-                $this->addBucket($buckets, $unsupported, null);
+            // 来店動機・目的・紹介・地域は初診時カルテsnapshot（Task 11-21）。snapshot前の旧Visitと未入力はunknown。
+            $channelId = $first->first_visit_acquisition_channel_id;
+            $this->addBucket($buckets, 'motivation', $channelId === null ? null : (string) $channelId, $first->acquisition_channel_name);
+            $referred = $first->first_visit_referred;
+            $this->addBucket($buckets, 'referrer', $referred === null ? null : ((int) $referred === 1 ? 'true' : 'false'));
+            $this->addBucket($buckets, 'prefecture', $first->first_visit_prefecture);
+            $city = $first->first_visit_city;
+            $this->addBucket($buckets, 'municipality', $city === null ? null : trim(($first->first_visit_prefecture ?? '').' '.$city));
+            $visitPurposes = $purposes->get($first->id);
+            if ($visitPurposes === null || $visitPurposes->isEmpty()) {
+                $this->addBucket($buckets, 'visit_purpose', null);
+            } else {
+                foreach ($visitPurposes as $purpose) {
+                    $this->addBucket($buckets, 'visit_purpose', (string) $purpose->purpose_id, $purpose->purpose_name);
+                }
             }
+            $this->addCross($cross['motivation'], $channelId === null ? null : (string) $channelId, $first->acquisition_channel_name, $maxSequence);
+            $this->addCross($cross['first_staff'], $staffKey, $first->primary_staff_name_snapshot, $maxSequence);
         }
         if (! ($reached[10] <= $reached[6] && $reached[6] <= $reached[2] && $reached[2] <= $count)) {
             throw new LogicException('到達人数の順序が不正です。');
@@ -68,10 +85,11 @@ final class CustomerAnalyticsService
 
         $breakdowns = [];
         foreach ($dimensions as $dimension) {
-            $unsupported = in_array($dimension, ['visit_purpose', 'motivation', 'referrer', 'prefecture', 'municipality'], true);
             $breakdowns[$dimension] = [
-                'status' => $unsupported ? 'not_captured' : 'available',
+                'status' => 'available',
                 'basis' => match ($dimension) {
+                    'motivation', 'referrer', 'prefecture', 'municipality' => 'first_visit_karte_snapshot',
+                    'visit_purpose' => 'first_visit_karte_snapshot_multi_select',
                     'course' => 'first_visit_completed_treatment_analysis_category',
                     'gender', 'age_at_first_visit', 'age_decade' => 'first_visit_snapshot',
                     'first_staff', 'future_reservation' => 'first_visit_snapshot',
@@ -106,6 +124,10 @@ final class CustomerAnalyticsService
             ),
             reach: $reach,
             breakdowns: $breakdowns,
+            crossTabs: array_map(static fn (array $rows): array => array_values(array_map(static fn (array $row): array => [
+                ...$row,
+                'reached_2_rate' => $row['new_customers'] === 0 ? null : (float) ($row['reached_2'] / $row['new_customers']),
+            ], $rows)), $cross),
         );
     }
 
@@ -130,6 +152,17 @@ final class CustomerAnalyticsService
         $key = $value === null ? '\0' : 'v:'.$value;
         $buckets[$dimension][$key] ??= ['value' => $value, 'label' => $label ?? $value, 'count' => 0];
         $buckets[$dimension][$key]['count']++;
+    }
+
+    /** @param array<string, array{value:string|null,label:string|null,new_customers:int,reached_2:int}> $rows */
+    private function addCross(array &$rows, ?string $value, ?string $label, int $maxSequence): void
+    {
+        $key = $value === null ? '\0' : 'v:'.$value;
+        $rows[$key] ??= ['value' => $value, 'label' => $label ?? $value, 'new_customers' => 0, 'reached_2' => 0];
+        $rows[$key]['new_customers']++;
+        if ($maxSequence >= 2) {
+            $rows[$key]['reached_2']++;
+        }
     }
 
     private function courseFor(mixed $treatments): ?string

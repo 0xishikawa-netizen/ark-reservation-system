@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
@@ -36,6 +37,13 @@ class Customer extends Model
         'birthday',
         'gender',
         'note',
+        'acquisition_channel_id',
+        'acquisition_note',
+        'visit_purpose_note',
+        'referrer_customer_id',
+        'referrer_name',
+        'prefecture',
+        'city',
         'stripe_customer_id',
         'created_via',
     ];
@@ -88,6 +96,21 @@ class Customer extends Model
     }
 
     /** @return HasMany<Payment, $this> */
+    public function acquisitionChannel(): BelongsTo
+    {
+        return $this->belongsTo(AcquisitionChannel::class);
+    }
+
+    public function visitPurposes(): BelongsToMany
+    {
+        return $this->belongsToMany(VisitPurpose::class, 'customer_visit_purpose', 'customer_id', 'visit_purpose_id', 'user_id');
+    }
+
+    public function referrer(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'referrer_customer_id', 'user_id');
+    }
+
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class, 'customer_id', 'user_id');

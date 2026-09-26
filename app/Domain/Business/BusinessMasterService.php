@@ -29,6 +29,23 @@ final class BusinessMasterService
         return $this->update($category, $data, 'service_analysis_category', $actor);
     }
 
+    /**
+     * 顧客カルテの選択肢マスタ（来店動機・来店目的。Task 11-21）。
+     *
+     * @param  class-string<Model>  $modelClass
+     * @param  array<string, mixed>  $data
+     */
+    public function createKarteMaster(string $modelClass, array $data, ?Authenticatable $actor): Model
+    {
+        return $this->create($modelClass, $data, 'karte_master', $actor);
+    }
+
+    /** @param array<string, mixed> $data */
+    public function updateKarteMaster(Model $model, array $data, ?Authenticatable $actor): Model
+    {
+        return $this->update($model, $data, 'karte_master', $actor);
+    }
+
     /** @param array<string, mixed> $data */
     public function createTaxCategory(array $data, ?Authenticatable $actor): TaxCategory
     {

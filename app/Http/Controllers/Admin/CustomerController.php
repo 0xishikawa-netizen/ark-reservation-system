@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Customer\UpdateCustomerKarte;
 use App\Actions\Customer\UpdateCustomerProfile;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\UpdateCustomerKarteRequest;
 use App\Http\Requests\Admin\UpdateCustomerNoteRequest;
 use App\Http\Requests\Admin\UpdateCustomerProfileRequest;
+use App\Models\AcquisitionChannel;
 use App\Models\Customer;
+use App\Models\VisitPurpose;
 use App\Queries\CustomerListQuery;
 use App\Queries\CustomerOverviewQuery;
 use App\Queries\CustomerProfileQuery;
 use App\Queries\ReservationPanelQuery;
+use App\Support\Geography\Prefectures;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -132,9 +137,37 @@ class CustomerController extends Controller
     {
         $this->authorize('update', $customer);
 
+        $customer->loadMissing(['visitPurposes:id', 'referrer.user:id,name']);
+
         return Inertia::render('Admin/Customers/Edit', [
             'customer' => $this->profileData($query->get($customer)),
+            'karte' => [
+                'acquisition_channel_id' => $customer->acquisition_channel_id,
+                'acquisition_note' => $customer->acquisition_note,
+                'visit_purpose_ids' => $customer->visitPurposes->pluck('id')->values(),
+                'visit_purpose_note' => $customer->visit_purpose_note,
+                'referrer_customer_id' => $customer->referrer_customer_id,
+                'referrer_customer_name' => $customer->referrer?->user?->name,
+                'referrer_name' => $customer->referrer_name,
+                'prefecture' => $customer->prefecture,
+                'city' => $customer->city,
+            ],
+            'acquisitionChannels' => AcquisitionChannel::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->get(['id', 'name']),
+            'visitPurposes' => VisitPurpose::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->get(['id', 'name']),
+            'prefectures' => Prefectures::ALL,
+            'canManageKarte' => request()->user()?->can('customers.manage') ?? false,
+            'customerSearchEndpoint' => route('admin.reservations.customer-search'),
         ]);
+    }
+
+    public function updateKarte(
+        UpdateCustomerKarteRequest $request,
+        Customer $customer,
+        UpdateCustomerKarte $updateCustomerKarte,
+    ): RedirectResponse {
+        $updateCustomerKarte->execute($customer, $request->validated(), $request->user());
+
+        return back()->with('success', __('messages.customer.karte_updated'));
     }
 
     public function update(

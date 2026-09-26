@@ -21,6 +21,8 @@ final readonly class MonthlyCustomerSummary implements JsonSerializable
         public ?int $churnCustomers,
         public array $reach,
         public array $breakdowns,
+        /** 来店動機別・初回担当別の新規数と2回目到達（Task 11-21）。 */
+        public array $crossTabs = [],
     ) {}
 
     /** @return array<string, mixed> */
@@ -36,6 +38,7 @@ final readonly class MonthlyCustomerSummary implements JsonSerializable
             'churn_customers' => $this->churnCustomers,
             'reach' => $this->reach,
             'breakdowns' => $this->breakdowns,
+            'cross_tabs' => $this->crossTabs,
         ];
     }
 }
