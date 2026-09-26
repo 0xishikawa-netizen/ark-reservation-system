@@ -113,6 +113,42 @@ final class TimeBandUtilizationServiceTest extends TestCase
             array_sum(array_column($report['overall_rows'], 'bookable_minutes')));
     }
 
+    public function test_band_visit_counts_store_daily_rows_and_weekday_weekend_use_sums(): void
+    {
+        $a = Staff::factory()->create(['display_name' => 'A']);
+        $b = Staff::factory()->create(['display_name' => 'B']);
+        $this->shift($a, '2026-09-10', '10:00', '15:00');
+        $this->shift($b, '2026-09-10', '10:00', '15:00');
+        $this->shift($a, '2026-09-12', '10:00', '12:00');
+        // 1来店を 11:30〜12:00 A、12:00〜12:30 B で担当（JST）。
+        $visit = Visit::factory()->create(['business_date' => '2026-09-10', 'status' => 'completed', 'primary_staff_id' => $a->user_id]);
+        $treatment = VisitTreatment::factory()->create(['visit_id' => $visit->id, 'status' => 'completed', 'actual_minutes' => 60]);
+        VisitTreatmentStaff::factory()->create(['visit_treatment_id' => $treatment->id, 'staff_id' => $a->user_id,
+            'actual_started_at' => '2026-09-10 02:30:00', 'actual_ended_at' => '2026-09-10 03:00:00', 'actual_minutes' => 30]);
+        VisitTreatmentStaff::factory()->create(['visit_treatment_id' => $treatment->id, 'staff_id' => $b->user_id,
+            'actual_started_at' => '2026-09-10 03:00:00', 'actual_ended_at' => '2026-09-10 03:30:00', 'actual_minutes' => 30]);
+        $this->assignment($a, '2026-09-12', '2026-09-12 01:00:00', '2026-09-12 02:00:00', 60);
+
+        $report = $this->report();
+        $store = collect($report['store_daily_rows'])->keyBy(fn (array $row): string => $row['business_date'].'|'.$row['band_code']);
+        $this->assertSame(1, $store['2026-09-10|10_12']['visit_count']);
+        $this->assertSame(1, $store['2026-09-10|12_15']['visit_count']);
+        $this->assertSame(0, $store['2026-09-10|15_18']['visit_count']);
+        $this->assertSame(60, $store['2026-09-10|10_12']['occupied_minutes'] + $store['2026-09-10|12_15']['occupied_minutes']);
+        $this->assertSame(240, $store['2026-09-10|10_12']['bookable_minutes']);
+        $this->assertEquals(30 / 240, $store['2026-09-10|10_12']['bookable_utilization_rate']);
+        $this->assertSame(1, $this->row($report, $a, '2026-09-10', '10_12')['visit_count']);
+        $this->assertSame(0, $this->row($report, $a, '2026-09-10', '12_15')['visit_count']);
+        $this->assertSame(1, $this->row($report, $b, '2026-09-10', '12_15')['visit_count']);
+
+        $types = collect($report['day_type_rows'])->keyBy(fn (array $row): string => $row['day_type'].'|'.$row['band_code']);
+        // 平日10〜12: 稼働30分 / 予約可能240分（A・B）。土日10〜12: 60分 / 120分。日率の平均ではなく分子・分母の合計。
+        $this->assertEquals(30 / 240, $types['weekday|10_12']['bookable_utilization_rate']);
+        $this->assertEquals(60 / 120, $types['weekend|10_12']['bookable_utilization_rate']);
+        $this->assertSame(1, $types['weekend|10_12']['visit_count']);
+        $this->assertSame(2, collect($report['overall_rows'])->firstWhere('band_code', '10_12')['visit_count']);
+    }
+
     /** @return array<string,mixed> */
     private function report(): array
     {

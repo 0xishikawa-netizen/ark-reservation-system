@@ -198,6 +198,17 @@ export const MESSAGES = {
     },
     /** 集計 */
     reporting: {
+        bandVisits: '人数',
+        bandVisitsHint: '人数は、その時間帯に実担当時間が1分以上重なった完了来店の数です（店舗全体は来店単位、スタッフ別はスタッフ×来店単位で重複を除く）。',
+        bandVisitsUnknown: '担当時刻が未記録の来店',
+        bandOccupiedHours: '稼働（時間）',
+        bandDayType: '平日 / 土日',
+        bandDayTypeHint: '平日＝月〜金、土日＝土・日（祝日も曜日どおり）。率は日率の平均ではなく、分子合計 ÷ 分母合計です。',
+        bandDayTypeColumn: '区分',
+        bandWeekday: '平日',
+        bandWeekend: '土日',
+        bandStoreDaily: '店舗全体（日別）',
+        bandStoreDailyHint: '全スタッフ合計の日別×時間帯。率は分子合計 ÷ 分母合計です。',
         staffSalesTitle: 'スタッフ売上',
         staffSalesSubtitle: '確定会計のスタッフ売上配分（税込）から、スタッフ別の売上・指名売上を集計します。',
         staffSalesMonthly: 'スタッフ別（月合計）',

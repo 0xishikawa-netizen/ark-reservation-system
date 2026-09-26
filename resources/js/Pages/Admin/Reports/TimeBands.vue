@@ -16,10 +16,12 @@ interface Row {
     known_occupied_minutes: number; occupied_unknown_count: number;
     working_minutes: number | null; bookable_minutes: number;
     legacy_utilization_rate: number | null; bookable_utilization_rate: number | null;
+    visit_count?: number; day_type?: 'weekday' | 'weekend'; visit_unknown_count?: number;
 }
 interface Report {
     month_key: string; as_of_date: string; staff: { id: number; name: string }[];
     outside_band_minutes: number; daily_rows: Row[]; monthly_rows: Row[]; overall_rows: Row[];
+    store_daily_rows?: Row[]; day_type_rows?: Row[]; visit_unknown_count?: number;
 }
 
 const props = defineProps<{ report: Report; dataEndpoint: string }>();
@@ -44,6 +46,14 @@ const monthlyRows = computed(() => {
     const sorted = [...report.value.monthly_rows].sort((a, b) =>
         ((order.get(a.staff_id ?? -1) ?? 0) - (order.get(b.staff_id ?? -1) ?? 0)) || compareBand(a, b));
     return sorted.map((row, index) => ({ row, groupStart: index === 0 || sorted[index - 1].staff_id !== row.staff_id }));
+});
+
+/** 稼働分を時間（小数1桁）でも見られるようにする。値なしは null のまま。 */
+const hours = (minutes: number | null): number | null => (minutes === null ? null : Math.round((minutes / 60) * 10) / 10);
+const dayTypeRows = computed(() => (report.value.day_type_rows ?? []).map((row, index, rows) => ({ row, groupStart: index === 0 || rows[index - 1].day_type !== row.day_type })));
+const storeDailyRows = computed(() => {
+    const sorted = [...(report.value.store_daily_rows ?? [])].sort((a, b) => (a.business_date ?? '').localeCompare(b.business_date ?? '') || compareBand(a, b));
+    return sorted.map((row, index) => ({ row, groupStart: index === 0 || sorted[index - 1].business_date !== row.business_date }));
 });
 
 // ── 日別一覧の表示だけの絞り込み ──
@@ -120,6 +130,7 @@ function changeStaff(value: number | null): void {
                     <th class="is-sticky">{{ labels.bandTime }}</th>
                     <th class="num group-start">{{ labels.staffOccupied }}</th><th class="num">{{ labels.bandUnknown }}</th><th class="num">{{ labels.staffWorking }}</th>
                     <th class="num group-start">{{ labels.staffLegacyRate }}</th><th class="num">{{ labels.staffBookable }}</th><th class="num">{{ labels.staffBookableRate }}</th>
+                    <th class="num group-start">{{ labels.bandVisits }}</th><th class="num">{{ labels.bandOccupiedHours }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -131,8 +142,60 @@ function changeStaff(value: number | null): void {
                     <td class="num group-start"><ReportValue :value="row.legacy_utilization_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
                     <td class="num"><ReportValue :value="row.bookable_minutes" /></td>
                     <td class="num"><ReportValue :value="row.bookable_utilization_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                    <td class="num group-start"><ReportValue :value="row.visit_count ?? null" /></td>
+                    <td class="num"><ReportValue :value="hours(row.occupied_minutes)" format="decimal" :empty-label="labels.staffUnknown" /></td>
                 </tr>
-                <tr v-if="report.overall_rows.length === 0"><td colspan="7" class="empty-cell">{{ labels.staffNoData }}</td></tr>
+                <tr v-if="report.overall_rows.length === 0"><td colspan="9" class="empty-cell">{{ labels.staffNoData }}</td></tr>
+            </tbody>
+        </ReportTable>
+        <p class="band-note">{{ labels.bandVisitsHint }}<template v-if="(report.visit_unknown_count ?? 0) > 0">（{{ labels.bandVisitsUnknown }} {{ report.visit_unknown_count }}）</template></p>
+    </SectionCard>
+
+    <SectionCard :title="labels.bandDayType" :subtitle="labels.bandDayTypeHint" class="mb-4">
+        <ReportTable :loading="loading" min-width="860px" sticky-width="96px" max-height="none" data-testid="day-type-table">
+            <thead>
+                <tr>
+                    <th class="is-sticky">{{ labels.bandDayTypeColumn }}</th><th>{{ labels.bandTime }}</th>
+                    <th class="num group-start">{{ labels.staffOccupied }}</th><th class="num">{{ labels.staffWorking }}</th><th class="num">{{ labels.staffLegacyRate }}</th>
+                    <th class="num group-start">{{ labels.staffBookable }}</th><th class="num">{{ labels.staffBookableRate }}</th><th class="num group-start">{{ labels.bandVisits }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="{ row, groupStart } in dayTypeRows" :key="`${row.day_type}-${row.band_code}`" :class="{ 'row-group-start': groupStart }">
+                    <th class="is-sticky"><template v-if="groupStart">{{ row.day_type === 'weekday' ? labels.bandWeekday : labels.bandWeekend }}</template></th>
+                    <td>{{ row.band_label }}</td>
+                    <td class="num group-start"><ReportValue :value="row.occupied_minutes" :empty-label="labels.staffUnknown" /></td>
+                    <td class="num"><ReportValue :value="row.working_minutes" :empty-label="labels.staffUnknown" /></td>
+                    <td class="num"><ReportValue :value="row.legacy_utilization_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                    <td class="num group-start"><ReportValue :value="row.bookable_minutes" /></td>
+                    <td class="num"><ReportValue :value="row.bookable_utilization_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                    <td class="num group-start"><ReportValue :value="row.visit_count ?? null" /></td>
+                </tr>
+                <tr v-if="dayTypeRows.length === 0"><td colspan="8" class="empty-cell">{{ labels.staffNoData }}</td></tr>
+            </tbody>
+        </ReportTable>
+    </SectionCard>
+
+    <SectionCard :title="labels.bandStoreDaily" :subtitle="labels.bandStoreDailyHint" class="mb-4">
+        <ReportTable :loading="loading" min-width="860px" sticky-width="104px" max-height="56vh" data-testid="store-daily-table">
+            <thead>
+                <tr>
+                    <th class="is-sticky">{{ labels.staffDate }}</th><th>{{ labels.bandTime }}</th>
+                    <th class="num group-start">{{ labels.staffOccupied }}</th><th class="num">{{ labels.staffWorking }}</th>
+                    <th class="num group-start">{{ labels.staffBookable }}</th><th class="num">{{ labels.staffBookableRate }}</th><th class="num group-start">{{ labels.bandVisits }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="{ row, groupStart } in storeDailyRows" :key="`${row.business_date}-${row.band_code}`" :class="{ 'row-group-start': groupStart }">
+                    <th class="is-sticky"><template v-if="groupStart">{{ formatReportDate(row.business_date ?? '') }}</template></th>
+                    <td>{{ row.band_label }}</td>
+                    <td class="num group-start"><ReportValue :value="row.occupied_minutes" :empty-label="labels.staffUnknown" /></td>
+                    <td class="num"><ReportValue :value="row.working_minutes" :empty-label="labels.staffUnknown" /></td>
+                    <td class="num group-start"><ReportValue :value="row.bookable_minutes" /></td>
+                    <td class="num"><ReportValue :value="row.bookable_utilization_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                    <td class="num group-start"><ReportValue :value="row.visit_count ?? null" /></td>
+                </tr>
+                <tr v-if="storeDailyRows.length === 0"><td colspan="7" class="empty-cell">{{ labels.staffNoData }}</td></tr>
             </tbody>
         </ReportTable>
     </SectionCard>
@@ -144,6 +207,7 @@ function changeStaff(value: number | null): void {
                     <th class="is-sticky">{{ labels.staffName }}</th><th class="is-sticky-2">{{ labels.bandTime }}</th>
                     <th class="num group-start">{{ labels.staffOccupied }}</th><th class="num">{{ labels.bandUnknown }}</th><th class="num">{{ labels.staffWorking }}</th>
                     <th class="num group-start">{{ labels.staffLegacyRate }}</th><th class="num">{{ labels.staffBookable }}</th><th class="num">{{ labels.staffBookableRate }}</th>
+                    <th class="num group-start">{{ labels.bandVisits }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -156,8 +220,9 @@ function changeStaff(value: number | null): void {
                     <td class="num group-start"><ReportValue :value="row.legacy_utilization_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
                     <td class="num"><ReportValue :value="row.bookable_minutes" /></td>
                     <td class="num"><ReportValue :value="row.bookable_utilization_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                    <td class="num group-start"><ReportValue :value="row.visit_count ?? null" /></td>
                 </tr>
-                <tr v-if="report.monthly_rows.length === 0"><td colspan="8" class="empty-cell">{{ labels.staffNoData }}</td></tr>
+                <tr v-if="report.monthly_rows.length === 0"><td colspan="9" class="empty-cell">{{ labels.staffNoData }}</td></tr>
             </tbody>
         </ReportTable>
     </SectionCard>
@@ -180,6 +245,7 @@ function changeStaff(value: number | null): void {
                     <th :class="{ 'is-sticky-2': singleStaff }">{{ labels.bandTime }}</th>
                     <th class="num group-start">{{ labels.staffOccupied }}</th><th class="num">{{ labels.bandUnknown }}</th><th class="num">{{ labels.staffWorking }}</th>
                     <th class="num group-start">{{ labels.staffBookable }}</th><th class="num">{{ labels.staffBookableRate }}</th>
+                    <th class="num group-start">{{ labels.bandVisits }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -196,11 +262,16 @@ function changeStaff(value: number | null): void {
                     <td class="num"><ReportValue :value="row.working_minutes" :empty-label="labels.staffUnknown" /></td>
                     <td class="num group-start"><ReportValue :value="row.bookable_minutes" /></td>
                     <td class="num"><ReportValue :value="row.bookable_utilization_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                    <td class="num group-start"><ReportValue :value="row.visit_count ?? null" /></td>
                 </tr>
                 <tr v-if="dailyRows.length === 0">
-                    <td :colspan="singleStaff ? 7 : 8" class="empty-cell">{{ report.daily_rows.length === 0 ? labels.staffNoData : labels.dailyNoMatch }}</td>
+                    <td :colspan="singleStaff ? 8 : 9" class="empty-cell">{{ report.daily_rows.length === 0 ? labels.staffNoData : labels.dailyNoMatch }}</td>
                 </tr>
             </tbody>
         </ReportTable>
     </SectionCard>
 </template>
+
+<style scoped>
+.band-note { color: #6b7785; font-size: 0.85rem; margin-top: 8px; }
+</style>
