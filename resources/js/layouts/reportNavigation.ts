@@ -13,6 +13,7 @@ interface ReportRoutes {
     timeBands: string;
     annual: string;
     staffSales?: string;
+    courseSales?: string;
 }
 
 export interface ReportNavigationItem {
@@ -33,6 +34,7 @@ export function reportNavigationItems(can: ReportPermissions, routes: ReportRout
         ...(can.salesView ? [
             { title: '月計', href: routes.monthly, disabled: false as const, icon: 'mdi-chart-box-outline', group: '集計' as const },
             { title: MESSAGES.reporting.annualTitle, href: routes.annual, disabled: false as const, icon: 'mdi-calendar-range', group: '集計' as const },
+            ...(routes.courseSales ? [{ title: MESSAGES.reporting.courseSalesTitle, href: routes.courseSales, disabled: false as const, icon: 'mdi-ticket-confirmation-outline', group: '集計' as const }] : []),
             ...(routes.staffSales ? [{ title: MESSAGES.reporting.staffSalesTitle, href: routes.staffSales, disabled: false as const, icon: 'mdi-account-cash-outline', group: '集計' as const }] : []),
         ] : []),
         { title: MESSAGES.reporting.customerTitle, href: routes.customers, disabled: false, icon: 'mdi-account-group-outline', group: '集計' },

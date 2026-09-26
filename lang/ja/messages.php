@@ -198,6 +198,8 @@ return [
     ],
 
     'reporting' => [
+        'course_target_saved' => 'コース目標を保存しました。',
+        'course_missing' => '対象のコースが見つかりません。',
         'monthly_invalid' => '月計の指定条件が不正です。',
         'invalid_month' => '対象月が不正です。',
         'daily_note_saved' => '日報を保存しました。',

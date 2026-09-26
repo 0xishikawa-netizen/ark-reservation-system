@@ -499,6 +499,10 @@ UTC半開区間で索引を利用し、JST日付への変換はSELECT/GROUP BY�
 - `customers`: `acquisition_channel_id`、`acquisition_note`、`visit_purpose_note`、`referrer_customer_id`（self FK、nullOnDelete）、`referrer_name`、`prefecture`、`city`。番地は持たない。`customer_visit_purpose`（複数選択）。
 - `visits`: `first_visit_karte_snapshot_at`（NULL=未取得）、`first_visit_acquisition_channel_id`、`first_visit_referred`、`first_visit_prefecture`、`first_visit_city`、`visit_first_purposes`（初診完了時snapshot）。既存Visitは推測backfillしない。
 
+### Phase 11 Task 11-25 コース別目標
+
+- `course_sales_targets`: `target_month`（月初日）/ `course_type`（ticket・membership・service、CHECK制約）/ `course_id` / `target_amount` / `target_count` nullable / `updated_by`、UNIQUE(月, 種別, ID)。保存・削除は監査。
+
 ### 外部予約連携（Phase 9・`app/Domain/Integration`）
 
 - `reservation_provider_mappings`：`provider`(32) / `reservation_id` FK cascade / `external_reservation_id`(191) / `external_customer_id`(191) / `fingerprint`(64) / `external_updated_at` / `external_version`(64) / `last_synced_at` / `last_seen_at` / `sync_status`(16 default `in_sync`)。

@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BoothController;
 use App\Http\Controllers\Admin\BusinessMasterSettingsController;
 use App\Http\Controllers\Admin\CheckoutEntryController;
+use App\Http\Controllers\Admin\CourseSalesController;
 use App\Http\Controllers\Admin\CustomerAnalyticsController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\CustomerMembershipController as AdminCustomerMembershipController;
@@ -273,6 +274,12 @@ Route::middleware([
         ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.staff-sales');
     Route::get('reports/staff-sales/data', [StaffSalesController::class, 'data'])
         ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.staff-sales.data');
+    Route::get('reports/course-sales', [CourseSalesController::class, 'index'])
+        ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.course-sales');
+    Route::get('reports/course-sales/data', [CourseSalesController::class, 'data'])
+        ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.course-sales.data');
+    Route::put('reports/course-sales/targets', [CourseSalesController::class, 'saveTarget'])
+        ->middleware(['can:reports.view', 'can:sales.view', 'can:settings.manage'])->name('reports.course-sales.targets');
     Route::get('reports/annual', [AnnualReportController::class, 'index'])
         ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.annual');
     Route::get('reports/annual/data', [AnnualReportController::class, 'data'])

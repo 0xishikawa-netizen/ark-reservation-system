@@ -47,6 +47,7 @@ interface SharedPageProps {
             timeBands: string;
             annual: string;
             staffSales?: string;
+            courseSales?: string;
         };
     };
     flash: {
