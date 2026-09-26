@@ -67,6 +67,8 @@ describe('Monthly report page', () => {
     it('renders zero as 0 and nullable / future values as a muted hyphen keeping their meaning', () => {
         const page = render();
         const table = page.get('[data-testid="monthly-daily-table"]');
+        // 日別表は枠内で縦スクロールさせず、31日分をページのスクロールだけで見られるようにする。
+        expect(page.get('.ark-report-table-wrap').attributes('style')).toContain('max-height: none');
         // 税区分名（マスタの内部名）は出さず、税率ごとに合算して表示する。
         expect(page.findAll('[data-testid="tax-rate-summary"]').map((item) => item.text())).toEqual([
             '10%対象 税抜売上 1,500円 / 税額 150円', '8%対象 税抜売上 300円 / 税額 24円',
