@@ -507,6 +507,15 @@ onBeforeUnmount(() => {
     transition: background-color 0.12s ease;
 }
 
+/* 1280px 前後の PC 幅では、右側（時計・氏名・ログアウト）とタブ8個が並びきらず、スクロールバーを隠した
+   タブ列の外へ「システム」が押し出されて操作できなかった（全面検証 2026-09-27）。1440px 未満はタブの
+   左右余白を詰めて全タブを表示する。 */
+@media (max-width: 1439.98px) {
+    .ark-topnav__tab {
+        padding-inline: var(--ark-space-2);
+    }
+}
+
 .ark-topnav__tab:hover {
     background: rgb(var(--v-theme-brand-soft));
 }
