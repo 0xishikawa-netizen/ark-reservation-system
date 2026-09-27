@@ -18,6 +18,7 @@ use App\Enums\Reservation\PaymentStatus;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Reservation\ResourceType;
 use App\Enums\Reservation\SyncStatus;
+use App\Enums\Visit\CheckoutExemptionReason;
 use App\Events\OnlineReservationCreated;
 use App\Exceptions\NonBoundaryStartException;
 use App\Exceptions\Reservation\SlotUnavailableException;
@@ -393,8 +394,9 @@ final class ReservationService
     public function markCompleted(
         Reservation $reservation,
         ?Authenticatable $actor,
+        ?CheckoutExemptionReason $exemption = null,
     ): Reservation {
-        return $this->visitCompletion->completeReservation($reservation, $actor)->reservation;
+        return $this->visitCompletion->completeReservation($reservation, $actor, exemption: $exemption)->reservation;
     }
 
     /** @throws ValidationException */

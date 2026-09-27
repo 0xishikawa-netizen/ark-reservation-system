@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\Visit\CheckoutExemptionReason;
 use App\Enums\Visit\VisitStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -23,6 +24,7 @@ class Visit extends Model
         'first_visit_acquisition_channel_id', 'first_visit_referred', 'first_visit_prefecture', 'first_visit_city',
         'future_reservation_exists_at_checkout', 'future_reservation_snapshot_at',
         'staff_requested_at_checkout', 'requested_staff_id_at_checkout', 'nominations_recorded_at', 'completion_operation_id',
+        'checkout_exemption_reason',
     ];
 
     protected static function booted(): void
@@ -84,6 +86,7 @@ class Visit extends Model
             'nominations_recorded_at' => 'datetime',
             'first_visit_karte_snapshot_at' => 'datetime',
             'first_visit_referred' => 'boolean',
+            'checkout_exemption_reason' => CheckoutExemptionReason::class,
         ];
     }
 }

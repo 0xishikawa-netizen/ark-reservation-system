@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
 import { DateField, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
@@ -104,6 +104,13 @@ const loadingSlots = ref(false);
 const availabilityLoaded = ref(false);
 const availabilityError = ref('');
 const dialog = ref<'cancel' | 'complete' | 'no-show' | null>(null);
+const exemptionReason = ref<string | null>(null);
+const page = usePage();
+const canCheckout = computed(() => Boolean((page.props as { auth?: { can?: { checkoutsManage?: boolean } } }).auth?.can?.checkoutsManage));
+
+function openVisitEntry(): void {
+    router.post(`/admin/reservations/${props.reservation.id}/visit`);
+}
 const actionProcessing = ref(false);
 const cancelReason = ref('');
 // 保存直後だけ「確認」ボタンを出す（保存前から出しておくと、まだ保存していない
@@ -277,7 +284,9 @@ function runAction(): void {
     actionProcessing.value = true;
     router.patch(
         `/admin/reservations/${props.reservation.id}/${path}`,
-        action === 'cancel' ? { reason: cancelReason.value } : {},
+        action === 'cancel'
+            ? { reason: cancelReason.value }
+            : action === 'complete' ? { exemption_reason: exemptionReason.value ?? '' } : {},
         {
             preserveScroll: true,
             onFinish: () => {
@@ -291,7 +300,7 @@ function runAction(): void {
 function actionTitle(): string {
     return {
         cancel: '予約をキャンセル',
-        complete: '来店済み（完了）に変更',
+        complete: MESSAGES.visitCompletion.noCheckoutTitle,
         'no-show': '無断キャンセルに変更',
     }[dialog.value ?? 'cancel'];
 }
@@ -525,8 +534,20 @@ function submitAdjustment(): void {
             {{ MESSAGES.reservation.notConfirmedNotEditable }}
         </v-alert>
         <div class="d-flex ga-3 flex-wrap">
-            <v-btn color="success" variant="flat" :disabled="!isConfirmed" @click="dialog = 'complete'">
-                来店（完了）
+            <!-- 通常の施術は来店・会計で実施内容と会計を確定する（Task 11-27）。 -->
+            <v-btn
+                v-if="canCheckout"
+                color="primary"
+                variant="flat"
+                prepend-icon="mdi-cash-register"
+                :disabled="!isConfirmed && props.reservation.status !== 'completed'"
+                data-testid="open-visit-entry"
+                @click="openVisitEntry"
+            >
+                {{ MESSAGES.visitCompletion.visitEntry }}
+            </v-btn>
+            <v-btn color="success" variant="outlined" :disabled="!isConfirmed" data-testid="complete-without-checkout" @click="exemptionReason = null; dialog = 'complete'">
+                {{ MESSAGES.visitCompletion.noCheckoutMenu }}
             </v-btn>
             <v-btn color="warning" variant="outlined" :disabled="!isConfirmed" @click="dialog = 'no-show'">
                 無断キャンセル
@@ -619,7 +640,10 @@ function submitAdjustment(): void {
     <v-dialog :model-value="dialog !== null" max-width="520" @update:model-value="value => { if (!value) dialog = null; }">
         <v-card :title="actionTitle()">
             <v-card-text>
-                <p>{{ MESSAGES.common.confirmAction }}</p>
+                <p>{{ dialog === 'complete' ? MESSAGES.visitCompletion.noCheckoutHint : MESSAGES.common.confirmAction }}</p>
+                <v-radio-group v-if="dialog === 'complete'" v-model="exemptionReason" class="mt-2" density="compact" hide-details>
+                    <v-radio v-for="(label, value) in MESSAGES.visitCompletion.exemptionReasons" :key="value" :label="label" :value="value" />
+                </v-radio-group>
                 <v-textarea
                     v-if="dialog === 'cancel'"
                     v-model="cancelReason"
@@ -635,6 +659,7 @@ function submitAdjustment(): void {
                 <v-btn
                     :color="dialog === 'cancel' ? 'error' : 'primary'"
                     :loading="actionProcessing"
+                    :disabled="dialog === 'complete' && exemptionReason === null"
                     @click="runAction"
                 >
                     実行

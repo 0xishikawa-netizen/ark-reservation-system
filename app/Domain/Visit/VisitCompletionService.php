@@ -10,6 +10,7 @@ use App\Domain\Reservation\ReservationStateMachine;
 use App\Domain\Ticket\TicketReservationService;
 use App\Enums\Accounting\CheckoutStatus;
 use App\Enums\Reservation\ReservationStatus;
+use App\Enums\Visit\CheckoutExemptionReason;
 use App\Enums\Visit\VisitStatus;
 use App\Models\Checkout;
 use App\Models\Customer;
@@ -23,6 +24,7 @@ use App\Support\Business\BusinessTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Ramsey\Uuid\Uuid;
@@ -42,14 +44,19 @@ final class VisitCompletionService
         private readonly AuditLogger $audit,
     ) {}
 
+    /**
+     * @param  CheckoutExemptionReason|null  $exemption  会計を作らずに完了する正当な理由（無料・事前決済済み・回数券/月額利用）。
+     *                                                   通常の有償施術は来店・会計入力から確定するため null にしない運用とする（Task 11-27）。
+     */
     public function completeReservation(
         Reservation $reservation,
         ?Authenticatable $actor = null,
         ?string $operationId = null,
+        ?CheckoutExemptionReason $exemption = null,
     ): VisitCompletionResult {
         $operationId ??= $this->operationIdFor($reservation);
 
-        return DB::transaction(function () use ($reservation, $actor, $operationId): VisitCompletionResult {
+        return DB::transaction(function () use ($reservation, $actor, $operationId, $exemption): VisitCompletionResult {
             $lockedReservation = Reservation::query()
                 ->whereKey($reservation->getKey())
                 ->lockForUpdate()
@@ -95,6 +102,11 @@ final class VisitCompletionService
 
             $this->finalizeTreatments($visit, $lockedReservation, $operationId, $actor);
             $accountingPending = $this->finalizeExistingCheckout($visit, $actor);
+            if ($exemption !== null && $accountingPending) {
+                // 会計なし完了の理由を来店に残し、「会計未確定」の要確認から外す。
+                $visit->forceFill(['checkout_exemption_reason' => $exemption])->save();
+                $accountingPending = false;
+            }
 
             // 既存の追記型台帳・dedupe keyをそのまま利用し、別系統の減算を作らない。
             $this->tickets->consume($lockedReservation, $actor);
@@ -112,7 +124,8 @@ final class VisitCompletionService
             $this->audit->log(
                 'reservation.completed',
                 $lockedReservation,
-                "予約完了 #{$lockedReservation->id} visit#{$visit->id}",
+                "予約完了 #{$lockedReservation->id} visit#{$visit->id}"
+                    .($visit->checkout_exemption_reason !== null ? ' 会計なし:'.$visit->checkout_exemption_reason->value : ''),
                 $actor,
             );
 
@@ -306,41 +319,62 @@ final class VisitCompletionService
             ->get();
 
         if ($treatments->isEmpty()) {
-            // 現行予約は予約作成時の標準時間＋bufferでends_atを確定している。新規ライブ完了時だけ、
-            // その予約枠からbufferを除いた時間を初期実績にする（既存completedのbackfillには使わない）。
-            // これにより、予約後にservice.duration_minが変更されても当時確保した枠を再現できる。
-            $scheduledMinutes = max(
-                1,
-                (int) $reservation->starts_at->diffInMinutes($reservation->ends_at) - (int) $reservation->buffer_min,
-            );
-            // 予約台帳のstarts_atはJSTの壁時計値。施術実績はUTC instantで保存し、
-            // 時間帯別稼働率が9時間ずれて集計されないようにする。
-            $actualStart = CarbonImmutable::parse(
-                $reservation->starts_at->format('Y-m-d H:i:s'),
-                $this->businessTime->timezone(),
-            )->utc();
-            $treatments = collect([$this->visitFacts->addTreatment($visit, $reservation->service, [
-                'actual_minutes' => $scheduledMinutes,
-                'actual_started_at' => $actualStart,
-                'actual_ended_at' => $actualStart->addMinutes($scheduledMinutes),
-                'sort_order' => 0,
-                'operation_key' => "visit-completion:{$operationId}:treatment:0",
-            ], $actor)]);
+            $treatments = $this->seedTreatmentsFromReservation($visit, $reservation, "visit-completion:{$operationId}", $actor);
         }
 
         foreach ($treatments as $treatment) {
-            $assignmentsExist = VisitTreatmentStaff::query()
-                ->where('visit_treatment_id', $treatment->id)
-                ->exists();
-            if (! $assignmentsExist && $reservation->staff !== null) {
-                $this->visitFacts->assignStaff($treatment, $reservation->staff, [
-                    'actual_minutes' => (int) $treatment->actual_minutes,
-                    'actual_started_at' => $treatment->actual_started_at,
-                    'actual_ended_at' => $treatment->actual_ended_at,
-                    'sort_order' => 0,
-                ], $actor);
-            }
+            $this->assignReservationStaff($treatment, $reservation, $actor);
             $this->visitFacts->completeTreatment($treatment, $actor);
+        }
+    }
+
+    /**
+     * 予約の内容から下書きの施術実績を作る（来店・会計入力の初期表示と、会計なし完了の両方で使う）。
+     * 実施内容は来店・会計入力で変更できる。完了後は施術実績（visit_treatments）が正本で、予約を後から
+     * 変更しても完了済みの実績は変わらない。
+     *
+     * @return Collection<int, VisitTreatment>
+     */
+    public function seedTreatmentsFromReservation(Visit $visit, Reservation $reservation, string $operationKeyPrefix, ?Authenticatable $actor): Collection
+    {
+        $reservation->loadMissing(['service.analysisCategory', 'staff']);
+        // 現行予約は予約作成時の標準時間＋bufferでends_atを確定している。その予約枠からbufferを除いた時間を
+        // 初期実績にする（既存completedのbackfillには使わない）。予約後にservice.duration_minが変更されても
+        // 当時確保した枠を再現できる。
+        $scheduledMinutes = max(
+            1,
+            (int) $reservation->starts_at->diffInMinutes($reservation->ends_at) - (int) $reservation->buffer_min,
+        );
+        // 予約台帳のstarts_atはJSTの壁時計値。施術実績はUTC instantで保存し、
+        // 時間帯別稼働率が9時間ずれて集計されないようにする。
+        $actualStart = CarbonImmutable::parse(
+            $reservation->starts_at->format('Y-m-d H:i:s'),
+            $this->businessTime->timezone(),
+        )->utc();
+        $treatment = $this->visitFacts->addTreatment($visit, $reservation->service, [
+            'actual_minutes' => $scheduledMinutes,
+            'actual_started_at' => $actualStart,
+            'actual_ended_at' => $actualStart->addMinutes($scheduledMinutes),
+            'sort_order' => 0,
+            'operation_key' => "{$operationKeyPrefix}:treatment:0",
+        ], $actor);
+        $this->assignReservationStaff($treatment, $reservation, $actor);
+
+        return collect([$treatment]);
+    }
+
+    private function assignReservationStaff(VisitTreatment $treatment, Reservation $reservation, ?Authenticatable $actor): void
+    {
+        $assignmentsExist = VisitTreatmentStaff::query()
+            ->where('visit_treatment_id', $treatment->id)
+            ->exists();
+        if (! $assignmentsExist && $reservation->staff !== null) {
+            $this->visitFacts->assignStaff($treatment, $reservation->staff, [
+                'actual_minutes' => (int) $treatment->actual_minutes,
+                'actual_started_at' => $treatment->actual_started_at,
+                'actual_ended_at' => $treatment->actual_ended_at,
+                'sort_order' => 0,
+            ], $actor);
         }
     }
 

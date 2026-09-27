@@ -126,6 +126,11 @@ return [
         'legacy_completed_without_visit' => 'この完了済み予約には来店実績がないため、再完了できません。',
         'visit_conflict' => 'この予約には競合する来店実績があります。内容を確認してください。',
         'voided_checkout' => '取消済み会計があるため、来店完了できません。',
+        'exemption_required' => '会計なしで来店完了にする理由を選んでください。通常の施術は「来店・会計」から確定します。',
+        'exemption_free' => '無料施術',
+        'exemption_prepaid' => '事前決済済み',
+        'exemption_entitlement' => '回数券・月額の利用',
+        'completed_without_checkout' => '会計なしで来店完了にしました（:reason）。',
     ],
 
     // 予定ブロック（休憩・清掃など）

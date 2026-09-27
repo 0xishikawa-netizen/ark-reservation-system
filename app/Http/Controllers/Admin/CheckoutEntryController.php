@@ -112,7 +112,7 @@ final class CheckoutEntryController extends Controller
 
     public function showVisit(Visit $visit, TaxRateService $taxRates): Response
     {
-        $visit->load(['customer.user:id,name', 'reservation', 'nominations', 'treatments.staffAssignments']);
+        $visit->load(['customer.user:id,name', 'reservation.service:id,name', 'reservation.staff:user_id,display_name', 'reservation.booth:id,name', 'nominations', 'treatments.staffAssignments']);
         $checkout = Checkout::query()->with(['lines.allocations', 'tenders.allocations'])->where('visit_id', $visit->id)->first();
 
         return Inertia::render('Admin/Checkouts/Entry', [
@@ -237,6 +237,18 @@ final class CheckoutEntryController extends Controller
             'nominations_recorded' => $visit->nominations_recorded_at !== null,
             'nominated_staff_ids' => $visit->nominations->pluck('staff_id')->filter()->values(),
             'reservation_staff_requested' => $visit->reservation?->is_staff_requested,
+            // 予約の内容（来店・会計入力の見出しに出す。実施内容は施術実績で変更できる）。
+            'reservation' => $visit->reservation === null ? null : [
+                'starts_at' => $visit->reservation->starts_at->format('H:i'),
+                'ends_at' => $visit->reservation->ends_at->copy()->subMinutes((int) $visit->reservation->buffer_min)->format('H:i'),
+                'buffer_min' => (int) $visit->reservation->buffer_min,
+                'service_name' => $visit->reservation->service?->name,
+                'staff_name' => $visit->reservation->staff?->display_name,
+                'booth_name' => $visit->reservation->booth?->name,
+                'is_staff_requested' => (bool) $visit->reservation->is_staff_requested,
+                'payment_method' => $visit->reservation->payment_method?->value,
+            ],
+            'checkout_exemption_reason' => $visit->checkout_exemption_reason?->value,
             'treatments' => $visit->treatments->map(fn (VisitTreatment $treatment): array => [
                 'id' => $treatment->id,
                 'service_id' => $treatment->service_id,

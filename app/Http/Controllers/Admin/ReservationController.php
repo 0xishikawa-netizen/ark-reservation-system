@@ -14,6 +14,7 @@ use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
 use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
+use App\Enums\Visit\CheckoutExemptionReason;
 use App\Exceptions\Reservation\StaleReservationException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdjustReservationAmountRequest;
@@ -357,9 +358,15 @@ final class ReservationController extends Controller
         Reservation $reservation,
         ReservationService $reservationService,
     ): RedirectResponse {
-        $reservationService->markCompleted($reservation, $request->user());
+        // 通常の有償施術は「来店・会計」で実施内容と会計を確定する。ここ（会計なし完了）は
+        // 無料・事前決済済み・回数券/月額利用の理由を明示した時だけ許可する（Task 11-27）。
+        $validated = $request->validate([
+            'exemption_reason' => ['required', Rule::enum(CheckoutExemptionReason::class)],
+        ], ['exemption_reason.required' => __('messages.visit_completion.exemption_required')]);
+        $reason = CheckoutExemptionReason::from($validated['exemption_reason']);
+        $reservationService->markCompleted($reservation, $request->user(), $reason);
 
-        return back()->with('success', __('messages.reservation.completed'));
+        return back()->with('success', __('messages.visit_completion.completed_without_checkout', ['reason' => $reason->label()]));
     }
 
     public function noShow(

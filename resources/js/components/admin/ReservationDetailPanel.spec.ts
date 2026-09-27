@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import ReservationDetailPanel from './ReservationDetailPanel.vue';
 
+const router = vi.hoisted(() => ({ patch: vi.fn(), post: vi.fn() }));
+vi.mock('@inertiajs/vue3', () => ({ router }));
+
 function body(): DOMWrapper<HTMLElement> {
     return new DOMWrapper(document.body);
 }
@@ -32,6 +35,7 @@ const panelData = {
         edit_url: '/admin/reservations/10/edit',
         payment: null,
         can_complete: true,
+        visit_entry_url: '/admin/reservations/10/visit',
         can_cancel: true,
         can_no_show: true,
     },
@@ -107,6 +111,45 @@ describe('ReservationDetailPanel', () => {
         expect(wrapper.emitted('rebook')).toEqual([
             [{ customerId: 20, serviceId: 30, staffId: 40 }],
         ]);
+    });
+
+    it('shows 来店・会計 as the main action and no fact-less 来店完了 button (Task 11-27)', async () => {
+        const wrapper = await mountPanel();
+        const entry = wrapper.find('[data-testid="open-visit-entry"]');
+
+        expect(entry.exists()).toBe(true);
+        expect(entry.text()).toContain('来店・会計');
+        expect(wrapper.text()).not.toMatch(/(^|\s)来店完了(\s|$)/);
+        await entry.trigger('click');
+        expect(router.post).toHaveBeenCalledWith('/admin/reservations/10/visit', {}, expect.any(Object));
+    });
+
+    it('completes without checkout only after choosing an explicit reason', async () => {
+        const wrapper = await mountPanel();
+        router.patch.mockClear();
+
+        await wrapper.find('button[aria-label="その他の操作"]').trigger('click');
+        await nextTick();
+        const noCheckout = body().findAll('.v-list-item').find((item) => item.text().includes('会計なしで来店完了'));
+        expect(noCheckout).toBeDefined();
+        await noCheckout!.trigger('click');
+        await nextTick();
+
+        const dialog = body().find('.v-overlay--active .v-card');
+        expect(dialog.text()).toContain('無料施術');
+        expect(dialog.text()).toContain('事前決済済み');
+        expect(dialog.text()).toContain('回数券・月額の利用');
+        const submit = dialog.findAll('button').find((button) => button.text().includes('会計なしで完了'));
+        expect(submit?.attributes('disabled')).toBeDefined();
+
+        await dialog.find('input[value="prepaid"]').setValue(true);
+        await nextTick();
+        await submit!.trigger('click');
+        expect(router.patch).toHaveBeenCalledWith(
+            '/admin/reservations/10/complete',
+            { exemption_reason: 'prepaid' },
+            expect.any(Object),
+        );
     });
 
     it('hides the current reservation rebook action without manage permission', async () => {

@@ -8,13 +8,16 @@ use App\Domain\Reservation\ReservationInput;
 use App\Domain\Reservation\ReservationService;
 use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
+use App\Enums\Visit\CheckoutExemptionReason;
 use App\Models\Booth;
+use App\Models\Checkout;
 use App\Models\Customer;
 use App\Models\Reservation;
 use App\Models\Service;
 use App\Models\Staff;
 use App\Models\StaffShift;
 use App\Models\User;
+use App\Queries\DailyReportQuery;
 use App\Support\Settings\Settings;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
@@ -227,11 +230,11 @@ final class AdminReservationManagementTest extends TestCase
             ->patch("/admin/reservations/{$canceled->id}/cancel", ['reason' => '店舗都合'])
             ->assertSessionHasNoErrors();
         $this->actingAs($manager)
-            ->patch("/admin/reservations/{$completed->id}/complete")
+            ->patch("/admin/reservations/{$completed->id}/complete", ['exemption_reason' => 'free'])
             ->assertSessionHasNoErrors();
         // ダブルクリック／HTTP再送でも既存の完了結果へ収束する。
         $this->actingAs($manager)
-            ->patch("/admin/reservations/{$completed->id}/complete")
+            ->patch("/admin/reservations/{$completed->id}/complete", ['exemption_reason' => 'free'])
             ->assertSessionHasNoErrors();
         $this->actingAs($manager)
             ->patch("/admin/reservations/{$noShow->id}/no-show")
@@ -271,6 +274,37 @@ final class AdminReservationManagementTest extends TestCase
     }
 
     /** @return array{Customer, Service, Staff, Booth} */
+    /**
+     * Task 11-27: 会計を作らない来店完了は、理由（無料・事前決済済み・回数券/月額利用）を明示した時だけ。
+     * 理由があれば来店に残り、日計の「会計未確定」に数えない。
+     */
+    public function test_completion_without_checkout_requires_an_explicit_reason(): void
+    {
+        $manager = $this->roleUser('manager');
+        [$customer, $service, $staff, $booth] = $this->masters('exemption');
+        $reservation = $this->createThroughService($customer, $service, $staff, $booth, $manager, '10:00:00');
+
+        $this->actingAs($manager)
+            ->patch("/admin/reservations/{$reservation->id}/complete")
+            ->assertSessionHasErrors('exemption_reason');
+        $this->actingAs($manager)
+            ->patch("/admin/reservations/{$reservation->id}/complete", ['exemption_reason' => 'paid_somehow'])
+            ->assertSessionHasErrors('exemption_reason');
+        $this->assertSame(ReservationStatus::Confirmed, $reservation->fresh()?->status);
+        $this->assertSame(0, $reservation->visit()->count());
+
+        $this->actingAs($manager)
+            ->patch("/admin/reservations/{$reservation->id}/complete", ['exemption_reason' => 'prepaid'])
+            ->assertSessionHasNoErrors();
+        $visit = $reservation->visit()->firstOrFail();
+        $this->assertSame(CheckoutExemptionReason::Prepaid, $visit->checkout_exemption_reason);
+        $this->assertSame(0, Checkout::query()->where('visit_id', $visit->id)->count());
+        $daily = app(DailyReportQuery::class)->fetch(CarbonImmutable::parse($visit->business_date->toDateString(), 'Asia/Tokyo'));
+        $this->assertSame(1, $daily['visits']['visit_count']);
+        $this->assertSame(0, $daily['visits']['accounting_pending_visit_count']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'reservation.completed']);
+    }
+
     private function masters(string $suffix): array
     {
         $customer = Customer::factory()->create();

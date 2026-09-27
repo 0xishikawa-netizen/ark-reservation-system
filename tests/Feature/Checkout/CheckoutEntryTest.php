@@ -380,6 +380,36 @@ class CheckoutEntryTest extends TestCase
         $this->assertSame(0, Visit::query()->count());
     }
 
+    /** Task 11-27: 予約から開くと、予約メニュー・時間・担当が施術実績の下書きとして初期表示される。 */
+    public function test_opening_a_reservation_prefills_treatment_staff_and_reservation_summary(): void
+    {
+        $admin = $this->admin();
+        $staff = Staff::factory()->create(['display_name' => '担当X']);
+        $service = Service::factory()->create(['name' => 'ARKコンディショニング60', 'duration_min' => 60, 'tax_category_id' => $this->standard->id]);
+        $reservation = $this->reservation($service, $staff);
+        $reservation->forceFill(['ends_at' => CarbonImmutable::parse('2026-09-15 12:35:00', 'UTC'), 'buffer_min' => 5])->save();
+
+        $this->actingAs($admin)->post(route('admin.reservations.visit', $reservation))->assertRedirect();
+        // 2回開いても下書きは1つ（冪等）。
+        $this->actingAs($admin)->post(route('admin.reservations.visit', $reservation))->assertRedirect();
+        $visit = Visit::query()->where('reservation_id', $reservation->id)->sole();
+        $treatment = $visit->treatments()->sole();
+        $this->assertSame($service->id, $treatment->service_id);
+        $this->assertSame(60, $treatment->actual_minutes);
+        $this->assertSame([$staff->user_id], $treatment->staffAssignments()->pluck('staff_id')->all());
+
+        $this->actingAs($admin)->get(route('admin.visits.checkout.show', $visit))->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('visit.treatments.0.started_at', '11:30')
+                ->where('visit.treatments.0.staff.0.staff_id', $staff->user_id)
+                ->where('visit.reservation.starts_at', '11:30')
+                ->where('visit.reservation.ends_at', '12:30')
+                ->where('visit.reservation.buffer_min', 5)
+                ->where('visit.reservation.service_name', 'ARKコンディショニング60')
+                ->where('visit.reservation.staff_name', '担当X')
+                ->where('visit.reservation.is_staff_requested', true));
+    }
+
     public function test_entry_pages_render_for_admin(): void
     {
         $admin = $this->admin();

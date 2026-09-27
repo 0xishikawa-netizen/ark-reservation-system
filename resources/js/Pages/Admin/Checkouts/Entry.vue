@@ -28,6 +28,8 @@ interface VisitProps {
     id: number; status: string; reservation_id: number | null; reservation_starts_at: string | null; business_date: string;
     primary_staff_id: number | null; nominations_recorded: boolean; nominated_staff_ids: number[];
     reservation_staff_requested: boolean | null; editable: boolean;
+    reservation?: { starts_at: string; ends_at: string; buffer_min: number; service_name: string | null; staff_name: string | null;
+        booth_name: string | null; is_staff_requested: boolean; payment_method: string | null } | null;
     treatments: (TreatmentRow & { service_name: string | null; category: string | null })[];
 }
 interface CheckoutProps { id: number; status: string; editable: boolean; void_reason: string | null; lines: LineRow[]; tenders: TenderRow[] }
@@ -74,6 +76,8 @@ const touch = (): void => { dirty.value = true; };
 const staffItems = computed(() => props.staff.map((s) => ({ title: s.name, value: s.id })));
 const serviceItems = computed(() => props.services.map((s) => ({ title: s.name, value: s.id })));
 const taxItems = computed(() => props.taxCategories.map((t) => ({ title: t.name, value: t.id })));
+/** 予約時の支払区分（回数券・月額・事前決済）。現地払いは表示しない。 */
+const paymentMethodLabel = (method: string): string | null => MESSAGES.visitCompletion.reservationPayment[method] ?? null;
 const methodItems = computed(() => props.paymentMethods.map((m) => ({ title: MESSAGES.reporting.paymentMethodHeadings[m.code] ?? m.name, value: m.id })));
 const treatmentItems = computed(() => treatments.value.map((row, index) => ({
     title: `${index + 1}. ${props.services.find((s) => s.id === row.service_id)?.name ?? labels.treatments}`,
@@ -116,7 +120,11 @@ function addLine(type: ItemType): void {
     if (type === 'service') {
         const index = treatments.value.length > 0 ? 0 : null;
         const service = props.services.find((s) => s.id === treatments.value[0]?.service_id) ?? props.services[0];
-        if (service) applyMaster(line, service);
+        if (service) {
+            // 明細名の選択とコース別集計のため、施術料はサービスIDも持たせる。
+            line.service_id = service.id;
+            applyMaster(line, service);
+        }
         line.treatment_index = index;
         line.is_staff_allocatable = index !== null;
     }
@@ -237,6 +245,16 @@ const title = computed(() => (props.mode === 'sale' ? labels.saleTitle : labels.
 const statusText = (status: string | undefined): string => ({
     draft: labels.statusDraft, completed: labels.statusCompleted, finalized: labels.statusFinalized, voided: labels.statusVoided,
 }[status ?? ''] ?? labels.statusNone);
+
+// 予約から開いた未会計の来店では、予約メニューの施術料を下書き明細として1行用意する（Task 11-27）。
+// 回数券・月額・事前決済の予約は施術料を二重に請求しないよう用意しない。保存するまでは確定しない。
+if (props.mode === 'visit' && props.checkout === null && props.visit?.editable && props.visit.reservation
+    && !['ticket', 'membership', 'single'].includes(props.visit.reservation.payment_method ?? '')
+    && treatments.value.length > 0 && lines.value.length === 0) {
+    addLine('service');
+    const prefilled = lines.value[0];
+    if (prefilled) allocateByMinutes(prefilled);
+}
 </script>
 
 <template>
@@ -256,6 +274,16 @@ const statusText = (status: string | undefined): string => ({
                     <v-chip v-if="visit" size="small" variant="tonal">{{ labels.visitStatus }}: {{ statusText(visit.status) }}</v-chip>
                     <v-chip v-if="visit" size="small" variant="tonal">{{ visit.reservation_id ? labels.reservationLinked : labels.walkIn }}</v-chip>
                     <v-chip size="small" variant="tonal" data-testid="checkout-status">{{ labels.checkoutStatus }}: {{ statusText(checkout?.status) }}</v-chip>
+                </div>
+                <!-- 予約内容（予約から来た時）。実施内容は下の施術で変更できる。 -->
+                <div v-if="visit?.reservation" class="reservation-summary" data-testid="reservation-summary">
+                    <span class="muted">{{ MESSAGES.visitCompletion.reservationSummary }}</span>
+                    <strong>{{ visit.reservation.starts_at }}〜{{ visit.reservation.ends_at }}</strong>
+                    <span v-if="visit.reservation.service_name">{{ visit.reservation.service_name }}</span>
+                    <span v-if="visit.reservation.staff_name">{{ labels.primaryStaff }} {{ visit.reservation.staff_name }}<template v-if="visit.reservation.is_staff_requested">（{{ labels.nominations }}）</template></span>
+                    <span v-if="visit.reservation.booth_name">{{ visit.reservation.booth_name }}</span>
+                    <span v-if="visit.reservation.buffer_min > 0" class="muted">{{ MESSAGES.visitCompletion.bufferAfter.replace('{min}', String(visit.reservation.buffer_min)) }}</span>
+                    <span v-if="visit.reservation.payment_method && paymentMethodLabel(visit.reservation.payment_method)" class="muted">{{ paymentMethodLabel(visit.reservation.payment_method) }}</span>
                 </div>
             </SectionCard>
 
@@ -407,6 +435,7 @@ const statusText = (status: string | undefined): string => ({
 /* outlined入力の浮きラベルが上の行と重ならないよう、行間を空ける */
 .staff-row { row-gap: 16px; }
 .staff-row + .staff-row, h4 + .staff-row { margin-top: 16px; }
+.reservation-summary { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin-top: 8px; font-size: 0.875rem; }
 .treatment, .line { border-top: 1px solid #e4e8ee; padding: 12px 0; }
 .indent { margin-left: 24px; margin-top: 8px; }
 .field-xs { max-width: 90px; } .field-sm { max-width: 140px; } .field-md { min-width: 180px; max-width: 220px; } .field-lg { min-width: 240px; flex: 1 1 240px; }

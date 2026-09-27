@@ -94,7 +94,8 @@ final class DailyReportQuery
             ->selectRaw('COALESCE(SUM(CASE WHEN v.visit_sequence = 1 THEN 1 ELSE 0 END), 0) AS first_visit_count')
             ->selectRaw('COALESCE(SUM(CASE WHEN v.visit_sequence = 1 AND v.future_reservation_exists_at_checkout = 1 THEN 1 ELSE 0 END), 0) AS first_visit_reservation_count')
             ->selectRaw('COALESCE(SUM(CASE WHEN v.visit_sequence = 1 AND v.future_reservation_exists_at_checkout IS NULL THEN 1 ELSE 0 END), 0) AS first_visit_reservation_unknown_count')
-            ->selectRaw('COALESCE(SUM(CASE WHEN c.id IS NULL THEN 1 ELSE 0 END), 0) AS accounting_pending_visit_count')
+            // 会計なし完了の理由（無料・事前決済済み・回数券/月額利用）がある来店は会計待ちに数えない（Task 11-27）。
+            ->selectRaw('COALESCE(SUM(CASE WHEN c.id IS NULL AND v.checkout_exemption_reason IS NULL THEN 1 ELSE 0 END), 0) AS accounting_pending_visit_count')
             ->get()->mapWithKeys(static fn (object $row): array => [(string) $row->business_date => [
                 'visit_count' => (int) $row->visit_count,
                 'future_reservation_count' => (int) $row->future_reservation_count,

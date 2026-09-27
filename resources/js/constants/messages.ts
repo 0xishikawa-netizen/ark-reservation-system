@@ -189,6 +189,18 @@ export const MESSAGES = {
         sessionLost: 'ログイン状態を確認できませんでした。この画面で保存していない入力は反映されていない可能性があります。',
         sessionRelogin: 'ログイン画面へ',
     },
+    /** 来店完了（Task 11-27）。通常の施術は「来店・会計」で確定し、会計なし完了は理由がある時だけ。 */
+    visitCompletion: {
+        visitEntry: '来店・会計',
+        noCheckoutMenu: '会計なしで来店完了',
+        noCheckoutTitle: '会計なしで来店完了にしますか？',
+        noCheckoutHint: '通常の施術は「来店・会計」で実施内容と会計を確定します。会計を作らない理由を選んでください。',
+        noCheckoutSubmit: '会計なしで完了',
+        exemptionReasons: { free: '無料施術', prepaid: '事前決済済み', entitlement: '回数券・月額の利用' } as Record<string, string>,
+        reservationSummary: '予約内容',
+        bufferAfter: '終了後 {min}分',
+        reservationPayment: { ticket: '回数券利用', membership: '月額利用', single: '事前決済' } as Record<string, string>,
+    },
     /** 外部連携 */
     integration: {
         noneActive: '現在、実動する外部予約連携はありません（Mock のみ利用可能）。',

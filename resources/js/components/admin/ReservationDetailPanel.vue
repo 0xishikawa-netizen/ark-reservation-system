@@ -126,7 +126,9 @@ const memoEditing = ref(false);
 const memoDraft = ref("");
 const memoSaving = ref(false);
 
-const confirmMode = ref<null | "cancel" | "no_show">(null);
+const confirmMode = ref<null | "cancel" | "no_show" | "no_checkout">(null);
+// 会計なしで来店完了にする理由（Task 11-27）。通常の施術は「来店・会計」で確定する。
+const exemptionReason = ref<string | null>(null);
 const cancelReason = ref("");
 const actionBusy = ref(false);
 /** キャンセル・無断キャンセル・来店完了が失敗した時のメッセージ。 */
@@ -382,11 +384,9 @@ function openVisitEntry(): void {
     }
 }
 
-function complete(): void {
-    const id = data.value?.reservation?.id;
-    if (id) {
-        runAction(`/admin/reservations/${id}/complete`);
-    }
+function openNoCheckout(): void {
+    exemptionReason.value = null;
+    confirmMode.value = "no_checkout";
 }
 
 const panelTitle = computed(() =>
@@ -409,6 +409,10 @@ function submitConfirm(): void {
         });
     } else if (confirmMode.value === "no_show") {
         runAction(`/admin/reservations/${id}/no-show`);
+    } else if (confirmMode.value === "no_checkout" && exemptionReason.value !== null) {
+        runAction(`/admin/reservations/${id}/complete`, {
+            exemption_reason: exemptionReason.value,
+        });
     }
 }
 </script>
@@ -829,16 +833,6 @@ function submitConfirm(): void {
                         来店・会計
                     </v-btn>
                     <v-btn
-                        v-else-if="data.reservation.can_complete"
-                        color="primary"
-                        variant="flat"
-                        size="small"
-                        :loading="actionBusy"
-                        @click="complete"
-                    >
-                        来店完了
-                    </v-btn>
-                    <v-btn
                         :href="data.reservation.edit_url"
                         color="accent"
                         variant="outlined"
@@ -890,10 +884,11 @@ function submitConfirm(): void {
                             @click="emit('create')"
                         />
                         <v-list-item
-                            v-if="data.reservation?.visit_entry_url && data.reservation.can_complete"
+                            v-if="data.reservation?.can_complete"
                             prepend-icon="mdi-check-circle-outline"
-                            title="会計なしで来店完了"
-                            @click="complete"
+                            :title="MESSAGES.visitCompletion.noCheckoutMenu"
+                            data-testid="complete-without-checkout"
+                            @click="openNoCheckout"
                         />
                         <v-list-item
                             v-if="data.reservation?.payment"
@@ -935,7 +930,9 @@ function submitConfirm(): void {
                     {{
                         confirmMode === "cancel"
                             ? "予約をキャンセルしますか？"
-                            : "無断キャンセルにしますか？"
+                            : confirmMode === "no_checkout"
+                              ? MESSAGES.visitCompletion.noCheckoutTitle
+                              : "無断キャンセルにしますか？"
                     }}
                 </v-card-title>
                 <v-card-text>
@@ -944,6 +941,17 @@ function submitConfirm(): void {
                         {{ fmtDay(data.reservation.date) }} {{ timeRange }}
                         <br />{{ data.reservation.service_name }}
                     </div>
+                    <template v-if="confirmMode === 'no_checkout'">
+                        <p class="text-body-2 mb-2">{{ MESSAGES.visitCompletion.noCheckoutHint }}</p>
+                        <v-radio-group v-model="exemptionReason" density="compact" hide-details data-testid="exemption-reasons">
+                            <v-radio
+                                v-for="(label, value) in MESSAGES.visitCompletion.exemptionReasons"
+                                :key="value"
+                                :label="label"
+                                :value="value"
+                            />
+                        </v-radio-group>
+                    </template>
                     <v-textarea
                         v-if="confirmMode === 'cancel'"
                         v-model="cancelReason"
@@ -967,12 +975,15 @@ function submitConfirm(): void {
                         :color="confirmMode === 'cancel' ? 'error' : 'primary'"
                         variant="flat"
                         :loading="actionBusy"
+                        :disabled="confirmMode === 'no_checkout' && exemptionReason === null"
                         @click="submitConfirm"
                     >
                         {{
                             confirmMode === "cancel"
                                 ? "キャンセルする"
-                                : "無断キャンセルにする"
+                                : confirmMode === "no_checkout"
+                                  ? MESSAGES.visitCompletion.noCheckoutSubmit
+                                  : "無断キャンセルにする"
                         }}
                     </v-btn>
                 </v-card-actions>

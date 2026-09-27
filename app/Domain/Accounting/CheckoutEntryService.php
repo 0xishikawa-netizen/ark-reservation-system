@@ -69,12 +69,16 @@ final class CheckoutEntryService
             $customer = Customer::query()->whereKey($locked->customer_id)->firstOrFail();
             $locked->loadMissing('staff');
 
-            return $this->visitFacts->createDraft($customer, $locked, [
+            $visit = $this->visitFacts->createDraft($customer, $locked, [
                 // 予約台帳のstarts_atはJSTの壁時計値。
                 'business_date' => $locked->starts_at->format('Y-m-d'),
                 'primary_staff_id' => $locked->staff_id,
                 'primary_staff_name_snapshot' => $locked->staff?->display_name,
             ], $actor);
+            // 予約メニュー・時間・担当を施術実績の下書きとして初期表示する（実施内容は画面で変更できる）。
+            $this->completion->seedTreatmentsFromReservation($visit, $locked, "visit-open:{$visit->id}", $actor);
+
+            return $visit;
         });
     }
 
