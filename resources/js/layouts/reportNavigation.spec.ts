@@ -11,6 +11,13 @@ const routes = {
 };
 
 describe('集計ナビゲーション', () => {
+    it('売上権限があれば「月次レポート」（概要）と年間集計の2つに集約する（Task 11-31）', () => {
+        const items = reportNavigationItems({ reportsView: true, salesView: true }, { ...routes, overview: '/named/overview' });
+
+        expect(items.map((item) => item.title)).toEqual(['月次レポート', '年間集計']);
+        expect(items.map((item) => item.href)).toEqual(['/named/overview', routes.annual]);
+    });
+
     it('開発管理者に日報を含む6画面をnamed routeのURLで表示する', () => {
         const items = reportNavigationItems({ reportsView: true, salesView: true }, routes);
 

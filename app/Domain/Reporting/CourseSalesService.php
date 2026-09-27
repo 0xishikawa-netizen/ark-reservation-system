@@ -111,6 +111,35 @@ final class CourseSalesService
         return [
             'year' => $year, 'month' => $month, 'month_key' => $start->format('Y-m'), 'sales_basis' => $salesBasis->value,
             'rows' => $rows, 'totals' => $totals,
+            'products' => $this->productSales($start, $end),
+        ];
+    }
+
+    /**
+     * 物販の商品別売上（Task 11-31）。決済日基準（月計と同じ「全支払の最終受領日」）で、確定会計の物販明細を集計する。
+     * 施術日基準では物販に施術日が無いため、同じ決済日基準の値を出す。
+     *
+     * @return array{rows: list<array<string, mixed>>, total_gross: int, total_quantity: int}
+     */
+    private function productSales(CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $paid = $this->daily->paidCheckouts($start->utc()->format('Y-m-d H:i:s'), $end->utc()->format('Y-m-d H:i:s'));
+        $rows = DB::table('checkout_lines as l')
+            ->join('checkouts as c', 'c.id', '=', 'l.checkout_id')
+            ->joinSub($paid, 'paid', 'paid.checkout_id', '=', 'l.checkout_id')
+            ->where('c.status', 'finalized')->where('l.item_type', 'product')
+            ->groupBy('l.product_id', 'l.item_name_snapshot')
+            ->selectRaw('l.product_id, l.item_name_snapshot AS name, SUM(l.quantity) AS quantity, SUM(l.gross_amount) AS gross, SUM(l.net_amount) AS net')
+            ->orderByDesc('gross')->get();
+        $total = (int) $rows->sum('gross');
+
+        return [
+            'rows' => $rows->map(static fn (object $row): array => [
+                'product_id' => $row->product_id === null ? null : (int) $row->product_id, 'name' => (string) $row->name,
+                'quantity' => (int) $row->quantity, 'gross' => (int) $row->gross, 'net' => (int) $row->net,
+                'share' => $total === 0 ? null : (int) $row->gross / $total,
+            ])->all(),
+            'total_gross' => $total, 'total_quantity' => (int) $rows->sum('quantity'),
         ];
     }
 

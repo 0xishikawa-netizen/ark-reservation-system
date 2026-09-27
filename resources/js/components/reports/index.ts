@@ -8,3 +8,5 @@ export { default as ReportTable } from './ReportTable.vue';
 export { default as ReportValue } from './ReportValue.vue';
 export { formatReportDate, formatReportValue, type ReportValueFormat } from './format';
 export { useDailyFilter } from './useDailyFilter';
+export { default as MonthlyReportTabs } from './MonthlyReportTabs.vue';
+export { default as ReportText } from './ReportText.vue';

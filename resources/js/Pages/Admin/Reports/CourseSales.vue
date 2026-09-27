@@ -2,7 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { MonthField, PageHeader, SectionCard } from '@/components/ark';
-import { ReportFilterBar, ReportFilterField, ReportKpi, ReportSelect, ReportTable, ReportValue } from '@/components/reports';
+import { MonthlyReportTabs, ReportFilterBar, ReportFilterField, ReportKpi, ReportSelect, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -16,7 +16,8 @@ interface Row {
     target_amount: number | null; target_count: number | null; average_unit_amount: number | null;
     difference_amount: number | null; achievement_rate: number | null;
 }
-interface Report { month_key: string; sales_basis: SalesBasis; rows: Row[]; totals: { sales_amount: number; sales_quantity: number; usage_count: number; target_amount: number | null } }
+interface Report { month_key: string; sales_basis: SalesBasis; rows: Row[]; totals: { sales_amount: number; sales_quantity: number; usage_count: number; target_amount: number | null };
+    products?: { rows: { product_id: number | null; name: string; quantity: number; gross: number; net: number; share: number | null }[]; total_gross: number; total_quantity: number } }
 
 const props = defineProps<{ report: Report; dataEndpoint: string; targetEndpoint: string; canEditTargets: boolean }>();
 const labels = MESSAGES.reporting;
@@ -65,6 +66,7 @@ function saveTarget(row: Row, clear = false): void {
 <template>
     <Head :title="labels.courseSalesTitle" />
     <PageHeader :title="labels.courseSalesTitle" :subtitle="labels.courseSalesSubtitle" />
+    <MonthlyReportTabs active="courses" :month="month" :basis="basis" />
     <ReportFilterBar :loading="loading" :loading-text="MESSAGES.common.loading" :error="error">
         <ReportFilterField size="md"><MonthField :model-value="month" :label="MESSAGES.calendar.targetMonth" density="compact" data-testid="month-input" @update:model-value="changeMonth" /></ReportFilterField>
         <ReportFilterField size="md"><ReportSelect :model-value="basis" :items="basisItems" :label="labels.annualBasis" data-testid="basis-select" @update:model-value="changeBasis" /></ReportFilterField>
@@ -118,6 +120,29 @@ function saveTarget(row: Row, clear = false): void {
                 </tr>
                 <tr v-if="report.rows.length === 0"><td :colspan="canEditTargets ? 11 : 10" class="empty-cell">{{ labels.courseNoData }}</td></tr>
             </tbody>
+        </ReportTable>
+    </SectionCard>
+
+    <!-- 物販（商品別。Task 11-31）：決済日基準で確定会計の物販明細を集計する。 -->
+    <SectionCard :title="MESSAGES.monthlyHub.products" class="mt-4">
+        <ReportTable max-height="none" min-width="600px" data-testid="product-sales">
+            <thead><tr>
+                <th class="is-sticky">{{ MESSAGES.monthlyHub.productName }}</th><th class="num">{{ MESSAGES.monthlyHub.quantity }}</th>
+                <th class="num">{{ MESSAGES.monthlyHub.productSales }}</th><th class="num">{{ MESSAGES.monthlyHub.share }}</th>
+            </tr></thead>
+            <tbody>
+                <tr v-for="row in report.products?.rows ?? []" :key="`${row.product_id}-${row.name}`">
+                    <th class="is-sticky">{{ row.name }}</th>
+                    <td class="num"><ReportValue :value="row.quantity" /></td>
+                    <td class="num"><ReportValue :value="row.gross" format="money" /></td>
+                    <td class="num"><ReportValue :value="row.share" format="percent" :empty-label="MESSAGES.common.notCalculated" /></td>
+                </tr>
+                <tr v-if="(report.products?.rows ?? []).length === 0"><td colspan="4" class="empty-cell">{{ MESSAGES.monthlyHub.noProducts }}</td></tr>
+            </tbody>
+            <tfoot v-if="(report.products?.rows ?? []).length > 0"><tr>
+                <th class="is-sticky">{{ MESSAGES.monthlyHub.total }}</th><td class="num"><ReportValue :value="report.products?.total_quantity ?? 0" /></td>
+                <td class="num"><ReportValue :value="report.products?.total_gross ?? 0" format="money" /></td><td />
+            </tr></tfoot>
         </ReportTable>
     </SectionCard>
 </template>

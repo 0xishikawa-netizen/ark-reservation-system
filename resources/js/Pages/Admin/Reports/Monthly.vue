@@ -2,7 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { EmptyValue, MonthField, PageHeader, SectionCard } from '@/components/ark';
-import { ReportFilterBar, ReportFilterField, ReportKpi, ReportSelect, ReportTable, ReportValue } from '@/components/reports';
+import { MonthlyReportTabs, ReportFilterBar, ReportFilterField, ReportKpi, ReportSelect, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -175,6 +175,7 @@ function changeBasis(value: SalesBasis): void {
             </template>
         </template>
     </PageHeader>
+    <MonthlyReportTabs active="monthly" :month="selectedMonth" :basis="selectedBasis" />
     <p v-if="exportEndpoint && selectedBasis === 'treatment_date'" class="report-hint" role="note">
         <v-icon icon="mdi-information-outline" size="16" />{{ labels.excelPaymentDateOnly }}
     </p>

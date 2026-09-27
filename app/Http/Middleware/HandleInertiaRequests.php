@@ -64,6 +64,7 @@ class HandleInertiaRequests extends Middleware
                 'reportRoutes' => [
                     'dailyNotes' => route('admin.reports.daily-notes'),
                     'monthly' => route('admin.reports.monthly'),
+                    'overview' => route('admin.reports.overview'),
                     'customers' => route('admin.reports.customers'),
                     'staffUtilization' => route('admin.reports.staff-utilization'),
                     'timeBands' => route('admin.reports.time-bands'),

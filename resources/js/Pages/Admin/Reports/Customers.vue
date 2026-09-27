@@ -2,7 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { DateField, EmptyValue, MonthField, PageHeader } from '@/components/ark';
-import { ReportFilterBar, ReportFilterField, ReportKpi, ReportTable, ReportValue } from '@/components/reports';
+import { MonthlyReportTabs, ReportFilterBar, ReportFilterField, ReportKpi, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -102,6 +102,7 @@ function changeAsOf(value: string): void {
             </v-btn>
         </template>
     </PageHeader>
+    <MonthlyReportTabs active="customers" :month="selectedMonth" />
 
     <ReportFilterBar :loading="loading" :loading-text="labels.customerLoading" :error="error">
         <ReportFilterField size="md">

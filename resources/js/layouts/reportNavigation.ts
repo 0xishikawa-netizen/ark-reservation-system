@@ -14,6 +14,7 @@ interface ReportRoutes {
     annual: string;
     staffSales?: string;
     courseSales?: string;
+    overview?: string;
 }
 
 export interface ReportNavigationItem {
@@ -29,13 +30,21 @@ export function reportNavigationItems(can: ReportPermissions, routes: ReportRout
         return [];
     }
 
+    // 月次レポート（Task 11-31）：同じ月を分析する画面（月計表・日計明細・日報・顧客統計・予約分析・スタッフ稼働・
+    // 時間帯別・スタッフ売上・コース/物販）は「月次レポート」のタブにまとめ、メニューは入口1つにする。
+    // 概要は売上を含むため、売上権限が無い場合は従来どおり売上を含まない画面を個別に出す。
+    if (can.salesView && routes.overview) {
+        return [
+            { title: MESSAGES.monthlyHub.title, href: routes.overview, disabled: false, icon: 'mdi-chart-box-outline', group: '集計' },
+            { title: MESSAGES.reporting.annualTitle, href: routes.annual, disabled: false, icon: 'mdi-calendar-range', group: '集計' },
+        ];
+    }
+
     return [
         { title: MESSAGES.reporting.dailyNotesTitle, href: routes.dailyNotes, disabled: false, icon: 'mdi-text-box-edit-outline', group: '集計' },
         ...(can.salesView ? [
             { title: '月計', href: routes.monthly, disabled: false as const, icon: 'mdi-chart-box-outline', group: '集計' as const },
             { title: MESSAGES.reporting.annualTitle, href: routes.annual, disabled: false as const, icon: 'mdi-calendar-range', group: '集計' as const },
-            ...(routes.courseSales ? [{ title: MESSAGES.reporting.courseSalesTitle, href: routes.courseSales, disabled: false as const, icon: 'mdi-ticket-confirmation-outline', group: '集計' as const }] : []),
-            ...(routes.staffSales ? [{ title: MESSAGES.reporting.staffSalesTitle, href: routes.staffSales, disabled: false as const, icon: 'mdi-account-cash-outline', group: '集計' as const }] : []),
         ] : []),
         { title: MESSAGES.reporting.customerTitle, href: routes.customers, disabled: false, icon: 'mdi-account-group-outline', group: '集計' },
         { title: MESSAGES.reporting.staffTitle, href: routes.staffUtilization, disabled: false, icon: 'mdi-chart-timeline-variant', group: '集計' },

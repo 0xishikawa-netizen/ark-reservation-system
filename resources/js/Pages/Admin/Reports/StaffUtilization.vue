@@ -2,9 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { EmptyValue, MonthField, PageHeader, SectionCard } from '@/components/ark';
-import {
-    formatReportDate, ReportDailyToolbar, ReportFilterBar, ReportFilterField, ReportSelect, ReportTable, ReportValue, useDailyFilter,
-} from '@/components/reports';
+import { formatReportDate, MonthlyReportTabs, ReportDailyToolbar, ReportFilterBar, ReportFilterField, ReportSelect, ReportTable, ReportValue, useDailyFilter } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -126,6 +124,7 @@ function changeStaff(value: number | null): void {
             </v-btn>
         </template>
     </PageHeader>
+    <MonthlyReportTabs active="staff" :month="month" />
 
     <ReportFilterBar :loading="loading" :loading-text="labels.staffLoading" :error="error">
         <ReportFilterField size="md">

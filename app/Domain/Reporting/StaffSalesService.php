@@ -28,6 +28,7 @@ final class StaffSalesService
     public function __construct(
         private readonly BusinessTime $businessTime,
         private readonly DailyReportQuery $daily,
+        private readonly StaffUtilizationService $utilization,
     ) {}
 
     /** @return array<string, mixed> */
@@ -71,6 +72,20 @@ final class StaffSalesService
         foreach ($staffRows as &$entry) {
             $known = $entry['total_amount'] - $entry['nomination_unknown_amount'];
             $entry['nominated_share'] = $entry['nomination_unknown_amount'] > 0 || $known === 0 ? null : $entry['nominated_amount'] / $known;
+        }
+        unset($entry);
+
+        // 稼働・勤務時間あたりの売上（Task 11-31。分析用の目安で、給与・評価とは別）。時間が不明・0なら NULL。
+        $utilization = collect($this->utilization->forMonth($year, $month)['monthly_rows'])->keyBy('staff_id');
+        foreach ($staffRows as &$entry) {
+            $time = $entry['staff_id'] === null ? null : $utilization->get($entry['staff_id']);
+            $occupied = $time['occupied_minutes'] ?? null;
+            $working = $time['working_minutes'] ?? null;
+            $entry['occupied_minutes'] = $occupied;
+            $entry['working_minutes'] = $working;
+            $entry['patient_count'] = $time['patient_count'] ?? null;
+            $entry['sales_per_occupied_hour'] = $occupied === null || $occupied === 0 ? null : intdiv($entry['total_amount'] * 60, $occupied);
+            $entry['sales_per_working_hour'] = $working === null || $working === 0 ? null : intdiv($entry['total_amount'] * 60, $working);
         }
         unset($entry);
 

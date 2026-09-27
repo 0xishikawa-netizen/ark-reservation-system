@@ -2,7 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { MonthField, PageHeader, SectionCard } from '@/components/ark';
-import { ReportFilterBar, ReportFilterField } from '@/components/reports';
+import { MonthlyReportTabs, ReportFilterBar, ReportFilterField } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -62,6 +62,7 @@ function save(day: DayNote): void {
 <template>
     <Head :title="labels.dailyNotesTitle" />
     <PageHeader :title="labels.dailyNotesTitle" :subtitle="labels.dailyNotesSubtitle" />
+    <MonthlyReportTabs active="notes" :month="month" />
     <ReportFilterBar>
         <ReportFilterField size="md">
             <MonthField :model-value="month" :label="labels.dailyNotesMonth" density="compact" data-testid="daily-notes-month" @update:model-value="changeMonth" />

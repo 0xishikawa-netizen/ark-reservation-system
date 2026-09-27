@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\Integrations\ReservationIntegrationController;
 use App\Http\Controllers\Admin\MembershipPlanController;
 use App\Http\Controllers\Admin\MfaController;
 use App\Http\Controllers\Admin\MonthlyReportController;
+use App\Http\Controllers\Admin\MonthlyReportHubController;
 use App\Http\Controllers\Admin\NotificationSettingsController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\ProductController;
@@ -252,6 +253,13 @@ Route::middleware([
         ->middleware('can:reports.view')->name('reports.daily-notes');
     Route::put('reports/daily-notes/{businessDate}', [DailyBusinessNoteController::class, 'update'])
         ->middleware('can:reports.manage')->name('reports.daily-notes.update');
+    // 月次レポート（Task 11-31）：概要・日計明細は売上を含むため sales.view も必要。予約分析は reports.view。
+    Route::get('reports/overview', [MonthlyReportHubController::class, 'overview'])
+        ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.overview');
+    Route::get('reports/daily-ledger', [MonthlyReportHubController::class, 'dailyLedger'])
+        ->middleware(['can:reports.view', 'can:sales.view'])->name('reports.daily-ledger');
+    Route::get('reports/reservation-analysis', [MonthlyReportHubController::class, 'reservationAnalysis'])
+        ->middleware('can:reports.view')->name('reports.reservation-analysis');
     Route::get('reports/monthly', [MonthlyReportController::class, 'index'])
         ->middleware(['can:reports.view', 'can:sales.view'])
         ->name('reports.monthly');
