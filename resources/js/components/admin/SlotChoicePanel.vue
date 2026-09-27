@@ -61,31 +61,45 @@ function fmtDay(iso: string): string {
                     <v-icon icon="mdi-calendar-plus-outline" size="20" />
                 </span>
                 <span class="sch__choice-body">
-                    <span class="sch__choice-title">予約を入れる</span>
+                    <span class="sch__choice-title">予約を作成</span>
                     <span class="sch__choice-desc">顧客・メニューを選んで登録</span>
                 </span>
                 <v-icon icon="mdi-chevron-right" size="18" class="sch__choice-arrow" />
             </button>
 
-            <button
-                type="button"
-                class="sch__choice sch__choice--block"
+            <!-- 予約ではない予定（休憩・清掃・ミーティング）は補助操作として控えめに出す（Task 11-30）。 -->
+            <v-btn
+                variant="outlined"
+                size="small"
+                prepend-icon="mdi-calendar-clock-outline"
+                class="sch__block-btn"
+                data-testid="choose-block"
                 @click="emit('chooseBlock')"
             >
-                <span class="sch__choice-icon">
-                    <v-icon icon="mdi-clock-plus-outline" size="20" />
-                </span>
-                <span class="sch__choice-body">
-                    <span class="sch__choice-title">予定を入れる</span>
-                    <span class="sch__choice-desc">休憩・ミーティングなど</span>
-                </span>
-                <v-icon icon="mdi-chevron-right" size="18" class="sch__choice-arrow" />
-            </button>
+                {{ MESSAGES.schedule.staffBlock }}
+            </v-btn>
         </div>
     </PanelShell>
 </template>
 
 <style scoped>
+/* 予約は主要操作（塗りつぶし）、スタッフ予定は右寄せの小さな補助ボタン。 */
+.sch__choice--reservation {
+    background: rgb(var(--v-theme-primary));
+    color: rgb(var(--v-theme-on-primary));
+    border-color: rgb(var(--v-theme-primary));
+}
+
+.sch__choice--reservation .sch__choice-desc,
+.sch__choice--reservation .sch__choice-arrow,
+.sch__choice--reservation .sch__choice-icon {
+    color: rgba(var(--v-theme-on-primary), 0.85);
+}
+
+.sch__block-btn {
+    align-self: flex-end;
+}
+
 .sch__when {
     padding: var(--ark-space-3);
     border-radius: var(--ark-radius);

@@ -692,7 +692,9 @@ function onWeekCellClick(
         time: minuteToLabel(snappedMinute),
     };
 
-    if (shouldFillCreatePanelFromSlot()) {
+    // 「メニューで空きを確認」中の空き枠クリックは予約の操作なので、予約／予定の選択を挟まず
+    // そのメニュー（＋クリックした担当/ブース）を選択済みで予約パネルを開く（Task 11-30）。
+    if (shouldFillCreatePanelFromSlot() || previewServiceId.value !== null) {
         fillCreatePanelFromSlot(slotPrefill);
 
         return;
@@ -893,6 +895,7 @@ function fillCreatePanelFromSlot(
             undefined,
         serviceId:
             props.create_prefill.service_id ??
+            previewServiceId.value ??
             reservationDraft.service_id ??
             undefined,
         staffId: slotPrefill.staffId ?? reservationDraft.staff_id ?? undefined,
@@ -1276,6 +1279,8 @@ function onSwitchToBlock(): void {
 function onSwitchToReservation(): void {
     if (panelKind.value === "slot-choice") {
         openCreatePanel({
+            // 「メニューで空きを確認」中に選んだ枠なら、そのメニューを選択済みで開く（Task 11-30）。
+            serviceId: previewServiceId.value ?? reservationDraft.service_id ?? undefined,
             staffId: props.create_prefill.staff_id ?? undefined,
             boothId: props.create_prefill.booth_id ?? undefined,
             date: props.create_prefill.date ?? undefined,
@@ -1674,7 +1679,9 @@ function onTrackClick(lane: ScheduleLane, event: MouseEvent): void {
         time: minuteToLabel(snappedMinute),
     };
 
-    if (shouldFillCreatePanelFromSlot()) {
+    // 「メニューで空きを確認」中の空き枠クリックは予約の操作なので、予約／予定の選択を挟まず
+    // そのメニュー（＋クリックした担当/ブース）を選択済みで予約パネルを開く（Task 11-30）。
+    if (shouldFillCreatePanelFromSlot() || previewServiceId.value !== null) {
         fillCreatePanelFromSlot(slotPrefill);
 
         return;
@@ -3236,7 +3243,19 @@ function menuSegments(lane: ScheduleLane): {
             clearable
             hide-details
             :loading="previewLoading"
-        />
+            :menu-props="{ minWidth: 360, maxWidth: 520 }"
+            data-testid="preview-service"
+        >
+            <!-- メニュー名は省略せず全文を出す（長い名前は折り返す。Task 11-30） -->
+            <template #item="{ props: itemProps, item }">
+                <v-list-item v-bind="itemProps" :title="undefined" class="preview-service-item">
+                    <span class="preview-service-name">{{ item.raw.name }}</span>
+                </v-list-item>
+            </template>
+            <template #selection="{ item }">
+                <span class="preview-service-selection" :title="item.raw.name">{{ item.raw.name }}</span>
+            </template>
+        </v-select>
     </div>
 
     <v-menu
@@ -4852,7 +4871,23 @@ function menuSegments(lane: ScheduleLane): {
 }
 
 .schedule-topbar .toolbar-staff {
-    flex: 0 1 280px;
+    flex: 0 1 360px;
+}
+
+.preview-service-name {
+    display: block;
+    white-space: normal;
+    line-height: 1.35;
+    font-size: 0.875rem;
+}
+
+.preview-service-selection {
+    display: block;
+    overflow: hidden;
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.25;
+    font-size: 0.8125rem;
 }
 
 .toolbar-period {

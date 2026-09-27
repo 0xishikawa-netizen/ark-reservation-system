@@ -1,25 +1,20 @@
 /**
- * ブッキングボード（日表示）の行の高さ。
- * 人数が少ない日は画面の空きを使って行を高くし、多い日は最小高さ＋ページの縦スクロールにする。
- * 予約カードが間延びしないよう、上限は行数に応じて段階的に下げる。
- *   最小 68px（従来の固定値）
- *   上限 1〜3行: 152px（少し広め） / 4〜6行: 112px（標準） / 7行以上: 88px
+ * ブッキングボード（日表示）の行の高さ（Task 11-30）。
+ * スタッフ／ブース／両方のどの表示でも同じ標準の高さにする。人数が少ない日に画面の空きを埋めるため
+ * 行を伸ばすことはしない（1人の行が150px以上になり予約カードが不自然に大きくなっていたため）。
+ * 行が少ない日は台帳自体が内容の高さに縮み、「本日の集計」がすぐ下に来る。
+ *   標準 80px（名前・時間・メニュー・指名の4行が収まる高さ）
+ *   スマホ幅など狭い画面は従来の最小 68px
  */
 export const TRACK_MIN_HEIGHT = 68;
-
-export function trackMaxHeight(laneRows: number): number {
-    if (laneRows <= 3) return 152;
-    if (laneRows <= 6) return 112;
-
-    return 88;
-}
+export const TRACK_STANDARD_HEIGHT = 80;
 
 /**
  * @param laneRows     スタッフ／ブース行の数
- * @param headerRows   「両方」表示の見出し行の数（固定高さ）
- * @param headerHeight 見出し行1つの高さ
- * @param available    台帳の行に使える縦の空き（画面下端まで。0以下なら未計測）
- * @param narrow       スマホ幅など固定高さにする画面か
+ * @param headerRows   「両方」表示の見出し行の数（互換のため受け取るが高さには使わない）
+ * @param headerHeight 見出し行1つの高さ（同上）
+ * @param available    台帳の行に使える縦の空き（同上。空きに合わせて伸ばさない）
+ * @param narrow       スマホ幅など最小高さにする画面か
  */
 export function scheduleTrackHeight(
     laneRows: number,
@@ -28,11 +23,13 @@ export function scheduleTrackHeight(
     available: number,
     narrow: boolean,
 ): number {
-    if (narrow || laneRows === 0 || available <= 0) {
+    void headerRows;
+    void headerHeight;
+    void available;
+
+    if (narrow || laneRows === 0) {
         return TRACK_MIN_HEIGHT;
     }
 
-    const perLane = Math.floor((available - headerRows * headerHeight) / laneRows);
-
-    return Math.min(trackMaxHeight(laneRows), Math.max(TRACK_MIN_HEIGHT, perLane));
+    return TRACK_STANDARD_HEIGHT;
 }

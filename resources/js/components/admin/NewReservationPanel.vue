@@ -726,75 +726,13 @@ function submit(): void {
                 @select="(id) => { selectedServiceId = id; }"
             />
 
-            <!-- ③ 担当スタッフ・指名 -->
-            <div class="nrp__block">
-                <span class="nrp__block-label">担当スタッフ</span>
-                <v-select
-                    v-model="selectedStaffId"
-                    :items="staffSelectItems"
-                    item-title="title"
-                    item-value="value"
-                    density="compact"
-                    variant="outlined"
-                    hide-details="auto"
-                    :error-messages="form.errors.staff_id"
-                />
-                <v-checkbox
-                    v-if="selectedStaffId !== null"
-                    v-model="form.is_staff_requested"
-                    label="指名（顧客がこのスタッフを希望）"
-                    density="compact"
-                    hide-details
-                    class="nrp__nomination"
-                />
-            </div>
-
-            <!-- ④ インターバル -->
-            <div class="nrp__block">
-                <span class="nrp__block-label">インターバル</span>
-                <div class="nrp__buffers" role="radiogroup" aria-label="インターバル">
-                    <button
-                        v-for="opt in BUFFER_OPTIONS"
-                        :key="opt.value"
-                        type="button"
-                        class="nrp__buffer"
-                        :class="{ 'nrp__buffer--active': form.buffer_min === opt.value }"
-                        role="radio"
-                        :aria-checked="form.buffer_min === opt.value"
-                        @click="form.buffer_min = opt.value"
-                    >
-                        {{ opt.label }}
-                    </button>
-                </div>
-            </div>
-
-            <!-- ⑤ ブース（自動） -->
-            <div class="nrp__block">
-                <span class="nrp__block-label">ブース</span>
-                <!-- 空いているブースを自動で提案し、別の空きブースへ変更もできる（Task 11-28）。
-                     未選択のまま予約すると、メニューで使えるブースのうち空いている1つを確定する。 -->
-                <v-select
-                    v-model="selectedBoothId"
-                    :items="boothOptions"
-                    item-title="name"
-                    item-value="id"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    clearable
-                    :placeholder="MESSAGES.bookingResources.boothAuto"
-                    data-testid="nrp-booth"
-                />
-                <p v-if="form.errors.booth_id" class="nrp__error">{{ form.errors.booth_id }}</p>
-            </div>
-
-            <!-- ⑥ 日付 -->
+            <!-- ③ 日付（予約の操作順：顧客→メニュー→日時→担当→ブース→インターバル→備考。Task 11-30） -->
             <div v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__block">
                 <span class="nrp__block-label">日付</span>
                 <DateField v-model="date" label="" density="compact" :clearable="false" />
             </div>
 
-            <!-- ⑦ 開始時間 -->
+            <!-- ④ 開始時間 -->
             <div v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__block">
                 <span class="nrp__block-label">
                     開始時間
@@ -820,6 +758,68 @@ function submit(): void {
                 <p v-if="form.errors.starts_at" class="nrp__error">{{ form.errors.starts_at }}</p>
             </div>
 
+            <!-- ⑤ 担当スタッフ・指名 -->
+            <div class="nrp__block">
+                <span class="nrp__block-label">担当スタッフ</span>
+                <v-select
+                    v-model="selectedStaffId"
+                    :items="staffSelectItems"
+                    item-title="title"
+                    item-value="value"
+                    density="compact"
+                    variant="outlined"
+                    hide-details="auto"
+                    :error-messages="form.errors.staff_id"
+                />
+                <v-checkbox
+                    v-if="selectedStaffId !== null"
+                    v-model="form.is_staff_requested"
+                    label="指名（顧客がこのスタッフを希望）"
+                    density="compact"
+                    hide-details
+                    class="nrp__nomination"
+                />
+            </div>
+
+            <!-- ⑥ ブース（自動・変更可） -->
+            <div class="nrp__block">
+                <span class="nrp__block-label">ブース</span>
+                <!-- 空いているブースを自動で提案し、別の空きブースへ変更もできる（Task 11-28）。
+                     未選択のまま予約すると、メニューで使えるブースのうち空いている1つを確定する。 -->
+                <v-select
+                    v-model="selectedBoothId"
+                    :items="boothOptions"
+                    item-title="name"
+                    item-value="id"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    clearable
+                    :placeholder="MESSAGES.bookingResources.boothAuto"
+                    data-testid="nrp-booth"
+                />
+                <p v-if="form.errors.booth_id" class="nrp__error">{{ form.errors.booth_id }}</p>
+            </div>
+
+            <!-- ⑦ インターバル（予約の後ろに確保） -->
+            <div class="nrp__block">
+                <span class="nrp__block-label">インターバル</span>
+                <div class="nrp__buffers" role="radiogroup" aria-label="インターバル">
+                    <button
+                        v-for="opt in BUFFER_OPTIONS"
+                        :key="opt.value"
+                        type="button"
+                        class="nrp__buffer"
+                        :class="{ 'nrp__buffer--active': form.buffer_min === opt.value }"
+                        role="radio"
+                        :aria-checked="form.buffer_min === opt.value"
+                        @click="form.buffer_min = opt.value"
+                    >
+                        {{ opt.label }}
+                    </button>
+                </div>
+            </div>
+
             <!-- ⑧ 予約備考 -->
             <div class="nrp__block">
                 <span class="nrp__block-label">予約備考</span>
@@ -835,15 +835,24 @@ function submit(): void {
                 />
             </div>
 
-            <button type="button" class="nrp__switch" @click="emit('switchToBlock')">
-                <v-icon icon="mdi-clock-plus-outline" size="14" />
-                <span>代わりに予定（休憩など）を入れる</span>
-                <v-icon icon="mdi-chevron-right" size="14" class="nrp__switch-arrow" />
-            </button>
+            <!-- 予約ではない「スタッフ予定」（休憩・清掃など）は控えめな補助操作にする（Task 11-30）。 -->
+            <div class="nrp__secondary">
+                <v-btn variant="text" size="x-small" prepend-icon="mdi-calendar-clock-outline" data-testid="switch-to-block" @click="emit('switchToBlock')">
+                    {{ MESSAGES.schedule.addStaffBlock }}
+                </v-btn>
+            </div>
 
             <p v-if="reservationConflictError" class="nrp__error">{{ reservationConflictError }}</p>
 
         <template #footer>
+            <!-- 予約内容の確認（作成ボタンの直前に1〜2行で） -->
+            <div v-if="form.starts_at && selectedService" class="nrp__summary" data-testid="nrp-summary">
+                <strong>{{ timeLabel(form.starts_at) }}〜{{ selectedEndLabel }}</strong>
+                <span>{{ selectedService.name }}</span>
+                <span v-if="selectedStaffName">{{ selectedStaffName }}<template v-if="form.is_staff_requested">（指名）</template></span>
+                <span>{{ selectedBoothName ?? MESSAGES.bookingResources.boothAuto }}</span>
+                <span v-if="form.buffer_min > 0" class="nrp__summary-muted">{{ MESSAGES.visitCompletion.bufferAfter.replace('{min}', String(form.buffer_min)) }}</span>
+            </div>
             <v-btn
                 color="primary"
                 variant="flat"
@@ -1145,6 +1154,26 @@ function submit(): void {
     margin-left: 6px;
     font-weight: 500;
     font-size: 0.72rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.nrp__secondary {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -4px;
+}
+
+.nrp__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    margin-bottom: 8px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: rgb(var(--v-theme-on-surface));
+}
+
+.nrp__summary-muted {
     color: rgba(var(--v-theme-on-surface), 0.6);
 }
 

@@ -71,6 +71,8 @@ export const MESSAGES = {
     /** ブッキングボードの予定 */
     schedule: {
         bufferSegment: 'インターバル（終了後{min}分）',
+        addStaffBlock: 'スタッフ予定を追加',
+        staffBlock: 'スタッフ予定（休憩など）',
         extend: '延長',
         extendTitle: '予約を延長しますか？',
         extendHint: '延長後の時間でスタッフ・ブース・次の予約・インターバルが空いている時だけ延長できます。',
