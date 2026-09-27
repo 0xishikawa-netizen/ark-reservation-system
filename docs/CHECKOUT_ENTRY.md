@@ -65,3 +65,10 @@
   - admin へ未付与の全権限を付与する。
   - `reservations.manage` を持つロールへ `checkouts.manage` を付与する。
 - 「施術料」追加ボタンの明細が `service_id` を持たず、明細名が空になる不具合を修正した（コース別集計に必要）。
+
+## 来店の営業日（全面検証 2026-09-27）
+
+- 予約ありの来店の営業日（`visits.business_date`）は、予約日（`reservations.starts_at` の JST 壁時計の日付）とする。来店・会計入力の下書き（`CheckoutEntryService::openForReservation`）と、会計なしの来店完了・下書きなしの完了（`VisitCompletionService::completeReservation`）で同じ規則にした。
+- 以前は下書きなしで完了すると完了操作の日付を使っていたため、閉店後・翌日にまとめて完了した来店だけが翌日の日計・月計に入り、施術実績（予約日の時刻）と日付が食い違っていた。
+- 予約なし来店は従来どおり、作成時に選んだ営業日を使う。
+- 完了済みの来店は変更できないため、既存データの営業日は補正しない（推測 backfill をしない）。

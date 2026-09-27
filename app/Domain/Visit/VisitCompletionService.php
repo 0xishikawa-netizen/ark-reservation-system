@@ -86,7 +86,10 @@ final class VisitCompletionService
 
             if ($visit === null) {
                 $visit = $this->visitFacts->createDraft($customer, $lockedReservation, [
-                    'business_date' => $this->businessTime->businessDate($completedAt)->toDateString(),
+                    // 予約あり来店の営業日は施術を行った日＝予約日（JSTの壁時計）。来店・会計入力の下書き
+                    // （CheckoutEntryService::openForReservation）と同じ規則にする。以前は完了操作の日付を使っていたため、
+                    // 閉店後・翌日にまとめて完了すると、来店だけが翌日の日計・月計へずれていた（全面検証 2026-09-27）。
+                    'business_date' => $lockedReservation->starts_at->format('Y-m-d'),
                     'primary_staff_id' => $lockedReservation->staff_id,
                     'primary_staff_name_snapshot' => $lockedReservation->staff?->display_name,
                     'completion_operation_id' => $operationId,

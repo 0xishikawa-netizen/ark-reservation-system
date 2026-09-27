@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Visit;
 
+use App\Domain\Accounting\CheckoutEntryService;
 use App\Domain\Reporting\TimeBandUtilizationService;
 use App\Domain\Visit\VisitCompletionService;
 use App\Enums\Accounting\CheckoutStatus;
@@ -15,6 +16,7 @@ use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Ticket\TicketNoShowPolicy;
 use App\Enums\Ticket\TicketReservationUsageStatus;
 use App\Enums\Ticket\TicketTransactionType;
+use App\Enums\Visit\CheckoutExemptionReason;
 use App\Enums\Visit\VisitStatus;
 use App\Models\Checkout;
 use App\Models\CheckoutLine;
@@ -67,7 +69,8 @@ class VisitCompletionServiceTest extends TestCase
 
         $this->assertSame(ReservationStatus::Completed, $result->reservation->status);
         $this->assertSame(VisitStatus::Completed, $result->visit->status);
-        $this->assertSame('2026-09-25', $result->visit->business_date->toDateString());
+        // 営業日は予約日（9/24 10:00 の予約を 9/25 0:30 JST に完了しても 9/24）。
+        $this->assertSame('2026-09-24', $result->visit->business_date->toDateString());
         $this->assertNull($result->visit->started_at);
         $this->assertSame($staff->user_id, $result->visit->primary_staff_id);
         $this->assertSame('主担当', $result->visit->primary_staff_name_snapshot);
@@ -135,11 +138,29 @@ class VisitCompletionServiceTest extends TestCase
         $this->assertSame(29, $visit->fresh()->first_visit_age_years_snapshot);
     }
 
+    /**
+     * 全面検証（2026-09-27）の再発防止：閉店後・翌日に「会計なしで来店完了」しても、来店は予約日の日計に入る。
+     * 来店・会計の下書きを先に開いた場合（CheckoutEntryService）と同じ営業日になる。
+     */
+    public function test_late_completion_keeps_the_reservation_date_like_the_checkout_entry_path(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-25 01:00:00', 'UTC'));
+        $direct = $this->completion()->completeReservation($this->reservation(), exemption: CheckoutExemptionReason::Free)->visit;
+        $viaEntry = app(CheckoutEntryService::class)->openForReservation($this->reservation(), null);
+        $viaEntry = $this->completion()->completeReservation(Reservation::query()->findOrFail($viaEntry->reservation_id))->visit;
+
+        $this->assertSame('2026-09-24', $direct->business_date->toDateString());
+        $this->assertSame($direct->business_date->toDateString(), $viaEntry->business_date->toDateString());
+        $this->assertSame(CheckoutExemptionReason::Free, $direct->checkout_exemption_reason);
+        // 施術実績も予約日のまま（来店と施術の日付が食い違わない）。
+        $this->assertSame('2026-09-24', $direct->treatments()->firstOrFail()->actual_started_at->timezone('Asia/Tokyo')->toDateString());
+    }
+
     public function test_first_visit_age_uses_tokyo_business_date_across_utc_midnight(): void
     {
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-24 15:30:00', 'UTC'));
         $customer = Customer::factory()->create(['birthday' => '1996-09-25']);
-        $visit = $this->completion()->completeReservation($this->reservation($customer))->visit;
+        $visit = $this->completion()->completeReservation($this->reservation($customer, startsAt: '2026-09-25 09:00:00'))->visit;
 
         $this->assertSame('2026-09-25', $visit->business_date->toDateString());
         $this->assertSame(30, $visit->first_visit_age_years_snapshot);
