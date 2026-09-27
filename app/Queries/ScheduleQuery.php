@@ -74,6 +74,7 @@ final class ScheduleQuery
                 'reservations.booth_id',
                 'reservations.starts_at',
                 'reservations.ends_at',
+                'reservations.buffer_min',
                 'reservations.status',
                 'reservations.source',
                 'reservations.version',
@@ -118,6 +119,8 @@ final class ScheduleQuery
                 'booth_id' => $row->booth_id === null ? null : (int) $row->booth_id,
                 'starts_at' => (string) $row->starts_at,
                 'ends_at' => (string) $row->ends_at,
+                // 終了後インターバル（Task 11-29）。ends_at はこれを含む占有終了。予約時間は ends_at − buffer。
+                'buffer_min' => (int) $row->buffer_min,
                 'status' => (string) $row->status,
                 'source' => (string) $row->source,
                 'version' => (int) $row->version,

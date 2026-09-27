@@ -18,7 +18,7 @@ class VisitTreatment extends Model
     protected $fillable = [
         'visit_id', 'service_id', 'analysis_category_id', 'service_name_snapshot',
         'analysis_category_code_snapshot', 'analysis_category_name_snapshot', 'status',
-        'actual_started_at', 'actual_ended_at', 'actual_minutes', 'sort_order', 'operation_key',
+        'actual_started_at', 'actual_ended_at', 'actual_minutes', 'sort_order', 'operation_key', 'booth_id',
     ];
 
     protected static function booted(): void

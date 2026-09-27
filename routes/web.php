@@ -371,6 +371,10 @@ Route::middleware([
     Route::patch('reservations/{reservation}/no-show', [AdminReservationController::class, 'noShow'])
         ->middleware('can:reservations.manage')
         ->name('reservations.no-show');
+    // 予約の延長（Task 11-29）。延長後の時間帯で競合を再判定し、空いていなければ保存しない。
+    Route::post('reservations/{reservation}/extend', [AdminReservationController::class, 'extend'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.extend');
     Route::get('customers', [CustomerController::class, 'index'])
         ->name('customers.index');
     Route::get('customers/{customer}/summary', [CustomerController::class, 'summary'])

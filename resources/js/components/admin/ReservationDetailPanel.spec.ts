@@ -17,7 +17,6 @@ const panelData = {
         customer_id: 20,
         date: '2026-09-22',
         starts_at: '2026-09-22 10:00:00',
-        ends_at: '2026-09-22 11:00:00',
         service_id: 30,
         service_name: 'パーソナル60分',
         staff_id: 40,
@@ -36,6 +35,10 @@ const panelData = {
         payment: null,
         can_complete: true,
         visit_entry_url: '/admin/reservations/10/visit',
+        buffer_min: 5,
+        ends_at: '2026-09-22 11:05:00',
+        can_extend: true,
+        extension_services: [{ id: 31, name: 'はり30分' }],
         can_cancel: true,
         can_no_show: true,
     },
@@ -150,6 +153,22 @@ describe('ReservationDetailPanel', () => {
             { exemption_reason: 'prepaid' },
             expect.any(Object),
         );
+    });
+
+    it('shows the reservation time without the interval and extends with minutes and service (Task 11-29)', async () => {
+        const wrapper = await mountPanel();
+        router.post.mockClear();
+        expect(wrapper.text()).toContain('10:00〜11:00（終了後 5分）');
+
+        await wrapper.find('button[aria-label="その他の操作"]').trigger('click');
+        await nextTick();
+        await body().find('[data-testid="extend-reservation"]').trigger('click');
+        await nextTick();
+        const dialog = body().find('.v-overlay--active .v-card');
+        expect(dialog.text()).toContain('+30分');
+        const submit = dialog.findAll('button').find((button) => button.text().includes('延長する'));
+        await submit!.trigger('click');
+        expect(router.post).toHaveBeenCalledWith('/admin/reservations/10/extend', { minutes: 30, service_id: null, version: 0 }, expect.any(Object));
     });
 
     it('hides the current reservation rebook action without manage permission', async () => {

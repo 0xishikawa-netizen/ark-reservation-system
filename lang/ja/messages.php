@@ -99,6 +99,8 @@ return [
         'booth_unavailable' => 'このブースは現在利用できません。',
         'booth_not_for_service' => 'このメニューでは選択したブースを使えません。メニューに設定されたブースから選んでください。',
         'no_booth_available' => 'この時間はメニューで使えるブースが空いていません。',
+        'extension_minutes_invalid' => '延長する時間（分）を選んでください。',
+        'extended' => '予約を:minutes分延長しました。',
         'staff_not_qualified' => 'このスタッフはこの施術に必要な資格を登録していないため担当できません。',
         'booth_block_overlap' => 'この時間はブースの予定（清掃・メンテナンス等）と重なっています。',
         'past_datetime' => '過去の日時は予約できません。',
@@ -343,5 +345,7 @@ return [
         'tender_allocation_mismatch' => '支払ごとの施術・物販の配分合計が支払額と一致しません。',
         'tender_allocation_category_mismatch' => '施術・物販それぞれの支払配分合計が明細の税込額と一致しません。',
         'tender_allocation_required' => '施術と物販がある会計で支払が複数の場合は、各支払の物販分を入力してください。',
+        'exceeds_reserved_minutes' => '施術の合計（:actual分）が予約の時間（:reserved分）を超えています。予約を延長してから保存してください。',
+        'staff_not_qualified' => ':staff さんは「:service」に必要な資格が登録されていないため担当できません。',
     ],
 ];

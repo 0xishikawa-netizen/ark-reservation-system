@@ -494,14 +494,17 @@ watch(
     },
 );
 
-/** 選択中の枠の終了時刻（施術時間＋バッファ）。バッファの効果を数字で見せる。 */
+/**
+ * 選択中の予約の終了時刻（施術時間だけ）。インターバルは予約の後ろの別区間なので含めない（Task 11-29）。
+ * 例：14:00開始・60分・インターバル5分 → 予約 14:00〜15:00、ブロック 15:00〜15:05。
+ */
 const selectedEndLabel = computed<string | null>(() => {
     if (form.starts_at === null || selectedService.value === null) {
         return null;
     }
 
     const [h, m] = form.starts_at.slice(11, 16).split(':').map(Number);
-    const total = h * 60 + m + selectedService.value.duration_min + form.buffer_min;
+    const total = h * 60 + m + selectedService.value.duration_min;
 
     return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 });
@@ -581,7 +584,7 @@ function submit(): void {
                     <span class="nrp__slotbox-date">{{ fmtDay(date) }}</span>
                     <span v-if="dateTimeLocked" class="nrp__slotbox-label">開始時間</span>
                     <span v-if="form.starts_at" class="nrp__slotbox-time">
-                        {{ timeLabel(form.starts_at) }}<template v-if="selectedEndLabel">〜{{ selectedEndLabel }}</template>
+                        {{ timeLabel(form.starts_at) }}<template v-if="selectedEndLabel">〜{{ selectedEndLabel }}</template><small v-if="selectedEndLabel && form.buffer_min > 0" class="nrp__buffer-note" data-testid="nrp-buffer-note">{{ MESSAGES.visitCompletion.bufferAfter.replace('{min}', String(form.buffer_min)) }}</small>
                     </span>
                     <span v-else-if="loadingSlots" class="nrp__slotbox-empty">{{ MESSAGES.common.loading }}</span>
                     <span v-else class="nrp__slotbox-empty">--:-- 〜 --:--</span>
@@ -1138,6 +1141,13 @@ function submit(): void {
 }
 
 /* 施術後にあける時間（バッファ）の選択チップ。 */
+.nrp__buffer-note {
+    margin-left: 6px;
+    font-weight: 500;
+    font-size: 0.72rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
 .nrp__buffers {
     display: flex;
     gap: 6px;

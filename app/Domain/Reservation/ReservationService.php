@@ -237,6 +237,83 @@ final class ReservationService
         return $reservation;
     }
 
+    /**
+     * 予約を延長する（Task 11-29）。例：60分トレーニングの後に30分はりを追加して合計90分。
+     * 延長後の時間帯（終了後インターバルを含む）でスタッフの勤務・予定ブロック・他予約、ブースの空き、
+     * 追加する施術の担当可否・資格・利用ブースを改めて確認し、1つでも満たさなければ保存しない。
+     *
+     * @throws ValidationException|SlotUnavailableException|StaleReservationException
+     */
+    public function extend(int $reservationId, int $minutes, ?int $serviceId, int $expectedVersion, ?int $actorUserId): Reservation
+    {
+        if ($minutes < 1 || $minutes > 180) {
+            $this->throwValidation('minutes', __('messages.reservation.extension_minutes_invalid'));
+        }
+
+        try {
+            $reservation = DB::transaction(function () use ($reservationId, $minutes, $serviceId, $expectedVersion, $actorUserId): Reservation {
+                $reservation = Reservation::query()->whereKey($reservationId)->lockForUpdate()->firstOrFail();
+                if ($reservation->version !== $expectedVersion) {
+                    throw new StaleReservationException;
+                }
+                if ($reservation->status !== ReservationStatus::Confirmed) {
+                    $this->throwValidation('status', __('messages.reservation.only_confirmed_editable'));
+                }
+                $baseService = $reservation->service()->firstOrFail();
+                $segmentService = $serviceId !== null ? Service::query()->findOrFail($serviceId) : $baseService;
+                if ($reservation->staff_id !== null && ! $this->resources->canPerform($segmentService, (int) $reservation->staff_id)) {
+                    $this->throwValidation('staff_id', $this->resources->isQualified($segmentService, (int) $reservation->staff_id)
+                        ? __('messages.reservation.staff_not_assigned')
+                        : __('messages.reservation.staff_not_qualified'));
+                }
+                // 予約のブースは延長後の時間帯も押さえ続ける（空きは下で再判定）。延長分を別のブース（はりのベッド等）で
+                // 行った場合は、来店・会計の施術実績に実際のブースを記録する。
+
+                $bookedMinutes = $reservation->bookedMinutes() + $minutes;
+                $startsAt = CarbonImmutable::parse($reservation->starts_at->format('Y-m-d H:i:s'));
+                $endsAt = $startsAt->addMinutes($bookedMinutes + (int) $reservation->buffer_min);
+                $this->validateReservationDetails(
+                    service: $baseService,
+                    staffId: $reservation->staff_id,
+                    boothId: $reservation->booth_id,
+                    startsAt: $startsAt,
+                    endsAt: $endsAt,
+                    adminContext: true,
+                );
+
+                ReservationResourceSlot::query()->where('reservation_id', $reservation->id)->delete();
+                ReservationResourceSlot::insert($this->slotRows(
+                    reservation: $reservation,
+                    staffId: $reservation->staff_id,
+                    boothId: $reservation->booth_id,
+                    slots: $this->occupiedSlots($startsAt, $endsAt, true),
+                ));
+                $reservation->update(['ends_at' => $endsAt, 'version' => $reservation->version + 1]);
+                $reservation->segments()->create([
+                    'service_id' => $segmentService->id,
+                    'minutes' => $minutes,
+                    'kind' => 'extension',
+                    'sort_order' => (int) $reservation->segments()->max('sort_order') + 1,
+                    'created_by' => $actorUserId,
+                ]);
+                $this->outbox->record($reservation, SyncOperation::Update);
+
+                return $reservation;
+            });
+        } catch (QueryException $exception) {
+            $this->throwSlotConflictForIntegrityViolation($exception);
+        }
+
+        $this->auditLogger->log(
+            'reservation.extended',
+            $reservation,
+            "予約延長 #{$reservation->id} +{$minutes}分 → {$reservation->ends_at->format('H:i')}（インターバル含む）",
+            $this->actor($actorUserId),
+        );
+
+        return $reservation;
+    }
+
     /** @throws ValidationException */
     public function cancel(
         Reservation $reservation,

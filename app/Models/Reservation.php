@@ -66,6 +66,18 @@ class Reservation extends Model
         return $this->belongsTo(Staff::class, 'staff_id', 'user_id');
     }
 
+    /** 延長などで追加した予定構成（Task 11-29）。 */
+    public function segments(): HasMany
+    {
+        return $this->hasMany(ReservationSegment::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    /** 予約が確保している施術分数（延長を含み、終了後インターバルを除く）。 */
+    public function bookedMinutes(): int
+    {
+        return max(1, (int) $this->starts_at->diffInMinutes($this->ends_at) - (int) $this->buffer_min);
+    }
+
     public function booth(): BelongsTo
     {
         return $this->belongsTo(Booth::class);

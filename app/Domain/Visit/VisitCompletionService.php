@@ -337,30 +337,36 @@ final class VisitCompletionService
      */
     public function seedTreatmentsFromReservation(Visit $visit, Reservation $reservation, string $operationKeyPrefix, ?Authenticatable $actor): Collection
     {
-        $reservation->loadMissing(['service.analysisCategory', 'staff']);
-        // 現行予約は予約作成時の標準時間＋bufferでends_atを確定している。その予約枠からbufferを除いた時間を
-        // 初期実績にする（既存completedのbackfillには使わない）。予約後にservice.duration_minが変更されても
-        // 当時確保した枠を再現できる。
-        $scheduledMinutes = max(
-            1,
-            (int) $reservation->starts_at->diffInMinutes($reservation->ends_at) - (int) $reservation->buffer_min,
-        );
+        $reservation->loadMissing(['service.analysisCategory', 'staff', 'segments.service.analysisCategory']);
+        // 現行予約は予約作成時の標準時間＋bufferでends_atを確定している。その予約枠からbufferを除いた時間
+        // （延長を含む）を初期実績にする（既存completedのbackfillには使わない）。予約後にservice.duration_minが
+        // 変更されても当時確保した枠を再現できる。延長で追加した予定構成（はり30分など）は別の施術として並べる。
+        $scheduledMinutes = $reservation->bookedMinutes();
+        $segments = $reservation->segments;
+        $baseMinutes = max(1, $scheduledMinutes - (int) $segments->sum('minutes'));
         // 予約台帳のstarts_atはJSTの壁時計値。施術実績はUTC instantで保存し、
         // 時間帯別稼働率が9時間ずれて集計されないようにする。
-        $actualStart = CarbonImmutable::parse(
+        $cursor = CarbonImmutable::parse(
             $reservation->starts_at->format('Y-m-d H:i:s'),
             $this->businessTime->timezone(),
         )->utc();
-        $treatment = $this->visitFacts->addTreatment($visit, $reservation->service, [
-            'actual_minutes' => $scheduledMinutes,
-            'actual_started_at' => $actualStart,
-            'actual_ended_at' => $actualStart->addMinutes($scheduledMinutes),
-            'sort_order' => 0,
-            'operation_key' => "{$operationKeyPrefix}:treatment:0",
-        ], $actor);
-        $this->assignReservationStaff($treatment, $reservation, $actor);
+        $plan = [[$reservation->service, $baseMinutes], ...$segments->map(fn ($segment): array => [$segment->service, (int) $segment->minutes])->all()];
+        $treatments = collect();
+        foreach ($plan as $position => [$service, $minutes]) {
+            $treatment = $this->visitFacts->addTreatment($visit, $service, [
+                'actual_minutes' => $minutes,
+                'actual_started_at' => $cursor,
+                'actual_ended_at' => $cursor->addMinutes($minutes),
+                'sort_order' => $position,
+                'booth_id' => $reservation->booth_id,
+                'operation_key' => "{$operationKeyPrefix}:treatment:{$position}",
+            ], $actor);
+            $this->assignReservationStaff($treatment, $reservation, $actor);
+            $treatments->push($treatment);
+            $cursor = $cursor->addMinutes($minutes);
+        }
 
-        return collect([$treatment]);
+        return $treatments;
     }
 
     private function assignReservationStaff(VisitTreatment $treatment, Reservation $reservation, ?Authenticatable $actor): void

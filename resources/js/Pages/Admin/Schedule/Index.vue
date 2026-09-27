@@ -101,7 +101,10 @@ interface ScheduleReservation {
     staff_id: number | null;
     booth_id: number | null;
     starts_at: string;
+    /** 占有の終わり（終了後インターバルを含む）。 */
     ends_at: string;
+    /** 終了後インターバル（分）。予約（施術）の終わりは ends_at − buffer_min。 */
+    buffer_min?: number;
     status: string;
     source: string;
     version: number;
@@ -518,6 +521,16 @@ function reservationStyle(
     };
 }
 
+/** 予約（施術）の終了時刻。インターバルは予約の後ろに別区間として表示する（Task 11-29）。 */
+function serviceEndLabel(reservation: ScheduleReservation): string {
+    return minuteToLabel(timeToMinute(reservation.ends_at.slice(11, 16)) - (reservation.buffer_min ?? 0));
+}
+
+/** カード内でインターバル区間（右端）を描く幅。 */
+function bufferStyle(reservation: ScheduleReservation): Record<string, string> {
+    return { width: `${(reservation.buffer_min ?? 0) * pixelsPerMinute.value}px` };
+}
+
 function reservationsFor(
     lane: { id: number | null; kind: "staff" | "booth" },
     day: string,
@@ -639,7 +652,7 @@ function weekNonWorkingRects(lane: ScheduleLane, day: string): WeekRect[] {
 }
 
 function weekReservationTooltip(reservation: ScheduleReservation): string {
-    return `${reservation.starts_at.slice(11, 16)}〜${reservation.ends_at.slice(11, 16)} ${reservation.customer_name} ／ ${reservation.service_name}`;
+    return `${reservation.starts_at.slice(11, 16)}〜${serviceEndLabel(reservation)} ${reservation.customer_name} ／ ${reservation.service_name}`;
 }
 
 function weekBlockTooltip(block: ScheduleBlock): string {
@@ -3969,6 +3982,14 @@ function menuSegments(lane: ScheduleLane): {
                                                 )
                                             "
                                         >
+                                            <!-- 終了後インターバル（予約の後ろの別区間。次の予約はここから後） -->
+                                            <span
+                                                v-if="(reservation.buffer_min ?? 0) > 0"
+                                                class="reservation-buffer"
+                                                :style="bufferStyle(reservation)"
+                                                :title="MESSAGES.schedule.bufferSegment.replace('{min}', String(reservation.buffer_min))"
+                                                aria-hidden="true"
+                                            />
                                             <span
                                                 v-if="
                                                     drag?.id ===
@@ -4081,10 +4102,7 @@ function menuSegments(lane: ScheduleLane): {
                                                             16,
                                                         )
                                                     }}–{{
-                                                        reservation.ends_at.slice(
-                                                            11,
-                                                            16,
-                                                        )
+                                                        serviceEndLabel(reservation)
                                                     }}
                                                 </span>
                                             </span>
@@ -5449,6 +5467,17 @@ function menuSegments(lane: ScheduleLane): {
         rgb(var(--v-theme-on-surface), 0.1) 12px
     );
     pointer-events: none;
+}
+
+/* 終了後インターバル：予約カードの右端に、施術と区別できる斜線の区間として描く（Task 11-29）。 */
+.reservation-buffer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    border-left: 1px dashed rgba(15, 23, 42, 0.25);
+    background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.85) 0 3px, rgba(148, 163, 184, 0.35) 3px 6px);
 }
 
 .reservation-card {

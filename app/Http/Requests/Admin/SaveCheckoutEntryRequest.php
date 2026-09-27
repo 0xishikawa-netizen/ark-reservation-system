@@ -27,6 +27,7 @@ final class SaveCheckoutEntryRequest extends FormRequest
             'nominated_staff_ids.*' => ['integer', 'distinct', 'exists:staff,user_id'],
             'treatments' => ['nullable', 'array', 'max:20'],
             'treatments.*.service_id' => ['nullable', 'integer', 'exists:services,id'],
+            'treatments.*.booth_id' => ['nullable', 'integer', 'exists:booths,id'],
             'treatments.*.actual_minutes' => ['required', 'integer', 'min:1', 'max:720'],
             'treatments.*.started_at' => $time,
             'treatments.*.staff' => ['nullable', 'array', 'max:10'],

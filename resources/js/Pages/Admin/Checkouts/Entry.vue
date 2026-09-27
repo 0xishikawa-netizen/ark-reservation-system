@@ -16,7 +16,7 @@ interface ServiceMaster extends Priced { duration_min: number; requires_staff: b
 interface TaxCategoryMaster { id: number; name: string; rate_bps: number | null }
 interface Option { id: number; name: string }
 interface StaffRow { staff_id: number | null; actual_minutes: number; started_at: string | null }
-interface TreatmentRow { service_id: number | null; actual_minutes: number; started_at: string | null; staff: StaffRow[] }
+interface TreatmentRow { service_id: number | null; actual_minutes: number; started_at: string | null; booth_id?: number | null; staff: StaffRow[] }
 interface Allocation { staff_id: number; amount: number }
 interface LineRow {
     item_type: ItemType; service_id: number | null; product_id: number | null; ticket_product_id: number | null;
@@ -28,7 +28,7 @@ interface VisitProps {
     id: number; status: string; reservation_id: number | null; reservation_starts_at: string | null; business_date: string;
     primary_staff_id: number | null; nominations_recorded: boolean; nominated_staff_ids: number[];
     reservation_staff_requested: boolean | null; editable: boolean;
-    reservation?: { starts_at: string; ends_at: string; buffer_min: number; service_name: string | null; staff_name: string | null;
+    reservation?: { booked_minutes?: number; starts_at: string; ends_at: string; buffer_min: number; service_name: string | null; staff_name: string | null;
         booth_name: string | null; is_staff_requested: boolean; payment_method: string | null } | null;
     treatments: (TreatmentRow & { service_name: string | null; category: string | null })[];
 }
@@ -41,6 +41,7 @@ const props = defineProps<{
     customer: { id: number; name: string | null; member_no: string; url: string } | null;
     date: string;
     services: ServiceMaster[];
+    booths?: Option[];
     products: Priced[];
     ticketProducts: Priced[];
     membershipPlans: Priced[];
@@ -62,7 +63,7 @@ const nominated = ref<number[]>(
         : (props.visit?.reservation_staff_requested && props.visit.primary_staff_id ? [props.visit.primary_staff_id] : []),
 );
 const treatments = ref<TreatmentRow[]>((props.visit?.treatments ?? []).map((row) => ({
-    service_id: row.service_id, actual_minutes: row.actual_minutes, started_at: row.started_at,
+    service_id: row.service_id, actual_minutes: row.actual_minutes, started_at: row.started_at, booth_id: row.booth_id ?? null,
     staff: row.staff.map((staff) => ({ ...staff })),
 })));
 const lines = ref<LineRow[]>((props.checkout?.lines ?? []).map((line) => ({ ...line, allocations: line.allocations.map((a) => ({ ...a })) })));
@@ -93,6 +94,7 @@ function addTreatment(): void {
         service_id: service?.id ?? null,
         actual_minutes: service?.duration_min ?? 60,
         started_at: props.visit?.reservation_starts_at ?? null,
+        booth_id: treatments.value[treatments.value.length - 1]?.booth_id ?? null,
         staff: primaryStaffId.value ? [{ staff_id: primaryStaffId.value, actual_minutes: service?.duration_min ?? 60, started_at: null }] : [],
     });
     touch();
@@ -167,14 +169,28 @@ const lineSplit = (line: LineRow) => splitInclusive(lineGross(line), rateOf(line
 const allocationOk = (line: LineRow): boolean => !line.is_staff_allocatable
     || line.allocations.reduce((sum, a) => sum + Number(a.amount || 0), 0) === lineGross(line);
 
+/**
+ * 担当時間で按分する。対象施術を選んでいればその施術の担当時間、未選択なら来店の全施術
+ * （T30＋M15＋A15 のような構成全体）の担当時間をスタッフごとに合計して按分する（Task 11-29）。
+ */
 function allocateByMinutes(line: LineRow): void {
-    const row = line.treatment_index === null ? null : treatments.value[line.treatment_index];
-    if (!row || row.staff.length === 0) return;
-    const staff = row.staff.filter((s) => s.staff_id !== null);
-    const amounts = allocateByWeight(lineGross(line), staff.map((s) => Number(s.actual_minutes)));
-    line.allocations = staff.map((s, index) => ({ staff_id: s.staff_id as number, amount: amounts[index] }));
+    const rows = line.treatment_index === null ? treatments.value : [treatments.value[line.treatment_index]].filter(Boolean);
+    const minutesByStaff = new Map<number, number>();
+    for (const row of rows) {
+        for (const s of row.staff) {
+            if (s.staff_id !== null) minutesByStaff.set(s.staff_id, (minutesByStaff.get(s.staff_id) ?? 0) + Number(s.actual_minutes));
+        }
+    }
+    if (minutesByStaff.size === 0) return;
+    const staffIds = [...minutesByStaff.keys()];
+    const amounts = allocateByWeight(lineGross(line), staffIds.map((id) => minutesByStaff.get(id) ?? 0));
+    line.allocations = staffIds.map((id, index) => ({ staff_id: id, amount: amounts[index] }));
     touch();
 }
+
+/** 実施施術の合計分数と、予約で確保した分数（延長を含む）。超えている時は延長が必要。 */
+const treatmentTotal = computed(() => treatments.value.reduce((sum, row) => sum + Number(row.actual_minutes || 0), 0));
+const reservedMinutes = computed(() => props.visit?.reservation?.booked_minutes ?? null);
 
 const retailGross = computed(() => lines.value.filter((l) => l.item_type === 'product').reduce((sum, l) => sum + lineGross(l), 0));
 const treatmentGross = computed(() => lines.value.filter((l) => l.item_type !== 'product').reduce((sum, l) => sum + lineGross(l), 0));
@@ -304,6 +320,8 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                             density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
                         <v-text-field v-model.number="row.actual_minutes" type="number" min="1" :label="labels.minutes" :readonly="!visitEditable"
                             density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
+                        <v-select v-if="(booths ?? []).length > 0" v-model="row.booth_id" :items="booths ?? []" item-title="name" item-value="id" :label="MESSAGES.checkout.booth"
+                            :readonly="!visitEditable" density="compact" variant="outlined" hide-details clearable class="field-sm" @update:model-value="touch" />
                         <v-btn v-if="visitEditable" icon="mdi-delete-outline" variant="text" size="small" :aria-label="labels.remove" @click="treatments.splice(index, 1); touch()" />
                     </div>
                     <div v-for="(staffRow, staffIndex) in row.staff" :key="staffIndex" class="staff-row indent">
@@ -320,7 +338,14 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                         <span v-if="!staffMinutesOk(row)" class="warn" role="alert">{{ labels.staffMinutesMismatch }}</span>
                     </div>
                 </div>
-                <v-btn v-if="visitEditable" variant="outlined" color="primary" size="small" prepend-icon="mdi-plus" data-testid="add-treatment" @click="addTreatment">{{ labels.addTreatment }}</v-btn>
+                <div class="composition-row">
+                    <v-btn v-if="visitEditable" variant="outlined" color="primary" size="small" prepend-icon="mdi-plus" data-testid="add-treatment" @click="addTreatment">{{ labels.addTreatment }}</v-btn>
+                    <!-- 実施施術の合計と予約の時間。超える時は予約の延長（競合確認つき）が必要。 -->
+                    <span v-if="reservedMinutes !== null" class="composition-total" :class="{ warn: treatmentTotal > reservedMinutes }" data-testid="composition-total">
+                        {{ MESSAGES.checkout.compositionTotal.replace('{total}', String(treatmentTotal)).replace('{reserved}', String(reservedMinutes)) }}
+                    </span>
+                    <span v-if="reservedMinutes !== null && treatmentTotal > reservedMinutes" class="warn" role="alert">{{ MESSAGES.checkout.compositionExceeds }}</span>
+                </div>
             </SectionCard>
 
             <SectionCard :title="labels.lines" class="mt-4">
@@ -365,7 +390,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                         </div>
                         <div v-if="checkoutEditable">
                             <v-btn size="small" variant="text" prepend-icon="mdi-plus" @click="line.allocations.push({ staff_id: primaryStaffId ?? staff[0]?.id ?? 0, amount: 0 }); touch()">{{ labels.allocations }}</v-btn>
-                            <v-btn v-if="line.treatment_index !== null" size="small" variant="text" prepend-icon="mdi-scale-balance" @click="allocateByMinutes(line)">{{ labels.allocateByMinutes }}</v-btn>
+                            <v-btn size="small" variant="text" prepend-icon="mdi-scale-balance" @click="allocateByMinutes(line)">{{ labels.allocateByMinutes }}</v-btn>
                         </div>
                         <span v-if="!allocationOk(line)" class="warn" role="alert">{{ labels.allocationMismatch }}</span>
                     </div>
@@ -435,6 +460,8 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
 /* outlined入力の浮きラベルが上の行と重ならないよう、行間を空ける */
 .staff-row { row-gap: 16px; }
 .staff-row + .staff-row, h4 + .staff-row { margin-top: 16px; }
+.composition-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.composition-total { font-size: 0.8125rem; color: rgba(var(--v-theme-on-surface), 0.7); }
 .reservation-summary { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin-top: 8px; font-size: 0.875rem; }
 .treatment, .line { border-top: 1px solid #e4e8ee; padding: 12px 0; }
 .indent { margin-left: 24px; margin-top: 8px; }

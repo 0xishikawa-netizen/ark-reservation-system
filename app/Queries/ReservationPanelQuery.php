@@ -10,6 +10,7 @@ use App\Enums\Reservation\ReservationStatus;
 use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\Reservation;
+use App\Models\Service;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -124,6 +125,7 @@ final class ReservationPanelQuery
             'date' => $reservation->starts_at->toDateString(),
             'starts_at' => $reservation->starts_at->format('Y-m-d H:i:s'),
             'ends_at' => $reservation->ends_at->format('Y-m-d H:i:s'),
+            'buffer_min' => (int) $reservation->buffer_min,
             'service_id' => (int) $reservation->service_id,
             'service_name' => (string) $reservation->service->name,
             'staff_id' => $reservation->staff_id,
@@ -163,7 +165,28 @@ final class ReservationPanelQuery
                 ReservationStatus::PendingExternalSync,
                 ReservationStatus::Confirmed,
             ], true),
+            // 延長（Task 11-29）。担当スタッフが実施でき、必要資格も持つ施術だけを候補にする。
+            'can_extend' => $canManage && $status === ReservationStatus::Confirmed,
+            'extension_services' => $canManage && $status === ReservationStatus::Confirmed
+                ? $this->extensionServices($reservation) : [],
         ];
+    }
+
+    /** @return list<array{id: int, name: string}> */
+    private function extensionServices(Reservation $reservation): array
+    {
+        $query = Service::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id');
+        if ($reservation->staff_id !== null) {
+            $staffId = (int) $reservation->staff_id;
+            $query->whereExists(fn ($assigned) => $assigned->selectRaw('1')->from('service_staff')
+                ->whereColumn('service_staff.service_id', 'services.id')->where('service_staff.staff_id', $staffId))
+                ->whereNotExists(fn ($missing) => $missing->selectRaw('1')->from('qualification_service as qs')
+                    ->whereColumn('qs.service_id', 'services.id')
+                    ->whereNotExists(fn ($held) => $held->selectRaw('1')->from('qualification_staff as qst')
+                        ->whereColumn('qst.qualification_id', 'qs.qualification_id')->where('qst.staff_id', $staffId)));
+        }
+
+        return $query->get(['id', 'name'])->map(static fn (Service $service): array => ['id' => (int) $service->id, 'name' => (string) $service->name])->all();
     }
 
     /**

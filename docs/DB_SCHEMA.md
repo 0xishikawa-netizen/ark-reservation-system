@@ -559,3 +559,7 @@ Task 11-13の`historical_metric_reviews`は過去集計値1件につき差異分
 - `qualification_service`（service_id, qualification_id, unique）：メニューに必要な資格。全部を保有するスタッフだけが担当できる。
 - 施術可能スタッフは既存 `service_staff` をそのまま使う（重複テーブルを作らない）。詳細は `docs/BOOKING_RESOURCES.md`。
 - 追加型 migration `2026_09_27_000007` は、既存環境へ会計権限を用意する（付与の追加のみ）。
+- Task 11-29：
+  - `reservation_segments`（reservation_id, service_id, minutes, kind, sort_order, created_by）：延長などで追加した予定構成。
+  - `visit_treatments.booth_id`（NULL可）：実際に使ったブース。
+  - `reservations.buffer_min` に「予約終了後のインターバル」の列コメントを付けた（列名・値は変えない）。

@@ -26,6 +26,7 @@ interface PanelData {
         date: string;
         starts_at: string;
         ends_at: string;
+        buffer_min?: number;
         service_id: number;
         service_name: string;
         staff_id: number | null;
@@ -51,6 +52,8 @@ interface PanelData {
         visit_entry_url: string | null;
         can_cancel: boolean;
         can_no_show: boolean;
+        can_extend?: boolean;
+        extension_services?: { id: number; name: string }[];
     } | null;
     today_reservation_id: number | null;
     customer: {
@@ -126,7 +129,10 @@ const memoEditing = ref(false);
 const memoDraft = ref("");
 const memoSaving = ref(false);
 
-const confirmMode = ref<null | "cancel" | "no_show" | "no_checkout">(null);
+const confirmMode = ref<null | "cancel" | "no_show" | "no_checkout" | "extend">(null);
+// 延長（Task 11-29）：追加する分数と施術。空いていなければサーバーが保存しない。
+const extendMinutes = ref<number>(30);
+const extendServiceId = ref<number | null>(null);
 // 会計なしで来店完了にする理由（Task 11-27）。通常の施術は「来店・会計」で確定する。
 const exemptionReason = ref<string | null>(null);
 const cancelReason = ref("");
@@ -264,7 +270,15 @@ const timeRange = computed(() => {
         return "";
     }
 
-    return `${r.starts_at.slice(11, 16)}〜${r.ends_at.slice(11, 16)}`;
+    // 予約（施術）の時間を出し、終了後インターバルは別に添える（Task 11-29）。
+    const [h, m] = r.ends_at.slice(11, 16).split(":").map(Number);
+    const end = h * 60 + m - (r.buffer_min ?? 0);
+    const endLabel = `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
+    const buffer = (r.buffer_min ?? 0) > 0
+        ? `（${MESSAGES.visitCompletion.bufferAfter.replace("{min}", String(r.buffer_min))}）`
+        : "";
+
+    return `${r.starts_at.slice(11, 16)}〜${endLabel}${buffer}`;
 });
 
 function fmtDay(iso: string): string {
@@ -409,6 +423,21 @@ function submitConfirm(): void {
         });
     } else if (confirmMode.value === "no_show") {
         runAction(`/admin/reservations/${id}/no-show`);
+    } else if (confirmMode.value === "extend") {
+        actionBusy.value = true;
+        actionError.value = null;
+        router.post(`/admin/reservations/${id}/extend`, {
+            minutes: extendMinutes.value,
+            service_id: extendServiceId.value,
+            version: data.value?.reservation?.version ?? 0,
+        }, {
+            preserveScroll: true,
+            preserveState: true,
+            errorBag: "reservation",
+            onError: (errors) => { actionError.value = firstErrorMessage(errors) ?? MESSAGES.common.actionFailedReload; },
+            onFinish: () => { actionBusy.value = false; confirmMode.value = null; },
+            onSuccess: () => refetch(),
+        });
     } else if (confirmMode.value === "no_checkout" && exemptionReason.value !== null) {
         runAction(`/admin/reservations/${id}/complete`, {
             exemption_reason: exemptionReason.value,
@@ -884,6 +913,13 @@ function submitConfirm(): void {
                             @click="emit('create')"
                         />
                         <v-list-item
+                            v-if="data.reservation?.can_extend"
+                            prepend-icon="mdi-clock-plus-outline"
+                            :title="MESSAGES.schedule.extend"
+                            data-testid="extend-reservation"
+                            @click="extendMinutes = 30; extendServiceId = null; confirmMode = 'extend'"
+                        />
+                        <v-list-item
                             v-if="data.reservation?.can_complete"
                             prepend-icon="mdi-check-circle-outline"
                             :title="MESSAGES.visitCompletion.noCheckoutMenu"
@@ -932,7 +968,9 @@ function submitConfirm(): void {
                             ? "予約をキャンセルしますか？"
                             : confirmMode === "no_checkout"
                               ? MESSAGES.visitCompletion.noCheckoutTitle
-                              : "無断キャンセルにしますか？"
+                              : confirmMode === "extend"
+                                ? MESSAGES.schedule.extendTitle
+                                : "無断キャンセルにしますか？"
                     }}
                 </v-card-title>
                 <v-card-text>
@@ -941,6 +979,25 @@ function submitConfirm(): void {
                         {{ fmtDay(data.reservation.date) }} {{ timeRange }}
                         <br />{{ data.reservation.service_name }}
                     </div>
+                    <template v-if="confirmMode === 'extend'">
+                        <p class="text-body-2 mb-2">{{ MESSAGES.schedule.extendHint }}</p>
+                        <v-btn-toggle v-model="extendMinutes" mandatory density="compact" variant="outlined" class="mb-3" data-testid="extend-minutes">
+                            <v-btn v-for="minutes in [15, 30, 45, 60]" :key="minutes" :value="minutes" size="small">+{{ minutes }}分</v-btn>
+                        </v-btn-toggle>
+                        <v-select
+                            v-model="extendServiceId"
+                            :items="data.reservation.extension_services ?? []"
+                            item-title="name"
+                            item-value="id"
+                            :label="MESSAGES.schedule.extendService"
+                            :placeholder="data.reservation.service_name"
+                            density="compact"
+                            variant="outlined"
+                            clearable
+                            hide-details
+                            data-testid="extend-service"
+                        />
+                    </template>
                     <template v-if="confirmMode === 'no_checkout'">
                         <p class="text-body-2 mb-2">{{ MESSAGES.visitCompletion.noCheckoutHint }}</p>
                         <v-radio-group v-model="exemptionReason" density="compact" hide-details data-testid="exemption-reasons">
@@ -983,7 +1040,9 @@ function submitConfirm(): void {
                                 ? "キャンセルする"
                                 : confirmMode === "no_checkout"
                                   ? MESSAGES.visitCompletion.noCheckoutSubmit
-                                  : "無断キャンセルにする"
+                                  : confirmMode === "extend"
+                                    ? MESSAGES.schedule.extendSubmit
+                                    : "無断キャンセルにする"
                         }}
                     </v-btn>
                 </v-card-actions>

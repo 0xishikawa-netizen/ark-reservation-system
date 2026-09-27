@@ -78,6 +78,8 @@ class CheckoutEntryTest extends TestCase
         $service = Service::factory()->create(['name' => '整体60', 'duration_min' => 60, 'price' => 8800, 'tax_category_id' => $this->standard->id]);
         $product = Product::factory()->create(['name' => '水', 'price' => 110, 'tax_category_id' => $this->reduced->id]);
         $reservation = $this->reservation($service, $staffA);
+        // 60分＋15分の2施術を行うため、予約は75分確保（延長済み）とする（Task 11-29 の上限チェック）。
+        $reservation->forceFill(['ends_at' => CarbonImmutable::parse('2026-09-15 12:45:00', 'UTC')])->save();
 
         $this->actingAs($admin)->post(route('admin.reservations.visit', $reservation))->assertRedirect();
         $visit = Visit::query()->where('reservation_id', $reservation->id)->sole();

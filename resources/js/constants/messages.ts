@@ -70,6 +70,12 @@ export const MESSAGES = {
     },
     /** ブッキングボードの予定 */
     schedule: {
+        bufferSegment: 'インターバル（終了後{min}分）',
+        extend: '延長',
+        extendTitle: '予約を延長しますか？',
+        extendHint: '延長後の時間でスタッフ・ブース・次の予約・インターバルが空いている時だけ延長できます。',
+        extendService: '追加する施術（未選択なら予約メニュー）',
+        extendSubmit: '延長する',
         noVisibleBooths: '表示対象のブースはありません。',
         noBookableStaff: '表示対象の予約受付スタッフはいません。',
         noWorkingStaff: 'この期間に出勤予定のスタッフはいません（勤務枠・休業日の設定を確認してください）。',
@@ -489,6 +495,9 @@ export const MESSAGES = {
     },
     /** 来店・会計入力（Task 11-19） */
     checkout: {
+        booth: 'ブース',
+        compositionTotal: '施術合計 {total}分 ／ 予約 {reserved}分',
+        compositionExceeds: '予約の時間を超えています。予約詳細の「延長」で延長してから保存してください。',
         indexTitle: '来店・会計',
         indexSubtitle: '日別の来店・店頭販売と会計状況',
         entryTitle: '来店・会計入力',

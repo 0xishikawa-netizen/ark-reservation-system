@@ -11,6 +11,7 @@ use App\Enums\Accounting\TenderAllocationCategory;
 use App\Enums\Visit\VisitStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SaveCheckoutEntryRequest;
+use App\Models\Booth;
 use App\Models\Checkout;
 use App\Models\CheckoutLine;
 use App\Models\Customer;
@@ -214,6 +215,8 @@ final class CheckoutEntryController extends Controller
             'staff' => Staff::query()->orderBy('sort_order')->orderBy('user_id')
                 ->get(['user_id', 'display_name'])->map(fn (Staff $staff): array => ['id' => $staff->user_id, 'name' => $staff->display_name])->values(),
             'taxCategories' => $taxCategories,
+            // 実際に使ったブースの選択肢（Task 11-29）。
+            'booths' => Booth::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->get(['id', 'name']),
             'paymentMethods' => PaymentMethod::query()->where('is_enabled', true)->orderBy('display_order')->orderBy('id')
                 ->get(['id', 'code', 'name'])->values(),
             'customerSearchEndpoint' => route('admin.reservations.customer-search'),
@@ -239,6 +242,7 @@ final class CheckoutEntryController extends Controller
             'reservation_staff_requested' => $visit->reservation?->is_staff_requested,
             // 予約の内容（来店・会計入力の見出しに出す。実施内容は施術実績で変更できる）。
             'reservation' => $visit->reservation === null ? null : [
+                'booked_minutes' => $visit->reservation->bookedMinutes(),
                 'starts_at' => $visit->reservation->starts_at->format('H:i'),
                 'ends_at' => $visit->reservation->ends_at->copy()->subMinutes((int) $visit->reservation->buffer_min)->format('H:i'),
                 'buffer_min' => (int) $visit->reservation->buffer_min,
@@ -255,6 +259,7 @@ final class CheckoutEntryController extends Controller
                 'service_name' => $treatment->service_name_snapshot,
                 'category' => $treatment->analysis_category_code_snapshot,
                 'actual_minutes' => $treatment->actual_minutes,
+                'booth_id' => $treatment->booth_id,
                 'started_at' => $time($treatment->actual_started_at),
                 'status' => $treatment->status->value,
                 'staff' => $treatment->staffAssignments->map(fn ($row): array => [

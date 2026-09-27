@@ -381,6 +381,27 @@ final class ReservationController extends Controller
         return back()->with('success', __('messages.reservation.no_show'));
     }
 
+    public function extend(
+        Request $request,
+        Reservation $reservation,
+        ReservationService $reservationService,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'minutes' => ['required', 'integer', 'min:5', 'max:180'],
+            'service_id' => ['nullable', 'integer', 'exists:services,id'],
+            'version' => ['required', 'integer'],
+        ]);
+        $reservationService->extend(
+            (int) $reservation->id,
+            (int) $validated['minutes'],
+            isset($validated['service_id']) ? (int) $validated['service_id'] : null,
+            (int) $validated['version'],
+            $request->user()?->getAuthIdentifier(),
+        );
+
+        return back()->with('success', __('messages.reservation.extended', ['minutes' => (int) $validated['minutes']]));
+    }
+
     private function userFor(Request $request): User
     {
         $user = $request->user();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Accounting;
 
 use App\Domain\Business\TaxRateService;
+use App\Domain\Reservation\BookingResourceResolver;
 use App\Domain\Reservation\ReservationService;
 use App\Domain\Visit\VisitCompletionService;
 use App\Domain\Visit\VisitFactService;
@@ -52,6 +53,7 @@ final class CheckoutEntryService
         private readonly TaxAmountCalculator $tax,
         private readonly BusinessTime $businessTime,
         private readonly AuditLogger $audit,
+        private readonly BookingResourceResolver $resources,
     ) {}
 
     /** 予約から来店下書きを開く。既に来店がある場合はそれを返す。 */
@@ -207,6 +209,18 @@ final class CheckoutEntryService
 
         $this->replaceNominations($visit, $data['nominated_staff_ids'] ?? null);
 
+        // 予約から来た来店は、実施内容の合計が予約で確保した時間（延長を含む）を超えないこと（Task 11-29）。
+        // 超える場合は予約を延長し、スタッフ・ブース・次予約・インターバルの競合を確認してから保存する。
+        $reservation = $visit->reservation_id !== null ? Reservation::query()->find($visit->reservation_id) : null;
+        if ($reservation !== null) {
+            $plannedTotal = array_sum(array_map(static fn (array $row): int => (int) ($row['actual_minutes'] ?? 0), array_values($data['treatments'] ?? [])));
+            if ($plannedTotal > $reservation->bookedMinutes()) {
+                throw ValidationException::withMessages(['treatments' => __('messages.checkout_entry.exceeds_reserved_minutes', [
+                    'reserved' => $reservation->bookedMinutes(), 'actual' => $plannedTotal,
+                ])]);
+            }
+        }
+
         $index = [];
         foreach (array_values($data['treatments'] ?? []) as $position => $row) {
             $service = isset($row['service_id']) ? Service::query()->with('analysisCategory')->findOrFail((int) $row['service_id']) : null;
@@ -220,6 +234,8 @@ final class CheckoutEntryService
                 'actual_started_at' => $start,
                 'actual_ended_at' => $start?->addMinutes($minutes),
                 'sort_order' => $position,
+                // 実際に使ったブース（任意）。
+                'booth_id' => isset($row['booth_id']) ? (int) $row['booth_id'] : null,
             ], $actor);
 
             $staffRows = array_values($row['staff'] ?? []);
@@ -231,6 +247,12 @@ final class CheckoutEntryService
             $index[$position] = [];
             foreach ($staffRows as $staffPosition => $staffRow) {
                 $staff = Staff::query()->findOrFail((int) $staffRow['staff_id']);
+                // 資格が必要な施術（はり等）は、資格を登録したスタッフしか担当できない（Task 11-28/11-29）。
+                if ($service !== null && ! $this->resources->isQualified($service, (int) $staff->getKey())) {
+                    throw ValidationException::withMessages(["treatments.{$position}.staff" => __('messages.checkout_entry.staff_not_qualified', [
+                        'staff' => $staff->display_name, 'service' => $service->name,
+                    ])]);
+                }
                 if (isset($index[$position][(int) $staff->getKey()])) {
                     throw ValidationException::withMessages(["treatments.{$position}.staff" => __('messages.checkout_entry.staff_duplicated')]);
                 }
