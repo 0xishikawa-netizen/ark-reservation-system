@@ -348,4 +348,19 @@ return [
         'exceeds_reserved_minutes' => '施術の合計（:actual分）が予約の時間（:reserved分）を超えています。予約を延長してから保存してください。',
         'staff_not_qualified' => ':staff さんは「:service」に必要な資格が登録されていないため担当できません。',
     ],
+    // 来店・会計入力の入力チェックで使う項目名（Task 11-32）。
+    'checkout_fields' => [
+        'treatment_minutes' => '施術の分数',
+        'treatment_staff' => '施術の担当',
+        'staff_minutes' => '担当の分数',
+        'start_time' => '開始時刻',
+        'quantity' => '数量',
+        'unit_amount' => '単価',
+        'allocation_staff' => '売上配分の担当',
+        'allocation_amount' => '売上配分の金額',
+        'item_type' => '明細の種類',
+        'tender_method' => '支払方法',
+        'tender_amount' => '支払金額',
+        'tender_retail' => '支払の物販分',
+    ],
 ];

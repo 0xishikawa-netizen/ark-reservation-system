@@ -38,9 +38,9 @@
 | 11-29 | 終了後インターバル・延長・施術構成の柔軟化 | DONE（2026-09-27）`docs/BOOKING_RESOURCES.md` |
 | 11-30 | ブッキングボード・予約パネルUX | DONE（2026-09-27）`docs/BOOKING_RESOURCES.md` |
 | 11-31 | 月次レポート（タブ再編・日計明細・予約分析・概要） | DONE（2026-09-27）`docs/REPORTS_UI.md` |
-| 11-32 | 業務シナリオ結合確認・全回帰 | **CURRENT / APPROVED** |
+| 11-32 | 業務シナリオ結合確認・全回帰 | DONE（2026-09-27）`docs/PHASE11_OPERATIONAL_VERIFICATION.md` |
 
-**Current Task: 11-32。** 2026-09-27、ユーザーが店舗運用の一連フロー完成（11-27〜11-32）を一括承認した。1 Taskずつ実装→テスト→次へ進める。 2026-09-27、実物帳票サンプル比較（`docs/handoff/2026-09-26-sample-comparison.md`）に基づき、ユーザーが11-19〜11-26と11-13再開を一括承認した。
+**Current Task: なし。** 11-27〜11-32 は 2026-09-27 に DONE（一括承認分を1 Taskずつ実施）。 2026-09-27、実物帳票サンプル比較（`docs/handoff/2026-09-26-sample-comparison.md`）に基づき、ユーザーが11-19〜11-26と11-13再開を一括承認した。
 ただし実装は常に1 Taskずつ（完了→次TaskをCURRENTへ）進める。
 
 実装できるのは `docs/PLAN.md` の Current Task と本表の **CURRENT / APPROVED** が一致する1 Taskだけ。

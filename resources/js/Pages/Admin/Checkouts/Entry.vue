@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RequestPayload } from '@inertiajs/core';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { PageHeader, SectionCard } from '@/components/ark';
 import { allocateByWeight, splitInclusive } from '@/components/checkout/amounts';
@@ -226,6 +226,10 @@ function payload(): RequestPayload {
     return body as RequestPayload;
 }
 
+// サーバー側の入力チェックで弾かれた内容（例: 支払額 0 円）を画面に出す。出さないと保存が無反応に見える。
+const page = usePage();
+const validationErrors = computed<string[]>(() => [...new Set(Object.values((page.props.errors ?? {}) as Record<string, string>))]);
+
 function save(then?: () => void): void {
     busy.value = true;
     router.put(props.endpoints.save, payload(), {
@@ -426,6 +430,10 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                 <p v-if="totals.difference !== 0 && lines.length > 0" class="warn" role="alert">{{ labels.mismatch }}</p>
                 <p v-if="!checkoutEditable" class="muted">{{ labels.readOnly }}<template v-if="checkout?.void_reason">（{{ checkout.void_reason }}）</template></p>
                 <p v-if="dirty" class="unsaved">{{ labels.unsaved }}</p>
+                <div v-if="validationErrors.length > 0" class="warn" role="alert" data-testid="entry-errors">
+                    <p>{{ MESSAGES.checkout.validationFailed }}</p>
+                    <ul><li v-for="message in validationErrors" :key="message">{{ message }}</li></ul>
+                </div>
                 <div class="actions">
                     <v-btn v-if="visitEditable || checkoutEditable" color="primary" variant="outlined" :loading="busy" prepend-icon="mdi-content-save-outline" data-testid="save-entry" @click="save()">{{ labels.save }}</v-btn>
                     <v-btn v-if="mode === 'visit' && (visitEditable || (checkout?.status === 'draft'))" color="primary" variant="flat" :loading="busy" prepend-icon="mdi-check" data-testid="complete-entry" @click="complete">{{ labels.complete }}</v-btn>

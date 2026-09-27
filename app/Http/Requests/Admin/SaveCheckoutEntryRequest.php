@@ -55,4 +55,26 @@ final class SaveCheckoutEntryRequest extends FormRequest
             'tenders.*.retail_amount' => ['nullable', 'integer', 'min:0', 'max:10000000'],
         ];
     }
+
+    /** @return array<string, string> */
+    public function attributes(): array
+    {
+        $field = static fn (string $key): string => (string) __('messages.checkout_fields.'.$key);
+
+        return [
+            'treatments.*.actual_minutes' => $field('treatment_minutes'),
+            'treatments.*.started_at' => $field('start_time'),
+            'treatments.*.staff.*.staff_id' => $field('treatment_staff'),
+            'treatments.*.staff.*.actual_minutes' => $field('staff_minutes'),
+            'treatments.*.staff.*.started_at' => $field('start_time'),
+            'lines.*.item_type' => $field('item_type'),
+            'lines.*.quantity' => $field('quantity'),
+            'lines.*.unit_amount' => $field('unit_amount'),
+            'lines.*.allocations.*.staff_id' => $field('allocation_staff'),
+            'lines.*.allocations.*.amount' => $field('allocation_amount'),
+            'tenders.*.payment_method_id' => $field('tender_method'),
+            'tenders.*.amount' => $field('tender_amount'),
+            'tenders.*.retail_amount' => $field('tender_retail'),
+        ];
+    }
 }

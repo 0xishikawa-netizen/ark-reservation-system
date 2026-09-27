@@ -221,6 +221,20 @@ class CheckoutEntryTest extends TestCase
         $this->assertSame(CheckoutStatus::Finalized, $checkout->fresh()->status);
     }
 
+    public function test_zero_tender_amount_is_rejected_with_japanese_field_name(): void
+    {
+        $admin = $this->admin();
+        $product = Product::factory()->create(['price' => 110, 'tax_category_id' => $this->reduced->id]);
+        $this->actingAs($admin)->post(route('admin.checkouts.store'), ['sale_date' => '2026-09-15'])->assertRedirect();
+        $checkout = Checkout::query()->sole();
+
+        $this->actingAs($admin)->put(route('admin.checkouts.update', $checkout), [
+            'lines' => [['item_type' => 'product', 'product_id' => $product->id, 'quantity' => 1, 'unit_amount' => 110]],
+            'tenders' => [['payment_method_id' => $this->cash->id, 'amount' => 0]],
+        ])->assertSessionHasErrors('tenders.0.amount');
+        $this->assertStringContainsString('支払金額', (string) session('errors')->first('tenders.0.amount'));
+    }
+
     public function test_total_mismatch_and_staff_minutes_mismatch_block_finalization(): void
     {
         $admin = $this->admin();

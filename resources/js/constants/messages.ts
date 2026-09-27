@@ -546,6 +546,7 @@ export const MESSAGES = {
     checkout: {
         booth: 'ブース',
         compositionTotal: '施術合計 {total}分 ／ 予約 {reserved}分',
+        validationFailed: '保存できませんでした。次の内容を確認してください。',
         compositionExceeds: '予約の時間を超えています。予約詳細の「延長」で延長してから保存してください。',
         indexTitle: '来店・会計',
         indexSubtitle: '日別の来店・店頭販売と会計状況',
