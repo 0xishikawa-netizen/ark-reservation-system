@@ -8,6 +8,7 @@ use App\Support\Security\PiiHasher;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Staff extends Model
@@ -52,6 +53,18 @@ class Staff extends Model
     }
 
     /** @return HasMany<StaffShift, $this> */
+    /** 実施できるメニュー（既存 service_staff。Task 11-28 でスタッフ側からも設定する）。 */
+    public function services(): BelongsToMany
+    {
+        return $this->belongsToMany(Service::class, 'service_staff', 'staff_id', 'service_id', 'user_id', 'id');
+    }
+
+    /** 保有資格（Task 11-28）。 */
+    public function qualifications(): BelongsToMany
+    {
+        return $this->belongsToMany(Qualification::class, 'qualification_staff', 'staff_id', 'qualification_id', 'user_id', 'id')->withTimestamps();
+    }
+
     public function shifts(): HasMany
     {
         return $this->hasMany(StaffShift::class, 'staff_id', 'user_id');

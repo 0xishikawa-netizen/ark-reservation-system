@@ -21,7 +21,7 @@ class CreateService
         return DB::transaction(function () use ($data, $actor): Service {
             /** @var list<int> $staffIds */
             $staffIds = array_values(array_unique($data['staff_ids'] ?? []));
-            unset($data['staff_ids']);
+            unset($data['staff_ids'], $data['booth_ids'], $data['qualification_ids']);
 
             if (($data['color'] ?? null) === null) {
                 unset($data['color']);

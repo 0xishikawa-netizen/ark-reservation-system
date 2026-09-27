@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Service\CreateService;
+use App\Actions\Service\SetServiceResources;
 use App\Actions\Service\SetServiceStaff;
 use App\Actions\Service\ToggleServiceActive;
 use App\Actions\Service\UpdateService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreServiceRequest;
 use App\Http\Requests\Admin\UpdateServiceRequest;
+use App\Models\Booth;
+use App\Models\Qualification;
 use App\Models\Service;
 use App\Models\ServiceAnalysisCategory;
 use App\Models\Staff;
@@ -68,8 +71,11 @@ class ServiceController extends Controller
     public function store(
         StoreServiceRequest $request,
         CreateService $createService,
+        SetServiceResources $setResources,
     ): RedirectResponse {
-        $createService->execute($request->validated(), $request->user());
+        $data = $request->validated();
+        $service = $createService->execute($data, $request->user());
+        $setResources->execute($service, $data['booth_ids'] ?? null, $data['qualification_ids'] ?? null, $request->user());
 
         return redirect()->route('admin.services.index')
             ->with('success', __('messages.service.created'));
@@ -93,6 +99,8 @@ class ServiceController extends Controller
                 'color' => $service->color,
                 'sort_order' => $service->sort_order,
                 'staff_ids' => $staffQuery->selectedIds($service),
+                'booth_ids' => $service->booths()->pluck('booths.id')->map(static fn (mixed $id): int => (int) $id)->values(),
+                'qualification_ids' => $service->qualifications()->pluck('qualifications.id')->map(static fn (mixed $id): int => (int) $id)->values(),
             ],
             'staff' => $staffQuery->get(),
             ...$this->masterOptions(),
@@ -104,10 +112,12 @@ class ServiceController extends Controller
         Service $service,
         UpdateService $updateService,
         SetServiceStaff $setServiceStaff,
+        SetServiceResources $setResources,
     ): RedirectResponse {
         $data = $request->validated();
         $service = $updateService->execute($service, $data, $request->user());
         $setServiceStaff->execute($service, $data['staff_ids'] ?? [], $request->user());
+        $setResources->execute($service, $data['booth_ids'] ?? null, $data['qualification_ids'] ?? null, $request->user());
 
         return redirect()->route('admin.services.index')
             ->with('success', __('messages.service.updated'));
@@ -142,6 +152,9 @@ class ServiceController extends Controller
                 ->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'code', 'name', 'is_active']),
             'taxCategories' => TaxCategory::query()
                 ->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'code', 'name', 'is_active']),
+            // Task 11-28: 利用ブース・必要資格の選択肢。
+            'booths' => Booth::query()->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'name', 'is_active']),
+            'qualifications' => Qualification::query()->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'code', 'name', 'is_active']),
         ];
     }
 }

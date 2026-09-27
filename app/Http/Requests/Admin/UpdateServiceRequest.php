@@ -34,6 +34,11 @@ class UpdateServiceRequest extends FormRequest
             'sort_order' => ['required', 'integer'],
             'staff_ids' => ['sometimes', 'array'],
             'staff_ids.*' => ['integer', 'distinct', 'exists:staff,user_id'],
+            // Task 11-28: メニューで使える具体ブース（空＝全有効ブース）と必要資格。
+            'booth_ids' => ['sometimes', 'array'],
+            'booth_ids.*' => ['integer', 'distinct', 'exists:booths,id'],
+            'qualification_ids' => ['sometimes', 'array'],
+            'qualification_ids.*' => ['integer', 'distinct', 'exists:qualifications,id'],
         ];
     }
 

@@ -20,7 +20,7 @@ class UpdateService
         ?Authenticatable $actor = null,
     ): Service {
         return DB::transaction(function () use ($service, $data, $actor): Service {
-            unset($data['staff_ids']);
+            unset($data['staff_ids'], $data['booth_ids'], $data['qualification_ids']);
 
             if (array_key_exists('color', $data) && $data['color'] === null) {
                 $data['color'] = '#607d8b';

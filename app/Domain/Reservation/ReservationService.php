@@ -54,6 +54,7 @@ final class ReservationService
         private readonly PaymentService $payments,
         private readonly BookingWindow $bookingWindow,
         private readonly VisitCompletionService $visitCompletion,
+        private readonly BookingResourceResolver $resources,
     ) {}
 
     /** @throws ValidationException|SlotUnavailableException */
@@ -63,11 +64,13 @@ final class ReservationService
         // 着替え・片付けの余白（バッファ）も枠として押さえるため ends_at に含める。
         // こうすることで重複チェック・空き枠計算は既存ロジックのままバッファを考慮できる。
         $endsAt = $in->startsAt->addMinutes($service->duration_min + $in->bufferMin);
+        // メニューに具体ブースの紐付けがあれば、指定が無い時は空いている紐付けブースを自動で確定する（Task 11-28）。
+        $boothId = $this->resolveBooth($service, $in->boothId, $in->startsAt, $endsAt);
 
         $this->validateReservationDetails(
             service: $service,
             staffId: $in->staffId,
-            boothId: $in->boothId,
+            boothId: $boothId,
             startsAt: $in->startsAt,
             endsAt: $endsAt,
             adminContext: $in->adminContext,
@@ -76,7 +79,7 @@ final class ReservationService
         $slots = $this->occupiedSlots($in->startsAt, $endsAt, $in->adminContext);
 
         try {
-            $reservation = DB::transaction(function () use ($in, $endsAt, $slots): Reservation {
+            $reservation = DB::transaction(function () use ($in, $endsAt, $slots, $boothId): Reservation {
                 // カード決済（single）は Stripe の与信が済むまで確定しない。
                 // 枠は pending_payment + payment_expires_at で HOLD する（PLAN §7）。
                 $isCard = $in->paymentMethod === PaymentMethod::Single;
@@ -86,7 +89,7 @@ final class ReservationService
                     'service_id' => $in->serviceId,
                     'staff_id' => $in->staffId,
                     'is_staff_requested' => $in->staffId !== null && $in->isStaffRequested,
-                    'booth_id' => $in->boothId,
+                    'booth_id' => $boothId,
                     'starts_at' => $in->startsAt,
                     'ends_at' => $endsAt,
                     'buffer_min' => $in->bufferMin,
@@ -108,7 +111,7 @@ final class ReservationService
                 ReservationResourceSlot::insert($this->slotRows(
                     reservation: $reservation,
                     staffId: $in->staffId,
-                    boothId: $in->boothId,
+                    boothId: $boothId,
                     slots: $slots,
                 ));
 
@@ -167,12 +170,16 @@ final class ReservationService
                 }
 
                 $service = $reservation->service()->firstOrFail();
-                $endsAt = $in->startsAt->addMinutes($service->duration_min);
+                // 予約が確保している施術分数（延長を含む）と終了後バッファを保ったまま時間を動かす。
+                // 以前は標準所要時間だけで ends_at を作り直していたため、変更するとバッファが消えていた。
+                $bookedMinutes = max(1, (int) $reservation->starts_at->diffInMinutes($reservation->ends_at) - (int) $reservation->buffer_min);
+                $endsAt = $in->startsAt->addMinutes($bookedMinutes + (int) $reservation->buffer_min);
+                $boothId = $this->resolveBooth($service, $in->boothId, $in->startsAt, $endsAt, (int) $reservation->id);
 
                 $this->validateReservationDetails(
                     service: $service,
                     staffId: $in->staffId,
-                    boothId: $in->boothId,
+                    boothId: $boothId,
                     startsAt: $in->startsAt,
                     endsAt: $endsAt,
                     adminContext: $in->adminContext,
@@ -187,7 +194,7 @@ final class ReservationService
                 ReservationResourceSlot::insert($this->slotRows(
                     reservation: $reservation,
                     staffId: $in->staffId,
-                    boothId: $in->boothId,
+                    boothId: $boothId,
                     slots: $slots,
                 ));
 
@@ -195,7 +202,7 @@ final class ReservationService
                     'starts_at' => $in->startsAt,
                     'ends_at' => $endsAt,
                     'staff_id' => $in->staffId,
-                    'booth_id' => $in->boothId,
+                    'booth_id' => $boothId,
                     'version' => $reservation->version + 1,
                 ];
 
@@ -458,6 +465,11 @@ final class ReservationService
                 $this->throwValidation('staff_id', __('messages.reservation.staff_not_assigned'));
             }
 
+            // 必要資格（はり等）を保有していないスタッフは担当できない（Task 11-28）。
+            if (! $this->resources->isQualified($service, $staffId)) {
+                $this->throwValidation('staff_id', __('messages.reservation.staff_not_qualified'));
+            }
+
             $staff = Staff::query()->find($staffId);
 
             if ($staff === null || ! $staff->is_bookable) {
@@ -488,6 +500,11 @@ final class ReservationService
                 $this->throwValidation('booth_id', __('messages.reservation.booth_unavailable'));
             }
 
+            // メニューに紐付いていないブースでは予約できない（紐付けが無いメニューは従来どおり全ブース可）。
+            if (! $this->resources->boothAllowed($service, $boothId)) {
+                $this->throwValidation('booth_id', __('messages.reservation.booth_not_for_service'));
+            }
+
             if ($this->hasScheduleBlockOverlap('booth_id', $boothId, $startsAt, $endsAt)) {
                 $this->throwValidation('booth_id', __('messages.reservation.booth_block_overlap'));
             }
@@ -514,6 +531,26 @@ final class ReservationService
                 $this->throwValidation('starts_at', $reason);
             }
         }
+    }
+
+    /**
+     * 予約で使う具体ブースを確定する（Task 11-28）。指定があればそのまま（妥当性は validateReservationDetails）。
+     * 指定が無く、メニューに具体ブースの紐付けがある時だけ、その中で空いている最初のブースを割り当てる。
+     * 1つも空いていなければ予約できない（スタッフだけ空いていても不可）。
+     *
+     * @throws ValidationException
+     */
+    private function resolveBooth(Service $service, ?int $boothId, CarbonImmutable $startsAt, CarbonImmutable $endsAt, ?int $ignoreReservationId = null): ?int
+    {
+        if ($boothId !== null || ! $this->resources->requiresMappedBooth($service)) {
+            return $boothId;
+        }
+        $free = $this->resources->firstFreeBooth($this->resources->mappedBoothIds($service), $startsAt, $endsAt, $ignoreReservationId);
+        if ($free === null) {
+            $this->throwValidation('booth_id', __('messages.reservation.no_booth_available'));
+        }
+
+        return $free;
     }
 
     /**

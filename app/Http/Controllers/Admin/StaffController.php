@@ -6,10 +6,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Staff\CreateStaff;
 use App\Actions\Staff\DeactivateStaff;
+use App\Actions\Staff\SetStaffCapabilities;
 use App\Actions\Staff\UpdateStaff;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreStaffRequest;
 use App\Http\Requests\Admin\UpdateStaffRequest;
+use App\Models\Qualification;
+use App\Models\Service;
 use App\Models\Staff;
 use App\Queries\StaffListQuery;
 use Illuminate\Http\RedirectResponse;
@@ -67,7 +70,12 @@ class StaffController extends Controller
                 'sort_order' => $staff->sort_order,
                 'role' => $staff->user->getRoleNames()->first(),
                 'is_active' => $staff->user->is_active,
+                'service_ids' => $staff->services()->pluck('services.id')->map(static fn (mixed $id): int => (int) $id)->values(),
+                'qualification_ids' => $staff->qualifications()->pluck('qualifications.id')->map(static fn (mixed $id): int => (int) $id)->values(),
             ],
+            // Task 11-28: 実施できる施術・保有資格の選択肢。
+            'services' => Service::query()->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'name', 'is_active']),
+            'qualifications' => Qualification::query()->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'name', 'is_active']),
             'roles' => [
                 ['title' => 'スタッフ', 'value' => 'staff'],
                 ['title' => 'マネージャー', 'value' => 'manager'],
@@ -80,8 +88,11 @@ class StaffController extends Controller
         UpdateStaffRequest $request,
         Staff $staff,
         UpdateStaff $updateStaff,
+        SetStaffCapabilities $setCapabilities,
     ): RedirectResponse {
-        $updateStaff->execute($staff, $request->validated(), $request->user());
+        $data = $request->validated();
+        $updateStaff->execute($staff, $data, $request->user());
+        $setCapabilities->execute($staff, $data['service_ids'] ?? null, $data['qualification_ids'] ?? null, $request->user());
 
         return redirect()->route('admin.staff.index')
             ->with('success', __('messages.staff.updated'));

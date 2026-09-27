@@ -15,7 +15,7 @@ interface MonthlyTarget { id: number; target_month: string; target_amount: numbe
 const props = defineProps<{
     analysisCategories: Master[]; taxCategories: TaxCategory[]; paymentMethods: PaymentMethod[];
     calendarDays: CalendarDay[]; salesTargets: { default_amount: number; monthly: MonthlyTarget[] };
-    employmentTypes: Master[]; acquisitionChannels?: Master[]; visitPurposes?: Master[]; business: { timezone: string; default_opens_at: string; default_closes_at: string };
+    employmentTypes: Master[]; acquisitionChannels?: Master[]; visitPurposes?: Master[]; qualifications?: Master[]; business: { timezone: string; default_opens_at: string; default_closes_at: string };
 }>();
 const tab = ref('analysis');
 const editingRateId = ref<number | null>(null);
@@ -59,10 +59,12 @@ const savePayment = (): void => {
 const karteForms = {
     'acquisition-channels': useForm({ code: '', name: '', is_active: true, sort_order: 100 }),
     'visit-purposes': useForm({ code: '', name: '', is_active: true, sort_order: 100 }),
+    qualifications: useForm({ code: '', name: '', is_active: true, sort_order: 100 }),
 };
 type KarteKind = keyof typeof karteForms;
 const karteBase = '/admin/settings/business-masters/karte';
-const karteLists = (kind: KarteKind): Master[] => (kind === 'acquisition-channels' ? props.acquisitionChannels : props.visitPurposes) ?? [];
+const karteLists = (kind: KarteKind): Master[] => (kind === 'acquisition-channels' ? props.acquisitionChannels
+    : kind === 'qualifications' ? props.qualifications : props.visitPurposes) ?? [];
 /** 並び替えは隣の行の表示順の前後へ移すだけ（削除はせず無効化で管理）。 */
 const moveKarte = (kind: KarteKind, item: Master, direction: -1 | 1): void => {
     const list = karteLists(kind);
@@ -78,7 +80,7 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
     <PageHeader title="業務マスタ" :subtitle="`集計の前提となる分類・税・決済・営業日・目標を管理します（${business.timezone}）。`" />
     <v-tabs v-model="tab" class="mb-4" show-arrows>
         <v-tab value="analysis">メニュー分類</v-tab><v-tab value="tax">税</v-tab><v-tab value="payment">決済方法</v-tab>
-        <v-tab value="calendar">店舗カレンダー</v-tab><v-tab value="target">売上目標</v-tab><v-tab value="employment">雇用形態</v-tab><v-tab value="karte">{{ MESSAGES.customer.karteMasterTab }}</v-tab>
+        <v-tab value="calendar">店舗カレンダー</v-tab><v-tab value="target">売上目標</v-tab><v-tab value="employment">雇用形態</v-tab><v-tab value="karte">{{ MESSAGES.customer.karteMasterTab }}</v-tab><v-tab value="qualification">{{ MESSAGES.bookingResources.qualificationMasterTab }}</v-tab>
     </v-tabs>
     <v-window v-model="tab">
         <v-window-item value="analysis"><SectionCard title="分析カテゴリ">
@@ -123,8 +125,8 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
             <v-table><thead><tr><th>コード</th><th>名称</th><th>状態</th><th></th></tr></thead><tbody><tr v-for="item in employmentTypes" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.is_active ? '有効' : '無効' }}</td><td><v-btn size="small" variant="text" @click="toggleMaster(item, '/admin/settings/business-masters/employment-types')">{{ item.is_active ? '無効化' : '有効化' }}</v-btn></td></tr></tbody></v-table>
             <v-form class="inline-form mt-5" @submit.prevent="employmentForm.post('/admin/settings/business-masters/employment-types', { preserveScroll: true, onSuccess: () => employmentForm.reset() })"><v-text-field v-model="employmentForm.code" label="コード" /><v-text-field v-model="employmentForm.name" label="名称" /><v-text-field v-model.number="employmentForm.sort_order" label="表示順" type="number" /><v-btn type="submit" color="primary">追加</v-btn></v-form>
         </SectionCard></v-window-item>
-    <v-window-item value="karte">
-            <SectionCard v-for="kind in (['acquisition-channels', 'visit-purposes'] as KarteKind[])" :key="kind" :title="kind === 'acquisition-channels' ? MESSAGES.customer.acquisitionChannel : MESSAGES.customer.karteVisitPurposeMaster" class="mb-4">
+    <v-window-item v-for="panel in ['karte', 'qualification']" :key="panel" :value="panel">
+            <SectionCard v-for="kind in (panel === 'qualification' ? ['qualifications'] : ['acquisition-channels', 'visit-purposes']) as KarteKind[]" :key="kind" :title="kind === 'acquisition-channels' ? MESSAGES.customer.acquisitionChannel : kind === 'qualifications' ? MESSAGES.bookingResources.qualificationMaster : MESSAGES.customer.karteVisitPurposeMaster" class="mb-4">
                 <v-table><thead><tr><th>コード</th><th>名称</th><th>状態</th><th></th></tr></thead><tbody>
                     <tr v-for="(item, index) in karteLists(kind)" :key="item.id">
                         <td>{{ item.code }}</td><td>{{ item.name }}</td>

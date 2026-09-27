@@ -19,6 +19,8 @@ interface ServiceOption {
     duration_min: number;
     requires_staff: boolean;
     staff_ids: number[];
+    /** メニューで使える具体ブース（空＝全ブース。Task 11-28）。 */
+    booth_ids?: number[];
     price: number;
     category: string | null;
     color: string;
@@ -253,6 +255,11 @@ function clearAvailability(): void {
 // ブースはメニュー選択・時間確定に応じて自動で提案する。ユーザーが一度でも自分で
 // 選び直したら、それ以降は自動提案で上書きしない（任意でいつでも変更できる）。
 const boothManuallySet = ref(props.draft.booth_manually_set);
+/** 選択中メニューで使えるブース（紐付けが無いメニューは全ブース）。 */
+const boothOptions = computed(() => {
+    const allowed = selectedService.value?.booth_ids ?? [];
+    return allowed.length === 0 ? props.booths : props.booths.filter((booth) => allowed.includes(booth.id));
+});
 let assigningBoothAutomatically = false;
 
 watch(selectedServiceId, () => {
@@ -292,6 +299,7 @@ async function autoAssignBooth(startsAt: string): Promise<void> {
         const params = new URLSearchParams({
             service_id: String(serviceId),
             starts_at: startsAt,
+            buffer_min: String(form.buffer_min),
         });
         const response = await fetch(`/admin/reservations/available-booth?${params.toString()}`, {
             headers: { Accept: 'application/json' },
@@ -760,9 +768,20 @@ function submit(): void {
             <!-- ⑤ ブース（自動） -->
             <div class="nrp__block">
                 <span class="nrp__block-label">ブース</span>
-                <p class="nrp__value" :class="{ 'nrp__value--empty': !selectedBoothName }">
-                    {{ selectedBoothName ?? '---' }}
-                </p>
+                <!-- 空いているブースを自動で提案し、別の空きブースへ変更もできる（Task 11-28）。
+                     未選択のまま予約すると、メニューで使えるブースのうち空いている1つを確定する。 -->
+                <v-select
+                    v-model="selectedBoothId"
+                    :items="boothOptions"
+                    item-title="name"
+                    item-value="id"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    clearable
+                    :placeholder="MESSAGES.bookingResources.boothAuto"
+                    data-testid="nrp-booth"
+                />
                 <p v-if="form.errors.booth_id" class="nrp__error">{{ form.errors.booth_id }}</p>
             </div>
 

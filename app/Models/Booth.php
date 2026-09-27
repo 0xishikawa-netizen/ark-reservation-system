@@ -7,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Booth extends Model
 {
@@ -27,6 +28,12 @@ class Booth extends Model
     }
 
     /** @param  Builder<Booth>  $query */
+    /** このブースを使えるメニュー（Task 11-28）。 */
+    public function services(): BelongsToMany
+    {
+        return $this->belongsToMany(Service::class, 'booth_service')->withTimestamps();
+    }
+
     public function scopeActive(Builder $query): void
     {
         $query->where('is_active', true);

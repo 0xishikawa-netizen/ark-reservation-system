@@ -549,3 +549,13 @@ UTC半開区間で索引を利用し、JST日付への変換はSELECT/GROUP BY�
 Task 11-26で`historical_metric_values.dimension`（varchar NULL、追加型migration）を加えた。旧帳票の内訳（来店動機・スタッフ枠・時間帯×平日/土日・支払方法等）を同じmetric codeで保持し、dimension付きの値は月合計と比較しない。
 
 Task 11-13の`historical_metric_reviews`は過去集計値1件につき差異分類・確認状態・理由・確認者・確認日時を1行保持する。元値とARK値は上書きせず、照合時に再計算する。詳細は`docs/PHASE11_RECONCILIATION.md`。
+
+## Task 11-27〜11-28 の追加（2026-09-27）
+
+- `visits.checkout_exemption_reason`（varchar(32) NULL）：会計を作らずに来店完了した理由。値は `free`（無料施術）/ `prepaid`（事前決済済み）/ `entitlement`（回数券・月額の利用）。NULL は会計で確定する通常の来店。既存行は推測で埋めない。
+- `booth_service`（booth_id, service_id, unique）：メニューで使える具体的なブース。紐付けが無いメニューは全有効ブースが候補。
+- `qualifications`（code unique, name, is_active, sort_order）：資格マスタ。選択肢として「はり師」だけを用意する。
+- `qualification_staff`（staff_id→staff.user_id, qualification_id, unique）：スタッフの保有資格。
+- `qualification_service`（service_id, qualification_id, unique）：メニューに必要な資格。全部を保有するスタッフだけが担当できる。
+- 施術可能スタッフは既存 `service_staff` をそのまま使う（重複テーブルを作らない）。詳細は `docs/BOOKING_RESOURCES.md`。
+- 追加型 migration `2026_09_27_000007` は、既存環境へ会計権限を用意する（付与の追加のみ）。

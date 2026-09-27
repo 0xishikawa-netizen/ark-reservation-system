@@ -21,8 +21,27 @@ final class ReservationFormOptionsQuery
     {
         $staffIdsByService = [];
 
-        foreach (DB::table('service_staff')->orderBy('staff_id')->get() as $row) {
+        // 施術可能スタッフのうち、メニューの必要資格を全部保有している人だけ（Task 11-28）。1クエリで取得する。
+        $qualifiedStaff = DB::table('service_staff as ss')
+            ->whereNotExists(function ($missing): void {
+                $missing->selectRaw('1')->from('qualification_service as qs')
+                    ->whereColumn('qs.service_id', 'ss.service_id')
+                    ->whereNotExists(function ($held): void {
+                        $held->selectRaw('1')->from('qualification_staff as qst')
+                            ->whereColumn('qst.qualification_id', 'qs.qualification_id')
+                            ->whereColumn('qst.staff_id', 'ss.staff_id');
+                    });
+            })
+            ->orderBy('ss.staff_id')->get(['ss.service_id', 'ss.staff_id']);
+        foreach ($qualifiedStaff as $row) {
             $staffIdsByService[(int) $row->service_id][] = (int) $row->staff_id;
+        }
+        // メニューで使える具体ブース（空＝全有効ブース）。
+        $boothIdsByService = [];
+        foreach (DB::table('booth_service')->join('booths', 'booths.id', '=', 'booth_service.booth_id')
+            ->where('booths.is_active', true)->orderBy('booths.sort_order')->orderBy('booths.id')
+            ->get(['booth_service.service_id', 'booth_service.booth_id']) as $row) {
+            $boothIdsByService[(int) $row->service_id][] = (int) $row->booth_id;
         }
 
         $services = DB::table('services')
@@ -38,6 +57,7 @@ final class ReservationFormOptionsQuery
                 'duration_min' => (int) $row->duration_min,
                 'requires_staff' => (bool) $row->requires_staff,
                 'staff_ids' => $staffIdsByService[(int) $row->id] ?? [],
+                'booth_ids' => $boothIdsByService[(int) $row->id] ?? [],
                 'price' => (int) $row->price,
                 'category' => $row->category === null ? null : (string) $row->category,
                 'color' => (string) $row->color,

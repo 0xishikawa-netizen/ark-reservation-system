@@ -61,6 +61,18 @@ class Service extends Model
     }
 
     /** @return HasMany<VisitTreatment, $this> */
+    /** このメニューで使える具体的なブース（Task 11-28）。空なら全有効ブースが候補。 */
+    public function booths(): BelongsToMany
+    {
+        return $this->belongsToMany(Booth::class, 'booth_service')->withTimestamps();
+    }
+
+    /** この施術を担当するのに必要な資格（Task 11-28）。全部を保有するスタッフだけが担当できる。 */
+    public function qualifications(): BelongsToMany
+    {
+        return $this->belongsToMany(Qualification::class, 'qualification_service')->withTimestamps();
+    }
+
     public function visitTreatments(): HasMany
     {
         return $this->hasMany(VisitTreatment::class);

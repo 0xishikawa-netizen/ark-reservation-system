@@ -13,6 +13,7 @@ use App\Models\AcquisitionChannel;
 use App\Models\EmploymentType;
 use App\Models\MonthlySalesTarget;
 use App\Models\PaymentMethod;
+use App\Models\Qualification;
 use App\Models\ServiceAnalysisCategory;
 use App\Models\StoreCalendarDay;
 use App\Models\TaxCategory;
@@ -62,6 +63,7 @@ final class BusinessMasterSettingsController extends Controller
             ],
             'acquisitionChannels' => AcquisitionChannel::query()->orderBy('sort_order')->orderBy('id')->get(),
             'visitPurposes' => VisitPurpose::query()->orderBy('sort_order')->orderBy('id')->get(),
+            'qualifications' => Qualification::query()->orderBy('sort_order')->orderBy('id')->get(),
             'employmentTypes' => EmploymentType::query()
                 ->orderBy('sort_order')->orderBy('id')->get(),
             'business' => [
@@ -116,6 +118,8 @@ final class BusinessMasterSettingsController extends Controller
         return match ($kind) {
             'acquisition-channels' => [AcquisitionChannel::class, 'acquisition_channels'],
             'visit-purposes' => [VisitPurpose::class, 'visit_purposes'],
+            // Task 11-28: 資格マスタ（はり師など）。同じ監査付きの作成・更新・無効化を使う。
+            'qualifications' => [Qualification::class, 'qualifications'],
             default => abort(404),
         };
     }

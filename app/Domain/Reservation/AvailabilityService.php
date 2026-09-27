@@ -20,8 +20,10 @@ final class AvailabilityService
 {
     private readonly SlotKey $slotKey;
 
-    public function __construct(private readonly StoreCalendarService $storeCalendar)
-    {
+    public function __construct(
+        private readonly StoreCalendarService $storeCalendar,
+        private readonly BookingResourceResolver $resources,
+    ) {
         $this->slotKey = SlotKey::fromSettings();
     }
 
@@ -57,6 +59,14 @@ final class AvailabilityService
             return [];
         }
 
+        // メニューに具体ブースが紐付いていれば、紐付けブースのどれか1つが空いている時だけ予約可能（Task 11-28）。
+        // 1つ目のブースが埋まっていても、別の紐付けブースが空いていれば予約できる。
+        $boothRestricted = $this->resources->requiresMappedBooth($service);
+
+        if ($boothId !== null && ! $this->resources->boothAllowed($service, $boothId)) {
+            return [];
+        }
+
         $calendarDay = $this->storeCalendar->resolve($date);
 
         if ($calendarDay['status'] === StoreCalendarDay::STATUS_CLOSED || $calendarDay['opens_at'] === null || $calendarDay['closes_at'] === null) {
@@ -70,15 +80,13 @@ final class AvailabilityService
             return [];
         }
 
-        // ブースも考慮する時の候補ブース。指定があればそのブースだけ、なければ有効な全ブース。
+        // ブースも考慮する時の候補ブース。指定があればそのブースだけ、なければメニューで使えるブース
+        // （紐付けが無いメニューは全有効ブース）。紐付けのあるメニューは常にブースも考慮する。
         $boothPool = $boothId !== null
             ? [$boothId]
-            : ($withBooths
-                ? Booth::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')
-                    ->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all()
-                : []);
+            : ($withBooths || $boothRestricted ? $this->resources->candidateBoothIds($service) : []);
 
-        if ($withBooths && $boothPool === []) {
+        if (($withBooths || $boothRestricted) && $boothPool === []) {
             return [];
         }
 
@@ -188,10 +196,11 @@ final class AvailabilityService
 
     /**
      * 指定した開始時刻ちょうどで空いている最初のブースを返す（メニュー選択時の自動割当用）。
+     * メニューに具体ブースの紐付けがあればその中から選ぶ（Task 11-28）。終了後バッファも含めて判定する。
      * あくまで画面側の初期提案であり、最終的な二重予約防止は既存の
-     * ReservationService::create()/reschedule() が改めて検証する。
+     * ReservationService::create()/reschedule() と枠の一意制約が改めて検証する。
      */
-    public function firstAvailableBooth(int $serviceId, CarbonImmutable $startsAt): ?int
+    public function firstAvailableBooth(int $serviceId, CarbonImmutable $startsAt, int $bufferMin = 0): ?int
     {
         $service = Service::query()->findOrFail($serviceId);
 
@@ -199,44 +208,11 @@ final class AvailabilityService
             return null;
         }
 
-        $endsAt = $startsAt->addMinutes($service->duration_min);
-        $boothIds = Booth::query()
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->pluck('id');
-
-        foreach ($boothIds as $boothId) {
-            $hasReservationConflict = DB::table('reservations')
-                ->where('booth_id', $boothId)
-                ->whereIn('status', [
-                    ReservationStatus::PendingPayment->value,
-                    ReservationStatus::PendingExternalSync->value,
-                    ReservationStatus::Confirmed->value,
-                ])
-                ->where('starts_at', '<', $endsAt->format('Y-m-d H:i:s'))
-                ->where('ends_at', '>', $startsAt->format('Y-m-d H:i:s'))
-                ->exists();
-
-            if ($hasReservationConflict) {
-                continue;
-            }
-
-            $hasBlockConflict = DB::table('staff_schedule_blocks')
-                ->where('booth_id', $boothId)
-                ->whereDate('work_date', $startsAt->toDateString())
-                ->whereTime('start_at', '<', $endsAt->format('H:i:s'))
-                ->whereTime('end_at', '>', $startsAt->format('H:i:s'))
-                ->exists();
-
-            if ($hasBlockConflict) {
-                continue;
-            }
-
-            return (int) $boothId;
-        }
-
-        return null;
+        return $this->resources->firstFreeBooth(
+            $this->resources->candidateBoothIds($service),
+            $startsAt,
+            $startsAt->addMinutes($service->duration_min + max($bufferMin, 0)),
+        );
     }
 
     /**
@@ -291,6 +267,8 @@ final class AvailabilityService
 
         $query = $service->staff()
             ->where('staff.is_bookable', true);
+        // 必要資格（はり等）を全部保有しているスタッフだけ（Task 11-28）。
+        $this->resources->whereQualified($query, $service);
 
         if ($staffId !== null) {
             $query->where('staff.user_id', $staffId);

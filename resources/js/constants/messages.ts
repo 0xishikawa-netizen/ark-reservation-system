@@ -201,6 +201,21 @@ export const MESSAGES = {
         bufferAfter: '終了後 {min}分',
         reservationPayment: { ticket: '回数券利用', membership: '月額利用', single: '事前決済' } as Record<string, string>,
     },
+    /** 予約リソース（Task 11-28）：メニュー×ブース、スタッフの施術可否・資格。 */
+    bookingResources: {
+        serviceBooths: '利用できるブース',
+        serviceBoothsHint: '未指定なら全ブースから選べます。指定すると、そのうち空いている1つで予約します。',
+        serviceQualifications: '必要な資格',
+        serviceQualificationsHint: '指定した資格をすべて持つスタッフだけが担当できます。',
+        staffServices: '実施できる施術',
+        staffServicesHint: '予約・担当の候補になるメニューです。',
+        staffQualifications: '保有資格',
+        staffQualificationsHint: '資格が必要なメニュー（はり等）は、資格を登録したスタッフだけが担当できます。',
+        qualificationMasterTab: '資格',
+        qualificationMaster: '資格マスタ',
+        boothAuto: '自動（空いているブース）',
+        inactive: '無効',
+    },
     /** 外部連携 */
     integration: {
         noneActive: '現在、実動する外部予約連携はありません（Mock のみ利用可能）。',

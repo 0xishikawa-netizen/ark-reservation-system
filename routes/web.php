@@ -471,9 +471,9 @@ Route::middleware([
         Route::put('settings/business-masters/tax-rates/{taxRate}', [BusinessMasterSettingsController::class, 'updateTaxRate'])
             ->name('settings.business-masters.tax-rates.update');
         Route::post('settings/business-masters/karte/{kind}', [BusinessMasterSettingsController::class, 'storeKarteMaster'])
-            ->whereIn('kind', ['acquisition-channels', 'visit-purposes'])->name('settings.business-masters.karte.store');
+            ->whereIn('kind', ['acquisition-channels', 'visit-purposes', 'qualifications'])->name('settings.business-masters.karte.store');
         Route::put('settings/business-masters/karte/{kind}/{id}', [BusinessMasterSettingsController::class, 'updateKarteMaster'])
-            ->whereIn('kind', ['acquisition-channels', 'visit-purposes'])->whereNumber('id')->name('settings.business-masters.karte.update');
+            ->whereIn('kind', ['acquisition-channels', 'visit-purposes', 'qualifications'])->whereNumber('id')->name('settings.business-masters.karte.update');
         Route::post('settings/business-masters/payment-methods', [BusinessMasterSettingsController::class, 'storePaymentMethod'])
             ->name('settings.business-masters.payment-methods.store');
         Route::put('settings/business-masters/payment-methods/{paymentMethod}', [BusinessMasterSettingsController::class, 'updatePaymentMethod'])

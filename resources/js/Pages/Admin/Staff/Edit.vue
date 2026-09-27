@@ -18,7 +18,11 @@ interface StaffFormData {
     sort_order: number;
     role: StaffRole;
     is_active: boolean;
+    service_ids: number[];
+    qualification_ids: number[];
 }
+
+interface OptionRow { id: number; name: string; is_active: boolean }
 
 interface RoleOption {
     title: string;
@@ -28,7 +32,10 @@ interface RoleOption {
 const props = defineProps<{
     staff: StaffFormData;
     roles: RoleOption[];
+    services: OptionRow[];
+    qualifications: OptionRow[];
 }>();
+const resourceLabels = MESSAGES.bookingResources;
 
 const form = useForm({
     display_name: props.staff.display_name,
@@ -37,6 +44,8 @@ const form = useForm({
     sort_order: props.staff.sort_order,
     role: props.staff.role,
     is_active: props.staff.is_active,
+    service_ids: [...props.staff.service_ids],
+    qualification_ids: [...props.staff.qualification_ids],
 });
 
 const submit = (): void => {
@@ -107,6 +116,39 @@ const deactivate = (): void => {
                     hide-details
                     class="mt-2"
                     :error-messages="form.errors.is_bookable"
+                />
+            </SectionCard>
+
+            <!-- Task 11-28: 実施できる施術と保有資格（資格が必要な施術は、資格を登録したスタッフだけが担当できる） -->
+            <SectionCard :title="`${resourceLabels.staffServices}・${resourceLabels.staffQualifications}`" class="mt-4">
+                <v-autocomplete
+                    v-model="form.service_ids"
+                    :label="resourceLabels.staffServices"
+                    :items="services"
+                    item-title="name"
+                    item-value="id"
+                    multiple
+                    chips
+                    closable-chips
+                    :hint="resourceLabels.staffServicesHint"
+                    persistent-hint
+                    :error-messages="form.errors.service_ids"
+                    class="mb-3"
+                    data-testid="staff-services"
+                />
+                <v-autocomplete
+                    v-model="form.qualification_ids"
+                    :label="resourceLabels.staffQualifications"
+                    :items="qualifications"
+                    item-title="name"
+                    item-value="id"
+                    multiple
+                    chips
+                    closable-chips
+                    :hint="resourceLabels.staffQualificationsHint"
+                    persistent-hint
+                    :error-messages="form.errors.qualification_ids"
+                    data-testid="staff-qualifications"
                 />
             </SectionCard>
 

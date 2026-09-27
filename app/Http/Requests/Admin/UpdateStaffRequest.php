@@ -24,6 +24,11 @@ class UpdateStaffRequest extends FormRequest
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'role' => ['nullable', 'string', Rule::in(['staff', 'manager', 'admin'])],
             'is_active' => ['sometimes', 'boolean'],
+            // Task 11-28: 実施できる施術・保有資格。
+            'service_ids' => ['sometimes', 'array'],
+            'service_ids.*' => ['integer', 'distinct', 'exists:services,id'],
+            'qualification_ids' => ['sometimes', 'array'],
+            'qualification_ids.*' => ['integer', 'distinct', 'exists:qualifications,id'],
         ];
     }
 }

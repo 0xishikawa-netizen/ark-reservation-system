@@ -2,6 +2,7 @@
 import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { ColorField, PageHeader, SectionCard } from '@/components/ark';
+import ServiceResourceFields from '@/components/admin/ServiceResourceFields.vue';
 
 defineOptions({ layout: AdminLayout });
 
@@ -17,6 +18,8 @@ defineProps<{
     staff: StaffOption[];
     analysisCategories: MasterOption[];
     taxCategories: MasterOption[];
+    booths: { id: number; name: string; is_active: boolean }[];
+    qualifications: MasterOption[];
 }>();
 
 const categorySuggestions = ['整体', 'トレーニング', 'コンディショニング'];
@@ -33,6 +36,8 @@ const form = useForm({
     requires_staff: true,
     sort_order: 0,
     staff_ids: [] as number[],
+    booth_ids: [] as number[],
+    qualification_ids: [] as number[],
 });
 
 const submit = (): void => {
@@ -166,6 +171,15 @@ const submit = (): void => {
                             />
                         </template>
                     </v-autocomplete>
+                    <ServiceResourceFields
+                        v-model:booth-ids="form.booth_ids"
+                        v-model:qualification-ids="form.qualification_ids"
+                        class="mt-2"
+                        :booths="booths"
+                        :qualifications="qualifications"
+                        :booth-errors="form.errors.booth_ids"
+                        :qualification-errors="form.errors.qualification_ids"
+                    />
                 </section>
 
                 <div class="form-actions d-flex ga-3 flex-wrap">

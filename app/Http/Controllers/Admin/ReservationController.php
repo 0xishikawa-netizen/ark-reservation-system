@@ -160,12 +160,14 @@ final class ReservationController extends Controller
         $validated = $request->validate([
             'service_id' => ['required', 'integer', 'exists:services,id'],
             'starts_at' => ['required', 'date'],
+            'buffer_min' => ['nullable', 'integer', 'min:0', 'max:60'],
         ]);
 
         return response()->json([
             'booth_id' => $availabilityService->firstAvailableBooth(
                 (int) $validated['service_id'],
                 CarbonImmutable::parse((string) $validated['starts_at']),
+                (int) ($validated['buffer_min'] ?? 0),
             ),
         ]);
     }
