@@ -65,15 +65,22 @@ const props = withDefaults(defineProps<{
     /** 作成後、台帳の軸・スタッフ絞り込みをリセットせず今の表示状態へ戻すためのクエリ。 */
     returnQuery?: Record<string, string | number | undefined>;
     canGoBack?: boolean;
+    /**
+     * 作成成功時の処理（下書きのクリア・戻る履歴のクリア）。emit ではなく関数で受け取る。
+     * 作成後はサーバーが台帳へリダイレクトし、このパネルは onSuccess より先にアンマウントされる。
+     * Vue はアンマウント後の emit を捨てるため、emit だと下書きが残り、次の予約に前回の顧客・
+     * メニュー・ブースが引き継がれていた。
+     */
+    afterCreate?: (payload: { date: string }) => void;
 }>(), {
     canGoBack: false,
     popularServiceIds: () => [],
+    afterCreate: undefined,
 });
 
 const emit = defineEmits<{
     close: [];
     back: [];
-    created: [payload: { date: string }];
     switchToBlock: [];
 }>();
 
@@ -560,9 +567,11 @@ function submitUrl(path: string): string {
 function submit(): void {
     form.service_id = selectedServiceId.value;
     form.booth_id = selectedBoothId.value;
+    const afterCreate = props.afterCreate;
+    const createdDate = date.value;
     form.post(submitUrl('/admin/reservations'), {
         errorBag: 'reservation',
-        onSuccess: () => emit('created', { date: date.value }),
+        onSuccess: () => afterCreate?.({ date: createdDate }),
     });
 }
 </script>

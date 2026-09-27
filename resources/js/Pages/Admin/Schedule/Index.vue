@@ -3468,7 +3468,7 @@ function menuSegments(lane: ScheduleLane): {
                 :can-go-back="canGoBackPanel"
                 @close="closePanel"
                 @back="goBackPanel"
-                @created="onReservationCreated"
+                :after-create="onReservationCreated"
                 @switch-to-block="onSwitchToBlock"
             />
             <ScheduleBlockCreatePanel
@@ -3481,7 +3481,7 @@ function menuSegments(lane: ScheduleLane): {
                 :can-go-back="canGoBackPanel"
                 @close="closePanel"
                 @back="goBackPanel"
-                @created="onBlockCreated"
+                :after-create="onBlockCreated"
                 @switch-to-reservation="onSwitchToReservation"
             />
             <ScheduleBlockDetailPanel

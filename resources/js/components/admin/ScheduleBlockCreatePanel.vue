@@ -47,14 +47,16 @@ const props = withDefaults(defineProps<{
     draft: BlockDraft;
     returnQuery?: Record<string, string | number | undefined>;
     canGoBack?: boolean;
+    /** 作成成功時の処理。アンマウント後も呼べるよう emit ではなく関数で受け取る（NewReservationPanel と同じ理由）。 */
+    afterCreate?: () => void;
 }>(), {
     canGoBack: false,
+    afterCreate: undefined,
 });
 
 const emit = defineEmits<{
     close: [];
     back: [];
-    created: [];
     switchToReservation: [];
 }>();
 
@@ -156,9 +158,10 @@ function submitUrl(path: string): string {
 }
 
 function submit(): void {
+    const afterCreate = props.afterCreate;
     form.post(submitUrl('/admin/schedule/blocks'), {
         errorBag: 'reservation',
-        onSuccess: () => emit('created'),
+        onSuccess: () => afterCreate?.(),
     });
 }
 </script>
