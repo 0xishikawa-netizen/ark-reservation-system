@@ -9,6 +9,7 @@ use App\Exceptions\Ticket\InsufficientTicketBalanceException;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PreventStaffTotpDisable;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\StartSession;
 use App\Http\Middleware\ThrottleFortifyRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -16,6 +17,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\StartSession as FrameworkStartSession;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -27,6 +29,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // fetch() の JSON を「直前の URL」に記録しない StartSession に差し替える（back() が JSON 画面へ戻る不具合の対策）。
+        $middleware->web(replace: [
+            FrameworkStartSession::class => StartSession::class,
+        ]);
         $middleware->web(append: [
             SecurityHeaders::class,
             HandleInertiaRequests::class,
