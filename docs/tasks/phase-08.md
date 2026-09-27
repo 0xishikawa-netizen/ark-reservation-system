@@ -154,3 +154,5 @@ Membership business logic の再実装（Phase 6 の Service / StateMachine を�
 - 最終自動検証すべて green。
 - 最終報告に **REAL STRIPE TEST MODE QA = 未完了** / **Membership Production Readiness = NOT READY** / 残 Stripe 手動 QA 一覧 を明記。
 - Phase 9 へは進まない（ユーザーの明示許可待ち）。
+
+> **2026-09-27 追記**：認可基盤のうち `AdminIdleTimeout` は廃止した（`docs/SESSION_POLICY.md`）。`AdminAccess` / `EnsureAccountIsActive` / `EnsureStaffMfa` / `can:*` は維持している。

@@ -16,6 +16,8 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -69,6 +71,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(
             fn (InsufficientMembershipBalanceException $exception, Request $request) => $renderConflict($exception, $request),
         );
+
+        // 本当にセッションが失効していた場合（419）、Inertia の操作では英語の「Page Expired」画面を
+        // モーダルで出さず、日本語の案内とともに再ログインへ導く。時間経過で意図的に失効させる仕組みはない。
+        $exceptions->respond(function (Response $response, Throwable $exception, Request $request): Response {
+            if ($response->getStatusCode() !== 419 || ! $request->hasHeader('X-Inertia')) {
+                return $response;
+            }
+            if (Auth::check()) {
+                return back()->withErrors(['session' => __('messages.auth.session_ended')]);
+            }
+            // POST先URLへ戻さないよう、操作していた画面を戻り先にする。
+            redirect()->setIntendedUrl(url()->previous());
+
+            return redirect()->route('login')->with('status', __('messages.auth.session_ended'));
+        });
 
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),

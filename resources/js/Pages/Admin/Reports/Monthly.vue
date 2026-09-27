@@ -226,7 +226,7 @@ function changeBasis(value: SalesBasis): void {
     </div>
 
     <SectionCard title="日別実績" :subtitle="labels.monthlyDailySubtitle">
-        <ReportTable :loading="loading" max-height="none" min-width="1800px" sticky-width="56px" data-testid="monthly-daily-table">
+        <ReportTable :loading="loading" max-height="none" page-sticky-header min-width="1800px" sticky-width="56px" data-testid="monthly-daily-table">
             <thead>
                 <tr class="group-row">
                     <th rowspan="2" class="is-sticky">日</th>

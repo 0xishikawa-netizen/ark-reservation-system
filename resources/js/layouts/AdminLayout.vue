@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useSessionKeepAlive } from '@/composables/sessionKeepAlive';
 import { MESSAGES } from '@/constants/messages';
 import { reportNavigationItems } from './reportNavigation';
 import { settingsNavigationItems, settingsSections } from './settingsNavigation';
@@ -197,6 +198,9 @@ const visit = (item: NavigationItem): void => {
 const logout = (): void => {
     router.post('/logout');
 };
+
+// 開いている間はセッションを維持する。本当に失効した時だけ再ログインの案内を出す（自動ログアウトはしない）。
+const { sessionLost } = useSessionKeepAlive();
 
 // 画面右上に現在時刻を表示する（Peak Manager 参考）。
 const now = ref(new Date());
@@ -412,6 +416,12 @@ onBeforeUnmount(() => {
 
         <v-main class="bg-background">
             <v-container fluid class="pa-6">
+                <v-alert v-if="sessionLost" type="warning" variant="tonal" class="mb-4" role="alert" data-testid="session-lost">
+                    {{ MESSAGES.auth.sessionLost }}
+                    <template #append>
+                        <v-btn href="/login" color="warning" variant="flat" size="small">{{ MESSAGES.auth.sessionRelogin }}</v-btn>
+                    </template>
+                </v-alert>
                 <slot />
             </v-container>
         </v-main>

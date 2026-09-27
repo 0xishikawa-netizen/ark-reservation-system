@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature\Admin;
 
 use App\Models\User;
-use App\Support\Settings\Settings;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Session\TokenMismatchException;
+use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -90,10 +91,8 @@ class AdminAccessTest extends TestCase
         $this->actingAs($staff)
             ->get('/admin')
             ->assertOk()
-            ->assertSessionHas(
-                'admin.last_activity',
-                fn (mixed $value): bool => is_int($value),
-            )
+            // 無操作時間の計測（旧 AdminIdleTimeout の最終操作時刻）は行わない。
+            ->assertSessionMissing('admin.last_activity')
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/Dashboard')
                 ->where('failedJobsCount', 0)
@@ -107,35 +106,101 @@ class AdminAccessTest extends TestCase
                 ->where('auth.can.auditLogsView', false));
     }
 
-    public function test_expired_admin_session_is_logged_out(): void
+    /**
+     * 管理画面は無操作・時間経過で自動ログアウトしない（docs/SESSION_POLICY.md）。
+     * 旧 AdminIdleTimeout が使っていた最終操作時刻が古くても、長時間後でも、そのまま使える。
+     */
+    public function test_long_inactivity_does_not_log_out_the_admin(): void
     {
-        $staff = User::factory()->create([
-            'two_factor_confirmed_at' => now(),
-        ]);
-        $staff->assignRole('staff');
+        $staff = $this->staffWithMfa();
 
         $this->actingAs($staff)
-            ->withSession(['admin.last_activity' => now()->subHour()->timestamp])
+            ->withSession(['admin.last_activity' => now()->subDay()->timestamp])
             ->get('/admin')
-            ->assertRedirect(route('login', ['expired' => 1]));
+            ->assertOk();
+
+        $this->travel(10)->hours();
+
+        $this->actingAs($staff)->get('/admin')->assertOk();
+        $this->assertAuthenticatedAs($staff, 'web');
+    }
+
+    public function test_admin_routes_have_no_idle_timeout_middleware(): void
+    {
+        $this->assertFalse(class_exists('App\\Http\\Middleware\\AdminIdleTimeout'));
+        $this->assertNull(config('admin.idle_timeout'));
+
+        $adminRoutes = collect(Route::getRoutes()->getRoutes())
+            ->filter(fn ($route): bool => str_starts_with((string) $route->getName(), 'admin.'));
+        $this->assertNotEmpty($adminRoutes);
+        foreach ($adminRoutes as $route) {
+            $middleware = implode(' ', $route->gatherMiddleware());
+            $this->assertDoesNotMatchRegularExpression('/idle|inactiv|timeout/i', $middleware, (string) $route->getName());
+            // 認証・管理画面権限・アカウント有効性・MFA は維持する。
+            $this->assertStringContainsString('auth', $middleware);
+            $this->assertStringContainsString('AdminAccess', $middleware);
+            $this->assertStringContainsString('EnsureAccountIsActive', $middleware);
+        }
+    }
+
+    public function test_keep_alive_requires_an_authenticated_admin_and_keeps_the_session(): void
+    {
+        $this->getJson('/admin/session/keep-alive')->assertUnauthorized();
+
+        $this->actingAs(User::factory()->create())
+            ->getJson('/admin/session/keep-alive')
+            ->assertForbidden();
+
+        $staff = $this->staffWithMfa();
+        $this->actingAs($staff)->getJson('/admin/session/keep-alive')->assertNoContent();
+        $this->assertAuthenticatedAs($staff, 'web');
+    }
+
+    public function test_disabled_account_is_still_logged_out_through_keep_alive(): void
+    {
+        $staff = $this->staffWithMfa();
+        $staff->forceFill(['is_active' => false])->save();
+
+        $this->actingAs($staff)
+            ->getJson('/admin/session/keep-alive')
+            ->assertRedirect(route('login'));
 
         $this->assertGuest('web');
     }
 
-    public function test_idle_timeout_prefers_the_database_setting(): void
+    public function test_explicit_logout_ends_admin_access(): void
     {
-        app(Settings::class)->set('admin.idle_timeout', 60);
+        $staff = $this->staffWithMfa();
 
-        $staff = User::factory()->create([
-            'two_factor_confirmed_at' => now(),
-        ]);
-        $staff->assignRole('staff');
-
-        $this->actingAs($staff)
-            ->withSession(['admin.last_activity' => now()->subSeconds(61)->timestamp])
-            ->get('/admin')
-            ->assertRedirect(route('login', ['expired' => 1]));
+        $this->actingAs($staff)->get('/admin')->assertOk();
+        $this->post('/logout')->assertRedirect();
 
         $this->assertGuest('web');
+        $this->get('/admin')->assertRedirect(route('login'));
+        $this->getJson('/admin/session/keep-alive')->assertUnauthorized();
+    }
+
+    public function test_expired_csrf_session_on_inertia_request_redirects_to_login_with_japanese_message(): void
+    {
+        Route::middleware('web')->post('/__test/token-mismatch', function (): never {
+            throw new TokenMismatchException('CSRF token mismatch.');
+        });
+
+        $this->from('/admin/reports/monthly')
+            ->post('/__test/token-mismatch', [], ['X-Inertia' => 'true'])
+            ->assertRedirect(route('login'))
+            ->assertSessionHas('status', __('messages.auth.session_ended'));
+        $this->assertSame(url('/admin/reports/monthly'), session('url.intended'));
+
+        // Inertia 以外（通常のフォーム・API）は従来どおり 419 を返す。
+        $this->post('/__test/token-mismatch')->assertStatus(419);
+    }
+
+    private function staffWithMfa(): User
+    {
+        $staff = User::factory()->create(['two_factor_confirmed_at' => now()]);
+        $staff->assignRole('staff');
+
+        return $staff;
     }
 }

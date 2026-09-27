@@ -287,3 +287,5 @@ Payment Element / Peak Manager 実 API / SALON BOARD 実 API / Reporting / 予�
 Phase 1 の共通基盤は完成。Phase 2（顧客・スタッフ・サービス・ブースのマスタ CRUD）は
 `RESERVATION_AUTHORITY=local` / `EXTERNAL_RESERVATION_GATEWAY=null` / Stripe 未接続で着手可能。
 **ユーザーの明示許可を待つ。**
+
+> **2026-09-27 追記**：本書の `AdminIdleTimeout`（30分の無操作ログアウト）は、ユーザー確定方針「管理画面は無操作・時間経過で自動ログアウトしない」により廃止・削除した。現行仕様は `docs/SESSION_POLICY.md`。

@@ -27,7 +27,8 @@ class SettingsTest extends TestCase
         );
         $this->assertSame('consume', app(Settings::class)->get('membership.no_show_policy'));
         // Phase 9: reservation.cancellation_tiers / reservation.no_show_refund_percent を追加。
-        $this->assertSame(10, Setting::query()->count());
+        // 管理画面の無操作タイムアウト（admin.idle_timeout）は廃止したため既定値に含めない。
+        $this->assertSame(9, Setting::query()->count());
     }
 
     public function test_missing_setting_returns_the_given_default(): void

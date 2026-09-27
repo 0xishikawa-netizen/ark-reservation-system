@@ -32,6 +32,7 @@ use App\Http\Controllers\Admin\RolePermissionController;
 use App\Http\Controllers\Admin\ScheduleBlockController;
 use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Admin\ServiceController;
+use App\Http\Controllers\Admin\SessionKeepAliveController;
 use App\Http\Controllers\Admin\StaffAttendanceController;
 use App\Http\Controllers\Admin\StaffController;
 use App\Http\Controllers\Admin\StaffSalesController;
@@ -60,7 +61,6 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Reserve\ReserveController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Middleware\AdminAccess;
-use App\Http\Middleware\AdminIdleTimeout;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureStaffMfa;
 use App\Http\Middleware\ThrottleFortifyRequests;
@@ -207,10 +207,12 @@ Route::middleware([
     'verified',
     AdminAccess::class,
     EnsureAccountIsActive::class,
-    AdminIdleTimeout::class,
+    // 無操作・時間経過による自動ログアウトは行わない（docs/SESSION_POLICY.md）。
     EnsureStaffMfa::class,
 ])->prefix('admin')->name('admin.')->group(function (): void {
     Route::get('/', AdminDashboardController::class)->name('dashboard');
+    // 管理画面を開いている間、Laravel セッションの寿命切れで再ログインにならないよう維持する。
+    Route::get('session/keep-alive', SessionKeepAliveController::class)->name('session.keep-alive');
     Route::get('two-factor-setup', [TwoFactorSetupController::class, 'show'])
         ->name('two-factor-setup');
     // MFA 管理（TOTP / SMS フォールバック / Google 連携）。自分の資格情報のみ。

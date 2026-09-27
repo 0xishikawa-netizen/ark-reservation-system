@@ -185,6 +185,9 @@ export const MESSAGES = {
         twoFactorSetupFailed: '2段階認証の設定情報を取得できませんでした。',
         saveRecoveryCodes: 'リカバリーコードを安全な場所に保存してください。',
         setPasswordBeforeUnlink: '連携を解除するには、先にパスワードを設定してください（ログイン手段が無くなるのを防ぐため）。',
+        // 本当にセッションが失効していた場合だけ出す（時間経過で自動ログアウトする仕組みはない）。
+        sessionLost: 'ログイン状態を確認できませんでした。この画面で保存していない入力は反映されていない可能性があります。',
+        sessionRelogin: 'ログイン画面へ',
     },
     /** 外部連携 */
     integration: {

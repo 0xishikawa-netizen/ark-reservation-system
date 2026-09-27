@@ -15,28 +15,80 @@
  *   tbody tr.row-group-start 日付・スタッフのまとまりの先頭行（上に区切り線）
  *   td.empty-cell        データなしの行（colspan で全幅に）
  */
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+
 defineOptions({ inheritAttrs: false });
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
     loading?: boolean;
-    /** 縦スクロール領域の最大高さ。ヘッダーは固定される。 */
+    /** 縦スクロール領域の最大高さ。ヘッダーは固定される。'none' で表内の縦スクロールをなくす。 */
     maxHeight?: string;
     /** 横スクロールを出し始める表の最小幅。 */
     minWidth?: string;
     /** 1列目（固定列）の幅。 */
     stickyWidth?: string;
+    /**
+     * 表内で縦スクロールさせない表（maxHeight='none'）で、列見出しをページのスクロールに追従させる。
+     * 横スクロールは表の枠内に残すため CSS の sticky は使えず（枠がスクロール基準になる）、
+     * 同じ thead を管理画面ヘッダーの直下まで translateY で下げる。見出しと列は同じ表なので横にずれない。
+     */
+    pageStickyHeader?: boolean;
 }>(), {
     loading: false,
     maxHeight: '70vh',
     minWidth: '100%',
     stickyWidth: '96px',
+    pageStickyHeader: false,
+});
+
+const wrap = ref<HTMLElement | null>(null);
+const stuck = ref(false);
+let frame = 0;
+
+/** 画面上部に固定されている管理画面ヘッダー（v-app-bar）の下端。無ければ 0。 */
+const fixedHeaderBottom = (): number => {
+    const bar = document.querySelector<HTMLElement>('.v-app-bar');
+    return bar ? Math.max(bar.getBoundingClientRect().bottom, 0) : 0;
+};
+
+const updateStickyHeader = (): void => {
+    frame = 0;
+    const element = wrap.value;
+    const thead = element?.querySelector('thead');
+    if (!element || !thead) return;
+    const rect = element.getBoundingClientRect();
+    const footHeight = element.querySelector('tfoot')?.getBoundingClientRect().height ?? 0;
+    // 見出しは表の上端より上へは出さず、合計行の手前で止める（表の外へはみ出さない）。
+    const maxOffset = Math.max(rect.height - thead.getBoundingClientRect().height - footHeight, 0);
+    // 枠線（clientTop）の分も差し引き、管理画面ヘッダーの下端にすき間なく付ける（下の行が透けない）。
+    const offset = Math.min(Math.max(fixedHeaderBottom() - rect.top - element.clientTop, 0), maxOffset);
+    element.style.setProperty('--report-page-sticky-offset', `${offset}px`);
+    stuck.value = offset > 0;
+};
+
+const scheduleUpdate = (): void => {
+    if (frame === 0) frame = window.requestAnimationFrame(updateStickyHeader);
+};
+
+onMounted(() => {
+    if (!props.pageStickyHeader) return;
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate, { passive: true });
+    updateStickyHeader();
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('scroll', scheduleUpdate);
+    window.removeEventListener('resize', scheduleUpdate);
+    if (frame !== 0) window.cancelAnimationFrame(frame);
 });
 </script>
 
 <template>
     <div
+        ref="wrap"
         class="ark-report-table-wrap"
-        :class="{ 'is-loading': loading }"
+        :class="{ 'is-loading': loading, 'is-page-sticky': pageStickyHeader, 'is-stuck': stuck }"
         :style="{ maxHeight, '--report-sticky-width': stickyWidth }"
         :aria-busy="loading"
     >
@@ -134,6 +186,24 @@ withDefaults(defineProps<{
 
 .ark-report-table .group-start {
     border-left: 1px solid #dfe4ec;
+}
+
+/*
+ * ページスクロール追従の見出し（pageStickyHeader）。thead ごと下げるので2段見出しも崩れない。
+ * 管理画面ヘッダー（v-app-bar）より下、表の本文・固定列より上に重ねる。背景は不透明（th の背景色）。
+ */
+.ark-report-table-wrap.is-page-sticky thead {
+    z-index: 5;
+    transform: translateY(var(--report-page-sticky-offset, 0px));
+    will-change: transform;
+}
+
+.ark-report-table-wrap.is-page-sticky.is-stuck thead tr:last-child th {
+    box-shadow: 0 1px 0 #dfe4ec, 0 2px 4px rgba(15, 23, 42, 0.06);
+}
+
+.ark-report-table-wrap.is-page-sticky.is-stuck thead tr:last-child th.is-sticky {
+    box-shadow: inset -1px 0 0 #dfe4ec, 0 1px 0 #dfe4ec, 0 2px 4px rgba(15, 23, 42, 0.06);
 }
 
 /* 左固定列 */
