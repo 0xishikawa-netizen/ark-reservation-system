@@ -133,9 +133,10 @@ final class AdminRouteAccessMatrixTest extends TestCase
                 );
             } else {
                 // 200（画面）か 422（クエリ検証を伴う一覧 API）のみ許容。
+                // セッション維持（keep-alive）だけは本文なしの 204 を返す（docs/SESSION_POLICY.md）。
                 $this->assertContains(
                     $status,
-                    [200, 422],
+                    $path === '/admin/session/keep-alive' ? [204] : [200, 422],
                     "開発管理者の {$path} が想定外のステータス {$status}",
                 );
             }
