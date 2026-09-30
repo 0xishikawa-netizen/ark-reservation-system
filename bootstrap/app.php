@@ -19,6 +19,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\StartSession as FrameworkStartSession;
 use Illuminate\Support\Facades\Auth;
+use Inertia\Middleware\EncryptHistory;
 use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -36,6 +37,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             SecurityHeaders::class,
             HandleInertiaRequests::class,
+            // Inertia がブラウザ履歴に保存するページデータを暗号化し、ログアウト時に鍵を捨てられるようにする。
+            EncryptHistory::class,
             ThrottleFortifyRequests::class,
             // 業務ロールによる TOTP 無効化を止める（自己ロックアウト対策）。
             PreventStaffTotpDisable::class,
@@ -78,19 +81,39 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (InsufficientMembershipBalanceException $exception, Request $request) => $renderConflict($exception, $request),
         );
 
-        // 本当にセッションが失効していた場合（419）、Inertia の操作では英語の「Page Expired」画面を
-        // モーダルで出さず、日本語の案内とともに再ログインへ導く。時間経過で意図的に失効させる仕組みはない。
+        // Inertia の送信で返った 419 / 429 を、英語の素のエラー画面（モーダル）ではなく日本語の案内に変える。
+        // respond() は1つしか登録できない（後から登録すると上書き）ため、1つのコールバックで扱う。
         $exceptions->respond(function (Response $response, Throwable $exception, Request $request): Response {
-            if ($response->getStatusCode() !== 419 || ! $request->hasHeader('X-Inertia')) {
+            if (! $request->hasHeader('X-Inertia')) {
                 return $response;
             }
-            if (Auth::check()) {
-                return back()->withErrors(['session' => __('messages.auth.session_ended')]);
-            }
-            // POST先URLへ戻さないよう、操作していた画面を戻り先にする。
-            redirect()->setIntendedUrl(url()->previous());
 
-            return redirect()->route('login')->with('status', __('messages.auth.session_ended'));
+            // 本当にセッションが失効していた場合（419）は、再ログインへ導く。時間経過で意図的に失効させる仕組みはない。
+            if ($response->getStatusCode() === 419) {
+                if (Auth::check()) {
+                    return back()->withErrors(['session' => __('messages.auth.session_ended')]);
+                }
+                // POST先URLへ戻さないよう、操作していた画面を戻り先にする。
+                redirect()->setIntendedUrl(url()->previous());
+
+                return redirect()->route('login')->with('status', __('messages.auth.session_ended'));
+            }
+
+            // ログイン等の試行回数超過（429）は、送信元の画面へ戻し入力欄に残り秒数つきの案内を出す
+            // （以前は素の 429 画面がモーダルで出て、フォームに案内が出なかった。全面検証 2026-09-30）。
+            if ($response->getStatusCode() === 429) {
+                $field = match (true) {
+                    $request->routeIs('password.confirm.store') => 'password',
+                    $request->routeIs('two-factor.login.store') => 'code',
+                    default => 'email',
+                };
+
+                return back()->withErrors([
+                    $field => __('auth.throttle', ['seconds' => (int) ($response->headers->get('Retry-After') ?? 60)]),
+                ]);
+            }
+
+            return $response;
         });
 
         $exceptions->shouldRenderJsonWhen(

@@ -9,6 +9,7 @@ use App\Actions\Fortify\RedirectIfTwoFactorAuthenticatableUnlessTrustedDevice;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Actions\Fortify\UpdateUserPassword;
 use App\Actions\Fortify\UpdateUserProfileInformation;
+use App\Http\Responses\HistoryClearingLogoutResponse;
 use App\Http\Responses\TrustedDeviceAwareTwoFactorLoginResponse;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -23,6 +24,7 @@ use Laravel\Fortify\Actions\AttemptToAuthenticate;
 use Laravel\Fortify\Actions\CanonicalizeUsername;
 use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
 use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
+use Laravel\Fortify\Contracts\LogoutResponse as LogoutResponseContract;
 use Laravel\Fortify\Contracts\TwoFactorLoginResponse as TwoFactorLoginResponseContract;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
@@ -32,6 +34,8 @@ class FortifyServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(TwoFactorLoginResponseContract::class, TrustedDeviceAwareTwoFactorLoginResponse::class);
+        // ログアウト後の「戻る」で前の利用者の画面（顧客情報）が見えないよう、ブラウザ履歴を消す。
+        $this->app->singleton(LogoutResponseContract::class, HistoryClearingLogoutResponse::class);
     }
 
     public function boot(): void
