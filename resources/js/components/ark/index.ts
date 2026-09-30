@@ -11,3 +11,6 @@ export { default as StatusChip } from './StatusChip.vue';
 export { default as TimeField } from './TimeField.vue';
 export { default as YearField } from './YearField.vue';
 export { default as WeeklyAvailabilityTimetable } from './WeeklyAvailabilityTimetable.vue';
+export { default as MasterDeleteButton } from './MasterDeleteButton.vue';
+export { default as TrashedMasterList } from './TrashedMasterList.vue';
+export { default as MoneyField } from './MoneyField.vue';

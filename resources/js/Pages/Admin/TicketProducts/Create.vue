@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { MoneyField } from '@/components/ark';
 import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -42,11 +43,9 @@ const submit = (): void => {
                         :error-messages="form.errors.total_count"
                         required
                     />
-                    <v-text-field
-                        v-model.number="form.price"
-                        label="価格（円）"
-                        type="number"
-                        min="0"
+                    <MoneyField
+                        v-model="form.price"
+                        label="価格"
                         :error-messages="form.errors.price"
                         required
                     />

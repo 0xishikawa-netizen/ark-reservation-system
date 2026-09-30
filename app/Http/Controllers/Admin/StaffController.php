@@ -8,6 +8,7 @@ use App\Actions\Staff\CreateStaff;
 use App\Actions\Staff\DeactivateStaff;
 use App\Actions\Staff\SetStaffCapabilities;
 use App\Actions\Staff\UpdateStaff;
+use App\Domain\Masters\MasterDeletionService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreStaffRequest;
 use App\Http\Requests\Admin\UpdateStaffRequest;
@@ -38,6 +39,8 @@ class StaffController extends Controller
             ]);
 
         return Inertia::render('Admin/Staff/Index', [
+            // 削除済み（復元用）は管理者（masters.delete）にだけ渡す。
+            'trashed' => request()->user()?->can('masters.delete') ? app(MasterDeletionService::class)->trashed('staff') : [],
             'staff' => $staff,
         ]);
     }

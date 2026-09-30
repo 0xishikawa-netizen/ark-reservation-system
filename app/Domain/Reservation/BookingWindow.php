@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Reservation;
 
 use App\Domain\Business\StoreCalendarService;
+use App\Models\StoreCalendarDay;
 use App\Support\Settings\Settings;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -80,6 +81,19 @@ final class BookingWindow
     public function closedDates(): array
     {
         return $this->storeCalendar->closedDates();
+    }
+
+    /**
+     * 期間内の休業日（例外日の休業と、毎週の定休日）。勤務枠の自動作成で休業日を飛ばすために使う。
+     *
+     * @return list<string> Y-m-d
+     */
+    public function closedDatesBetween(CarbonInterface $from, CarbonInterface $to): array
+    {
+        return array_values(array_keys(array_filter(
+            $this->storeCalendar->resolveRange($from, $to),
+            static fn (array $day): bool => $day['status'] === StoreCalendarDay::STATUS_CLOSED,
+        )));
     }
 
     public function isClosedDate(CarbonInterface $date): bool

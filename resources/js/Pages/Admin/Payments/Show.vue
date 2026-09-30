@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
-import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { EmptyState, PageHeader, SectionCard, StatusChip, MoneyField } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
 
@@ -223,12 +223,10 @@ const syncFromStripe = (): void => {
                     <v-alert type="warning" variant="tonal" density="compact" class="mb-4">
                         {{ MESSAGES.payment.refundIrreversible }}
                     </v-alert>
-                    <v-text-field
-                        v-model.number="form.amount"
-                        label="返金額（円）"
-                        type="number"
+                    <MoneyField
+                        v-model="form.amount"
+                        label="返金額"
                         :max="payment.refundable_amount"
-                        min="1"
                         :error-messages="form.errors.amount"
                         density="comfortable"
                     />

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip, MasterDeleteButton, TrashedMasterList } from '@/components/ark';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -21,6 +21,7 @@ interface StaffMember {
 }
 
 defineProps<{
+    trashed?: Array<{ id: number; name: string; deleted_at: string | null }>;
     staff: StaffMember[];
 }>();
 </script>
@@ -102,6 +103,7 @@ defineProps<{
                             >
                                 編集
                             </v-btn>
+                            <MasterDeleteButton type="staff" :id="member.user_id" :name="member.display_name" label="スタッフ" />
                             <v-btn
                                 size="small"
                                 variant="outlined"
@@ -126,6 +128,7 @@ defineProps<{
             </tbody>
         </v-table>
     </SectionCard>
+    <TrashedMasterList type="staff" label="スタッフ" :items="trashed ?? []" />
 </template>
 
 <style scoped>

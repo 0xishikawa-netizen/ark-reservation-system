@@ -18,6 +18,8 @@ final class StoreCalendarService
 {
     public const STATUS_NORMAL = 'normal';
 
+    public const CLOSED_WEEKDAYS_KEY = 'business_calendar.closed_weekdays';
+
     public function __construct(
         private readonly Settings $settings,
         private readonly BusinessTime $businessTime,
@@ -34,7 +36,40 @@ final class StoreCalendarService
             ->whereDate('business_date', $businessDate)
             ->first();
 
-        if ($exception !== null) {
+        return $this->dayFor($businessDate, $exception, $this->closedWeekdays());
+    }
+
+    /**
+     * 毎週の定休日（ISO 曜日 1=月〜7=日）。未設定なら空（毎日営業）。
+     *
+     * @return list<int>
+     */
+    public function closedWeekdays(): array
+    {
+        $value = $this->settings->get(self::CLOSED_WEEKDAYS_KEY, []);
+
+        return array_values(array_unique(array_map('intval', is_array($value) ? $value : [])));
+    }
+
+    /** @param list<int> $weekdays */
+    public function setClosedWeekdays(array $weekdays, ?Authenticatable $actor): void
+    {
+        $weekdays = array_values(array_unique(array_filter(array_map('intval', $weekdays), static fn (int $day): bool => $day >= 1 && $day <= 7)));
+        sort($weekdays);
+        $this->settings->set(self::CLOSED_WEEKDAYS_KEY, $weekdays, 'json');
+        $this->auditLogger->log('store_calendar.closed_weekdays_updated', null, '定休日: '.implode(',', $weekdays), $actor);
+    }
+
+    /**
+     * 1日分の営業状態。例外日（休業・特別営業時間・営業）を最優先し、無ければ定休日の曜日を休業にする。
+     *
+     * @param  list<int>  $closedWeekdays
+     * @return array{business_date:string,status:string,opens_at:string|null,closes_at:string|null,note:string|null,is_exception:bool}
+     */
+    private function dayFor(string $businessDate, ?StoreCalendarDay $exception, array $closedWeekdays): array
+    {
+        [$normalOpen, $normalClose] = $this->normalHours();
+        if ($exception !== null && $exception->status !== StoreCalendarDay::STATUS_OPEN) {
             return [
                 'business_date' => $businessDate,
                 'status' => (string) $exception->status,
@@ -44,20 +79,36 @@ final class StoreCalendarService
                 'is_exception' => true,
             ];
         }
+        // 「営業」の例外日は、定休日の曜日でも通常の営業時間で開ける。
+        if ($exception === null && in_array(CarbonImmutable::parse($businessDate)->dayOfWeekIso, $closedWeekdays, true)) {
+            return [
+                'business_date' => $businessDate,
+                'status' => StoreCalendarDay::STATUS_CLOSED,
+                'opens_at' => null,
+                'closes_at' => null,
+                'note' => __('messages.business.regular_holiday'),
+                'is_exception' => false,
+            ];
+        }
 
         return [
             'business_date' => $businessDate,
             'status' => self::STATUS_NORMAL,
-            'opens_at' => (string) ($this->settings->get(
-                'business_hours.open',
-                config('reservation.business_hours.open', '10:00'),
-            ) ?? config('reservation.business_hours.open', '10:00')),
-            'closes_at' => (string) ($this->settings->get(
-                'business_hours.close',
-                config('reservation.business_hours.close', '22:00'),
-            ) ?? config('reservation.business_hours.close', '22:00')),
-            'note' => null,
-            'is_exception' => false,
+            'opens_at' => $normalOpen,
+            'closes_at' => $normalClose,
+            'note' => $exception?->note,
+            'is_exception' => $exception !== null,
+        ];
+    }
+
+    /** @return array{0: string, 1: string} */
+    private function normalHours(): array
+    {
+        return [
+            (string) ($this->settings->get('business_hours.open', config('reservation.business_hours.open', '10:00'))
+                ?? config('reservation.business_hours.open', '10:00')),
+            (string) ($this->settings->get('business_hours.close', config('reservation.business_hours.close', '22:00'))
+                ?? config('reservation.business_hours.close', '22:00')),
         ];
     }
 
@@ -72,22 +123,11 @@ final class StoreCalendarService
         $last = $this->toBusinessDate($to);
         $exceptions = StoreCalendarDay::query()->whereBetween('business_date', [$first, $last])
             ->get()->keyBy(static fn (StoreCalendarDay $day): string => $day->business_date->toDateString());
-        $normalOpen = (string) ($this->settings->get('business_hours.open', config('reservation.business_hours.open', '10:00'))
-            ?? config('reservation.business_hours.open', '10:00'));
-        $normalClose = (string) ($this->settings->get('business_hours.close', config('reservation.business_hours.close', '22:00'))
-            ?? config('reservation.business_hours.close', '22:00'));
+        $closedWeekdays = $this->closedWeekdays();
         $days = [];
         for ($day = CarbonImmutable::parse($first, $this->businessTime->timezone()); $day->toDateString() <= $last; $day = $day->addDay()) {
             $date = $day->toDateString();
-            $exception = $exceptions->get($date);
-            $days[$date] = [
-                'business_date' => $date,
-                'status' => $exception?->status ?? self::STATUS_NORMAL,
-                'opens_at' => $exception === null ? $normalOpen : $this->time($exception->opens_at),
-                'closes_at' => $exception === null ? $normalClose : $this->time($exception->closes_at),
-                'note' => $exception?->note,
-                'is_exception' => $exception !== null,
-            ];
+            $days[$date] = $this->dayFor($date, $exceptions->get($date), $closedWeekdays);
         }
 
         return $days;
@@ -140,7 +180,7 @@ final class StoreCalendarService
         $opensAt = $data['opens_at'] ?? null;
         $closesAt = $data['closes_at'] ?? null;
 
-        if (! in_array($status, [StoreCalendarDay::STATUS_CLOSED, StoreCalendarDay::STATUS_SPECIAL_HOURS], true)) {
+        if (! in_array($status, [StoreCalendarDay::STATUS_CLOSED, StoreCalendarDay::STATUS_SPECIAL_HOURS, StoreCalendarDay::STATUS_OPEN], true)) {
             throw ValidationException::withMessages(['status' => __('messages.business.calendar_invalid_status')]);
         }
 

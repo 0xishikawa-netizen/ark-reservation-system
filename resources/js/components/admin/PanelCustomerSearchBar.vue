@@ -13,8 +13,11 @@ withDefaults(defineProps<{
     canSearch: boolean;
     /** 新規予約で顧客がまだ選ばれていない時に、この検索欄が入口だと分かるよう赤く強調する。 */
     highlight?: boolean;
+    /** 新規予約の入力中。選んだ顧客は予約の顧客に入る（顧客詳細は開かない）ことを案内する。 */
+    selectsForReservation?: boolean;
 }>(), {
     highlight: false,
+    selectsForReservation: false,
 });
 
 const emit = defineEmits<{
@@ -121,6 +124,10 @@ defineExpose({ restoreFocus, closeDropdown });
             @blur="onBlur"
         />
 
+        <p v-if="canSearch && selectsForReservation" class="psb__mode-hint" data-testid="psb-mode-hint">
+            {{ MESSAGES.customer.searchSelectsForReservation }}
+        </p>
+
         <div v-show="canSearch && showDropdown" class="psb__dropdown">
             <div v-if="loading" class="psb__state">
                 <v-progress-circular indeterminate size="22" color="primary" />
@@ -147,6 +154,13 @@ defineExpose({ restoreFocus, closeDropdown });
 </template>
 
 <style scoped>
+.psb__mode-hint {
+    margin: 4px 2px 0;
+    font-size: 0.6875rem;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.85);
+}
+
 /* 予約台帳の左パネル上部に常時表示する顧客検索（Peak Manager 参考・§8）。 */
 .psb {
     position: relative;

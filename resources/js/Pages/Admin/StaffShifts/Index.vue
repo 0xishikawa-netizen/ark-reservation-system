@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, reactive, ref, watch } from 'vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { DateField, PageHeader, SectionCard } from '@/components/ark';
+import { DateField, PageHeader, SectionCard, TimeField } from '@/components/ark';
 import { MESSAGES, confirmDeleteShiftMessage } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
@@ -50,6 +50,7 @@ interface BookingSettings {
     release_day_of_month: number;
     min_lead_minutes: number;
     closed_dates: string[];
+    closed_weekdays?: number[];
     enforced: boolean;
     last_bookable_date: string | null;
 }
@@ -65,32 +66,84 @@ const props = defineProps<{
     filters: { staff_id: number | null; from: string; to: string };
 }>();
 
-const tab = ref<'basic' | 'exceptions' | 'booking' | 'attendance'>('basic');
+type ShiftTab = 'basic' | 'exceptions' | 'attendance' | 'store';
+const SHIFT_TABS: ShiftTab[] = ['basic', 'exceptions', 'attendance', 'store'];
+// 開いているタブは URL に残す（期間の前後移動やスタッフ切替で画面を読み直しても、同じタブのままにする）。
+const initialTab = ((): ShiftTab => {
+    const value = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab');
+
+    return SHIFT_TABS.includes(value as ShiftTab) ? (value as ShiftTab) : 'basic';
+})();
+const tab = ref<ShiftTab>(initialTab);
+watch(tab, (value) => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', value);
+    window.history.replaceState(window.history.state, '', url);
+});
+const isStoreTab = computed(() => tab.value === 'store');
+const page = usePage();
+const canManageSettings = computed(() => page.props.auth?.can?.settingsManage === true);
 
 const attendanceId = ref<number | null>(null);
 const attendanceForm = useForm<{
     staff_id: number | null; business_date: string; clock_in_at: string; clock_out_at: string;
     status: 'draft' | 'confirmed'; note: string; breaks: { start_at: string; end_at: string; type: string; note: string }[];
 }>({ staff_id: props.selected_staff_id, business_date: '', clock_in_at: '', clock_out_at: '', status: 'draft', note: '', breaks: [] });
+/**
+ * 出退勤は「日付＋時刻」で入力する（以前は日時を1つの入力欄で打つ形で使いにくかった）。
+ * 保存時にサーバーの形式（YYYY-MM-DDTHH:MM）へ組み立てる。出勤より前の時刻は翌日（深夜の退勤）とみなす。
+ */
+const attendanceTimes = reactive({ clockIn: '', clockOut: '' });
+const attendanceBreaks = ref<{ start: string; end: string; type: string; note: string }[]>([]);
+const timeOf = (value: string | null): string => (value ? value.slice(11, 16) : '');
+const nextDate = (iso: string): string => {
+    const [y, m, d] = iso.split('-').map(Number);
+    const date = new Date(y, m - 1, d + 1);
+
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+const toDateTime = (date: string, time: string, after: string): string => {
+    if (!date || !time) {
+        return '';
+    }
+
+    return `${after !== '' && time < after ? nextDate(date) : date}T${time}`;
+};
 const editAttendance = (entry: AttendanceEntry): void => {
     attendanceId.value = entry.id;
     attendanceForm.staff_id = staffId.value;
     attendanceForm.business_date = entry.business_date;
-    attendanceForm.clock_in_at = entry.clock_in_at ?? '';
-    attendanceForm.clock_out_at = entry.clock_out_at ?? '';
+    attendanceTimes.clockIn = timeOf(entry.clock_in_at);
+    attendanceTimes.clockOut = timeOf(entry.clock_out_at);
     attendanceForm.status = entry.status;
     attendanceForm.note = entry.note ?? '';
-    attendanceForm.breaks = entry.breaks.map((value) => ({ ...value, note: value.note ?? '' }));
+    attendanceBreaks.value = entry.breaks.map((value) => ({ start: timeOf(value.start_at), end: timeOf(value.end_at), type: value.type, note: value.note ?? '' }));
 };
 const newAttendance = (): void => {
     attendanceId.value = null;
     attendanceForm.reset();
     attendanceForm.staff_id = staffId.value;
+    attendanceTimes.clockIn = '';
+    attendanceTimes.clockOut = '';
+    attendanceBreaks.value = [];
 };
 const addAttendanceBreak = (): void => {
-    attendanceForm.breaks.push({ start_at: '', end_at: '', type: 'break', note: '' });
+    attendanceBreaks.value.push({ start: '', end: '', type: 'break', note: '' });
 };
 const saveAttendance = (): void => {
+    const date = attendanceForm.business_date;
+    const clockIn = attendanceTimes.clockIn;
+    attendanceForm.clock_in_at = toDateTime(date, clockIn, '');
+    attendanceForm.clock_out_at = toDateTime(date, attendanceTimes.clockOut, clockIn);
+    attendanceForm.breaks = attendanceBreaks.value.map((entry) => ({
+        start_at: toDateTime(date, entry.start, clockIn),
+        end_at: toDateTime(date, entry.end, clockIn),
+        type: entry.type,
+        note: entry.note,
+    }));
     attendanceForm.staff_id = staffId.value;
     if (attendanceId.value === null) {
         attendanceForm.post('/admin/staff-shifts/attendances', { preserveScroll: true, onSuccess: newAttendance });
@@ -115,7 +168,7 @@ const staffId = ref<number | null>(props.selected_staff_id);
 const selectStaff = (id: number | null): void => {
     router.get(
         '/admin/staff-shifts',
-        { staff_id: id ?? undefined, from: props.filters.from, to: props.filters.to },
+        { staff_id: id ?? undefined, from: props.filters.from, to: props.filters.to, tab: tab.value },
         { preserveState: false, preserveScroll: true },
     );
 };
@@ -316,7 +369,7 @@ const periodShift = (deltaDays: number): void => {
 
     router.get(
         '/admin/staff-shifts',
-        { staff_id: staffId.value ?? undefined, from: move(props.filters.from), to: move(props.filters.to) },
+        { staff_id: staffId.value ?? undefined, from: move(props.filters.from), to: move(props.filters.to), tab: tab.value },
         { preserveState: false, preserveScroll: true },
     );
 };
@@ -365,6 +418,17 @@ const removeClosedDate = (value: string): void => {
     bookingForm.closed_dates = bookingForm.closed_dates.filter((d) => d !== value);
 };
 
+/** 毎週の定休日（業務マスタの店舗カレンダーと同じ設定）。 */
+const closedWeekdaysForm = useForm({ weekdays: [...(props.booking.closed_weekdays ?? [])] });
+const weekdayOptions = [
+    { value: 1, label: '月' }, { value: 2, label: '火' }, { value: 3, label: '水' }, { value: 4, label: '木' },
+    { value: 5, label: '金' }, { value: 6, label: '土' }, { value: 7, label: '日' },
+];
+const saveClosedWeekdays = (): void => {
+    closedWeekdaysForm.put('/admin/settings/business-masters/calendar/closed-weekdays', { preserveScroll: true, preserveState: true });
+};
+const periodLabel = computed(() => `${props.filters.from.replace(/-/g, '/')} 〜 ${props.filters.to.replace(/-/g, '/')}`);
+
 const saveBooking = (): void => {
     bookingForm.put('/admin/staff-shifts/booking', { preserveScroll: true, preserveState: true });
 };
@@ -395,7 +459,7 @@ const horizonSummary = computed(() => {
 
     <PageHeader
         title="勤務枠"
-        subtitle="基本シフトを決めておき、例外日と予約受付ルールだけを調整します。"
+        subtitle="スタッフごとの勤務（いつもの勤務・特定の日の変更・出退勤）と、店舗全体の休業日・予約受付を設定します。"
     >
         <template #actions>
             <v-btn
@@ -409,15 +473,27 @@ const horizonSummary = computed(() => {
         </template>
     </PageHeader>
 
-    <v-tabs v-model="tab" color="primary" class="mb-5">
-        <v-tab value="basic">基本シフト</v-tab>
-        <v-tab value="exceptions">例外日</v-tab>
-        <v-tab value="booking">予約受付</v-tab>
-        <v-tab value="attendance">{{ MESSAGES.attendance.tab }}</v-tab>
-    </v-tabs>
+    <!-- スタッフ個人の設定と、店舗全体の設定を分けて見せる。2 つのタブ列で同じ値を共有するため、
+         選択の強制（mandatory）を切る（切らないと片方の列が自分のタブを選び直してしまう）。 -->
+    <div class="ark-shift-tabs mb-5">
+        <div class="ark-shift-tabs__group">
+            <span class="ark-shift-tabs__label"><v-icon icon="mdi-account-outline" size="16" />スタッフごと</span>
+            <v-tabs v-model="tab" color="primary" density="comfortable" :mandatory="false">
+                <v-tab value="basic">いつもの勤務（基本シフト）</v-tab>
+                <v-tab value="exceptions">特定の日だけ変える</v-tab>
+                <v-tab value="attendance">{{ MESSAGES.attendance.tab }}</v-tab>
+            </v-tabs>
+        </div>
+        <div class="ark-shift-tabs__group">
+            <span class="ark-shift-tabs__label"><v-icon icon="mdi-store-outline" size="16" />店舗全体</span>
+            <v-tabs v-model="tab" color="primary" density="comfortable" :mandatory="false">
+                <v-tab value="store">休業日・予約受付</v-tab>
+            </v-tabs>
+        </div>
+    </div>
 
-    <!-- スタッフ選択（基本シフト / 例外日で共通） -->
-    <div v-if="tab !== 'booking'" class="mb-4" style="max-width: 320px">
+    <!-- スタッフ選択（スタッフごとのタブで共通） -->
+    <div v-if="!isStoreTab" class="mb-4" style="max-width: 320px">
         <v-select
             v-model="staffId"
             label="スタッフ"
@@ -439,39 +515,47 @@ const horizonSummary = computed(() => {
     <v-window v-model="tab">
         <v-window-item value="attendance">
             <SectionCard :title="MESSAGES.attendance.title" :subtitle="MESSAGES.attendance.subtitle">
+                <v-alert type="info" variant="tonal" density="compact" class="mb-4">{{ MESSAGES.attendance.help }}</v-alert>
                 <p v-if="staffId === null">{{ MESSAGES.attendance.selectStaff }}</p>
                 <template v-else>
-                    <div class="d-flex flex-wrap ga-3 mb-3">
-                        <DateField v-model="attendanceForm.business_date" :label="MESSAGES.attendance.date" :clearable="false" :hide-details="false" density="default" style="max-width: 220px" />
-                        <v-text-field v-model="attendanceForm.clock_in_at" type="datetime-local" :label="MESSAGES.attendance.clockIn" style="max-width: 240px" />
-                        <v-text-field v-model="attendanceForm.clock_out_at" type="datetime-local" :label="MESSAGES.attendance.clockOut" style="max-width: 240px" />
+                    <p class="ark-att__title">{{ attendanceId === null ? MESSAGES.attendance.newTitle : MESSAGES.attendance.editTitle }}</p>
+                    <div class="ark-att__row">
+                        <DateField v-model="attendanceForm.business_date" :label="MESSAGES.attendance.date" :clearable="false" density="comfortable" class="ark-att__date" />
+                        <TimeField v-model="attendanceTimes.clockIn" :label="MESSAGES.attendance.clockIn" :step-minutes="5" density="comfortable" class="ark-att__time" />
+                        <span class="ark-weekgrid__sep">〜</span>
+                        <TimeField v-model="attendanceTimes.clockOut" :label="MESSAGES.attendance.clockOut" :step-minutes="5" clearable density="comfortable" class="ark-att__time" />
                     </div>
-                    <div v-for="(entry, index) in attendanceForm.breaks" :key="index" class="d-flex flex-wrap ga-3 align-center mb-2">
-                        <v-text-field v-model="entry.start_at" type="datetime-local" :label="MESSAGES.attendance.breakStart" style="max-width: 240px" />
-                        <v-text-field v-model="entry.end_at" type="datetime-local" :label="MESSAGES.attendance.breakEnd" style="max-width: 240px" />
-                        <v-btn variant="text" color="error" @click="attendanceForm.breaks.splice(index, 1)">{{ MESSAGES.attendance.removeBreak }}</v-btn>
+                    <div v-for="(entry, index) in attendanceBreaks" :key="index" class="ark-att__row">
+                        <span class="ark-att__breaklabel">{{ MESSAGES.attendance.breakLabel }}{{ index + 1 }}</span>
+                        <TimeField v-model="entry.start" :label="MESSAGES.attendance.breakStart" :step-minutes="5" density="comfortable" class="ark-att__time" />
+                        <span class="ark-weekgrid__sep">〜</span>
+                        <TimeField v-model="entry.end" :label="MESSAGES.attendance.breakEnd" :step-minutes="5" density="comfortable" class="ark-att__time" />
+                        <v-btn variant="text" color="error" size="small" prepend-icon="mdi-close" @click="attendanceBreaks.splice(index, 1)">{{ MESSAGES.attendance.removeBreak }}</v-btn>
                     </div>
-                    <v-btn variant="text" class="mb-3" @click="addAttendanceBreak">{{ MESSAGES.attendance.addBreak }}</v-btn>
-                    <div class="d-flex flex-wrap ga-3">
-                        <v-select v-model="attendanceForm.status" :items="[{ title: MESSAGES.attendance.draft, value: 'draft' }, { title: MESSAGES.attendance.confirmed, value: 'confirmed' }]" style="max-width: 180px" />
-                        <v-text-field v-model="attendanceForm.note" :label="MESSAGES.attendance.note" style="max-width: 400px" />
+                    <v-btn variant="text" size="small" prepend-icon="mdi-plus" class="mb-3" @click="addAttendanceBreak">{{ MESSAGES.attendance.addBreak }}</v-btn>
+                    <div class="ark-att__row">
+                        <v-select v-model="attendanceForm.status" :label="MESSAGES.attendance.statusLabel" :items="[{ title: MESSAGES.attendance.draft, value: 'draft' }, { title: MESSAGES.attendance.confirmed, value: 'confirmed' }]" density="comfortable" hide-details class="ark-att__status" />
+                        <v-text-field v-model="attendanceForm.note" :label="MESSAGES.attendance.note" density="comfortable" hide-details class="ark-att__note" />
                     </div>
-                    <p v-if="Object.keys(attendanceForm.errors).length" role="alert" class="text-error">{{ MESSAGES.attendance.formError }} {{ Object.values(attendanceForm.errors).join(' / ') }}</p>
-                    <div class="d-flex ga-3">
-                        <v-btn color="primary" :loading="attendanceForm.processing" @click="saveAttendance">{{ MESSAGES.attendance.save }}</v-btn>
+                    <p v-if="Object.keys(attendanceForm.errors).length" role="alert" class="text-error text-body-2">{{ MESSAGES.attendance.formError }} {{ Object.values(attendanceForm.errors).join(' / ') }}</p>
+                    <div class="d-flex ga-3 mt-3">
+                        <v-btn color="primary" prepend-icon="mdi-content-save-outline" :loading="attendanceForm.processing" @click="saveAttendance">{{ MESSAGES.attendance.save }}</v-btn>
                         <v-btn variant="outlined" @click="newAttendance">{{ MESSAGES.attendance.new }}</v-btn>
                     </div>
                 </template>
             </SectionCard>
-            <SectionCard :title="MESSAGES.attendance.title" class="mt-5">
-                <p v-if="attendances.length === 0">{{ MESSAGES.attendance.none }}</p>
-                <v-table v-else>
+            <SectionCard :title="MESSAGES.attendance.listTitle" class="mt-5">
+                <p v-if="attendances.length === 0" class="text-medium-emphasis">{{ MESSAGES.attendance.none }}</p>
+                <v-table v-else density="comfortable">
+                    <thead><tr><th>{{ MESSAGES.attendance.date }}</th><th>{{ MESSAGES.attendance.clockIn }}〜{{ MESSAGES.attendance.clockOut }}</th><th>{{ MESSAGES.attendance.breakLabel }}</th><th>{{ MESSAGES.attendance.statusLabel }}</th><th>{{ MESSAGES.attendance.note }}</th><th class="text-right">操作</th></tr></thead>
                     <tbody>
                         <tr v-for="entry in attendances" :key="entry.id">
-                            <td>{{ entry.business_date }}</td><td>{{ entry.clock_in_at ?? MESSAGES.common.notRecorded }} 〜 {{ entry.clock_out_at ?? MESSAGES.common.notRecorded }}</td>
+                            <td>{{ entry.business_date }}</td>
+                            <td>{{ timeOf(entry.clock_in_at) || MESSAGES.common.notRecorded }} 〜 {{ timeOf(entry.clock_out_at) || MESSAGES.common.notRecorded }}</td>
+                            <td>{{ entry.breaks.map((b) => `${timeOf(b.start_at)}〜${timeOf(b.end_at)}`).join('、') }}</td>
                             <td>{{ entry.status === 'confirmed' ? MESSAGES.attendance.confirmed : MESSAGES.attendance.draft }}</td>
-                            <td>{{ entry.note ?? MESSAGES.common.notEntered }}</td>
-                            <td><v-btn variant="text" @click="editAttendance(entry)">{{ MESSAGES.attendance.edit }}</v-btn></td>
+                            <td class="text-medium-emphasis">{{ entry.note ?? '' }}</td>
+                            <td class="text-right"><v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-pencil-outline" @click="editAttendance(entry)">{{ MESSAGES.attendance.edit }}</v-btn></td>
                         </tr>
                     </tbody>
                 </v-table>
@@ -512,21 +596,9 @@ const horizonSummary = computed(() => {
                                 :key="index"
                                 class="ark-weekgrid__range"
                             >
-                                <v-text-field
-                                    v-model="range.start"
-                                    type="time"
-                                    density="compact"
-                                    hide-details
-                                    variant="outlined"
-                                />
+                                <TimeField v-model="range.start" label="開始" density="compact" :step-minutes="5" class="ark-weekgrid__time" />
                                 <span class="ark-weekgrid__sep">〜</span>
-                                <v-text-field
-                                    v-model="range.end"
-                                    type="time"
-                                    density="compact"
-                                    hide-details
-                                    variant="outlined"
-                                />
+                                <TimeField v-model="range.end" label="終了" density="compact" :step-minutes="5" class="ark-weekgrid__time" />
                                 <v-btn
                                     icon="mdi-close"
                                     size="x-small"
@@ -581,8 +653,8 @@ const horizonSummary = computed(() => {
         <v-window-item value="exceptions">
             <div class="ark-exceptions">
                 <SectionCard
-                    title="特定の日だけ変更する"
-                    subtitle="臨時休み・時間変更・追加出勤など、通常と違う日だけ設定します。"
+                    title="特定の日だけ変える"
+                    subtitle="日付を選んで「休みにする」か「この日の勤務時間」を登録します。いつもの勤務（基本シフト）は変わりません。"
                 >
                     <p v-if="staffId === null" class="text-medium-emphasis">
                         {{ MESSAGES.staff.selectStaff }}
@@ -640,25 +712,9 @@ const horizonSummary = computed(() => {
                                 </v-btn>
 
                                 <div class="ark-exceptions__addshift">
-                                    <v-text-field
-                                        v-model="addShiftForm.start_at"
-                                        type="time"
-                                        label="開始"
-                                        density="compact"
-                                        hide-details
-                                        variant="outlined"
-                                        style="max-width: 130px"
-                                    />
+                                    <TimeField v-model="addShiftForm.start_at" label="開始" density="compact" :step-minutes="5" class="ark-weekgrid__time" />
                                     <span class="ark-weekgrid__sep">〜</span>
-                                    <v-text-field
-                                        v-model="addShiftForm.end_at"
-                                        type="time"
-                                        label="終了"
-                                        density="compact"
-                                        hide-details
-                                        variant="outlined"
-                                        style="max-width: 130px"
-                                    />
+                                    <TimeField v-model="addShiftForm.end_at" label="終了" density="compact" :step-minutes="5" class="ark-weekgrid__time" />
                                     <v-btn
                                         color="primary"
                                         variant="tonal"
@@ -666,7 +722,7 @@ const horizonSummary = computed(() => {
                                         :loading="addShiftForm.processing"
                                         @click="addCustomShift"
                                     >
-                                        出勤を追加
+                                        この時間で出勤にする
                                     </v-btn>
                                 </div>
                                 <p
@@ -680,7 +736,7 @@ const horizonSummary = computed(() => {
                     </template>
                 </SectionCard>
 
-                <SectionCard title="設定済みの例外日" class="mt-5">
+                <SectionCard title="登録済みの「特定の日」" subtitle="今日以降に、休み・時間変更を登録した日です。" class="mt-5">
                     <p v-if="exceptions.length === 0" class="text-medium-emphasis">
                         {{ MESSAGES.shift.noUpcomingExceptions }}
                     </p>
@@ -703,8 +759,8 @@ const horizonSummary = computed(() => {
                                 </td>
                                 <td class="text-medium-emphasis">{{ e.note ?? MESSAGES.common.notEntered }}</td>
                                 <td class="text-right">
-                                    <v-btn size="small" variant="text" @click="clearException(e.id)">
-                                        解除
+                                    <v-btn size="small" variant="tonal" @click="clearException(e.id)">
+                                        いつもの勤務に戻す
                                     </v-btn>
                                 </td>
                             </tr>
@@ -712,16 +768,12 @@ const horizonSummary = computed(() => {
                     </v-table>
                 </SectionCard>
 
-                <SectionCard title="個別の勤務枠（この期間）" class="mt-5">
-                    <template #append>
-                        <div class="d-flex ga-1">
-                            <v-btn size="small" variant="text" @click="periodShift(-28)">前へ</v-btn>
-                            <v-btn size="small" variant="text" @click="periodShift(28)">次へ</v-btn>
-                        </div>
-                    </template>
-                    <p class="text-caption text-medium-emphasis mb-2">
-                        {{ filters.from }} 〜 {{ filters.to }} に手動で作成された勤務枠。
-                    </p>
+                <SectionCard title="手動で追加した勤務" subtitle="「この時間で出勤にする」で登録した勤務の一覧です（基本シフトから自動で作った勤務は含みません）。" class="mt-5">
+                    <div class="ark-period mb-2">
+                        <v-btn size="small" variant="outlined" prepend-icon="mdi-chevron-left" @click="periodShift(-42)">前の6週間</v-btn>
+                        <span class="ark-period__label">{{ periodLabel }}</span>
+                        <v-btn size="small" variant="outlined" append-icon="mdi-chevron-right" @click="periodShift(42)">次の6週間</v-btn>
+                    </div>
                     <p v-if="upcomingManualShifts.length === 0" class="text-medium-emphasis">
                         {{ MESSAGES.shift.noIndividualShifts }}
                     </p>
@@ -742,8 +794,20 @@ const horizonSummary = computed(() => {
             </div>
         </v-window-item>
 
-        <!-- ───────── タブ3：予約受付 ───────── -->
-        <v-window-item value="booking">
+        <!-- ───────── 店舗全体：休業日・予約受付 ───────── -->
+        <v-window-item value="store">
+            <SectionCard title="定休日（毎週）" subtitle="店全体が毎週休む曜日です。この曜日は予約を受け付けず、勤務枠も作りません。" class="mb-5">
+                <template v-if="canManageSettings">
+                    <div class="d-flex flex-wrap align-center ga-3">
+                        <v-chip-group v-model="closedWeekdaysForm.weekdays" multiple column aria-label="定休日の曜日">
+                            <v-chip v-for="day in weekdayOptions" :key="day.value" :value="day.value" filter variant="outlined" selected-class="ark-closed-on">{{ day.label }}</v-chip>
+                        </v-chip-group>
+                        <v-btn color="primary" variant="flat" prepend-icon="mdi-content-save-outline" :loading="closedWeekdaysForm.processing" @click="saveClosedWeekdays">定休日を保存</v-btn>
+                    </div>
+                </template>
+                <p v-else class="text-medium-emphasis">{{ (booking.closed_weekdays ?? []).length === 0 ? '定休日なし' : weekdayOptions.filter((d) => (booking.closed_weekdays ?? []).includes(d.value)).map((d) => d.label).join('・') }}</p>
+            </SectionCard>
+
             <SectionCard
                 title="お客様がいつまで予約できるか"
                 subtitle="店舗全体の予約受付ルールです。管理者の手動予約はこの期間制限を受けません。"
@@ -843,8 +907,8 @@ const horizonSummary = computed(() => {
             </SectionCard>
 
             <SectionCard
-                title="店舗休業日"
-                subtitle="ここで指定した日は、全スタッフ・管理者の手動予約を含めて予約できません。"
+                title="臨時休業日（店全体）"
+                subtitle="店全体を休む日です。この日は全スタッフの予約（管理画面からの予約も含む）ができず、勤務枠も作りません。"
                 class="mt-5"
             >
                 <div class="d-flex align-end ga-2" style="max-width: 360px">
@@ -882,9 +946,92 @@ const horizonSummary = computed(() => {
 </template>
 
 <style scoped>
+.ark-shift-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ark-space-4);
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.ark-shift-tabs__group {
+    display: flex;
+    flex-direction: column;
+}
+
+.ark-shift-tabs__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding-left: var(--ark-space-3);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.ark-weekgrid__time {
+    flex: 1 1 0;
+    /* 時計アイコン＋「10:00」が見切れない幅 */
+    min-width: 118px;
+}
+
+.ark-att__title {
+    margin: 0 0 var(--ark-space-3);
+    font-weight: 700;
+}
+
+.ark-att__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ark-space-3);
+    margin-bottom: var(--ark-space-3);
+}
+
+.ark-att__date {
+    flex: 0 0 220px;
+}
+
+.ark-att__time {
+    flex: 0 0 140px;
+}
+
+.ark-att__breaklabel {
+    min-width: 60px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.ark-att__status {
+    flex: 0 0 180px;
+}
+
+.ark-att__note {
+    flex: 1 1 280px;
+    max-width: 480px;
+}
+
+.ark-period {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ark-space-3);
+}
+
+.ark-period__label {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.ark-closed-on {
+    background: rgb(var(--v-theme-error));
+    color: rgb(var(--v-theme-on-error));
+    border-color: rgb(var(--v-theme-error));
+}
+
 .ark-weekgrid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: var(--ark-space-4);
 }
 

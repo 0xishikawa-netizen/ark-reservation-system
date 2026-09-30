@@ -17,7 +17,7 @@ class StaffShiftListQuery
         CarbonInterface $to,
     ): Collection {
         return StaffShift::query()
-            ->select(['id', 'staff_id', 'work_date', 'start_at', 'end_at'])
+            ->select(['id', 'staff_id', 'work_date', 'start_at', 'end_at', 'origin'])
             ->with('staff:user_id,display_name,color,sort_order')
             ->when($staffId !== null, fn ($query) => $query->where('staff_id', $staffId))
             ->whereBetween('work_date', [$from->toDateString(), $to->toDateString()])

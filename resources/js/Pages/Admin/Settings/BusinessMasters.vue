@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
-import { DateField, EmptyValue, MonthField, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { computed, ref } from 'vue';
+import { DateField, EmptyValue, MoneyField, MonthField, PageHeader, SectionCard, StatusChip, TimeField } from '@/components/ark';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -10,12 +10,12 @@ interface Master { id: number; code: string; name: string; is_active: boolean; s
 interface TaxRate { id: number; tax_category_id: number; rate_bps: number; effective_from: string; effective_to: string | null }
 interface TaxCategory extends Master { rates: TaxRate[] }
 interface PaymentMethod { id: number; code: string; name: string; is_enabled: boolean; display_order: number; external_provider: string | null }
-interface CalendarDay { id: number; business_date: string; status: 'closed' | 'special_hours'; opens_at: string | null; closes_at: string | null; note: string | null }
+interface CalendarDay { id: number; business_date: string; status: 'closed' | 'special_hours' | 'open'; opens_at: string | null; closes_at: string | null; note: string | null }
 interface MonthlyTarget { id: number; target_month: string; target_amount: number }
 const props = defineProps<{
     analysisCategories: Master[]; taxCategories: TaxCategory[]; paymentMethods: PaymentMethod[];
     calendarDays: CalendarDay[]; salesTargets: { default_amount: number; monthly: MonthlyTarget[] };
-    employmentTypes: Master[]; acquisitionChannels?: Master[]; visitPurposes?: Master[]; qualifications?: Master[]; business: { timezone: string; default_opens_at: string; default_closes_at: string };
+    employmentTypes: Master[]; closedWeekdays?: number[]; acquisitionChannels?: Master[]; visitPurposes?: Master[]; qualifications?: Master[]; business: { timezone: string; default_opens_at: string; default_closes_at: string };
 }>();
 const tab = ref('analysis');
 const editingRateId = ref<number | null>(null);
@@ -23,10 +23,27 @@ const editingPaymentId = ref<number | null>(null);
 const masterForm = useForm({ code: '', name: '', is_active: true, sort_order: 0 });
 const taxCategoryForm = useForm({ code: '', name: '', is_active: true, sort_order: 0 });
 const rateForm = useForm({ tax_category_id: null as number | null, rate_bps: 1000, effective_from: '', effective_to: null as string | null });
+/** 税率は % で入力し、保存時に bp（1% = 100bp）へ直す。 */
+const ratePercent = computed<number | null>({
+    get: () => rateForm.rate_bps / 100,
+    set: (value) => { rateForm.rate_bps = Math.round((value ?? 0) * 100); },
+});
 const paymentForm = useForm({ code: '', name: '', is_enabled: true, display_order: 0, external_provider: null as string | null });
-const calendarForm = useForm({ business_date: '', status: 'closed' as 'closed' | 'special_hours', opens_at: null as string | null, closes_at: null as string | null, note: null as string | null });
-const defaultTargetForm = useForm({ target_amount: props.salesTargets.default_amount });
-const monthlyTargetForm = useForm({ target_month: '', target_amount: 0 });
+const calendarForm = useForm({ business_date: '', status: 'closed' as 'closed' | 'special_hours' | 'open', opens_at: null as string | null, closes_at: null as string | null, note: null as string | null });
+const closedWeekdaysForm = useForm({ weekdays: [...(props.closedWeekdays ?? [])] });
+const weekdayOptions = [
+    { value: 1, label: '月' }, { value: 2, label: '火' }, { value: 3, label: '水' }, { value: 4, label: '木' },
+    { value: 5, label: '金' }, { value: 6, label: '土' }, { value: 7, label: '日' },
+];
+const calendarStatusItems = [
+    { title: '休業（臨時休業）', value: 'closed' },
+    { title: '営業時間を変更', value: 'special_hours' },
+    { title: '営業（定休日だけど営業）', value: 'open' },
+];
+const calendarStatusLabel = (status: CalendarDay['status']): string => calendarStatusItems.find((item) => item.value === status)?.title ?? status;
+const saveCalendarDay = (): void => calendarForm.put('/admin/settings/business-masters/calendar', { preserveScroll: true, onSuccess: () => calendarForm.reset() });
+const defaultTargetForm = useForm({ target_amount: props.salesTargets.default_amount as number | null });
+const monthlyTargetForm = useForm({ target_month: '', target_amount: null as number | null });
 const employmentForm = useForm({ code: '', name: '', is_active: true, sort_order: 0 });
 const saveNewMaster = (form: typeof masterForm, path: string): void => form.post(path, { preserveScroll: true, onSuccess: () => form.reset() });
 const toggleMaster = (item: Master, path: string): void => router.put(`${path}/${item.id}`, { ...item, is_active: !item.is_active }, { preserveScroll: true });
@@ -78,73 +95,324 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
 <template>
     <Head title="業務マスタ" />
     <PageHeader title="業務マスタ" :subtitle="`集計の前提となる分類・税・決済・営業日・目標を管理します（${business.timezone}）。`" />
-    <v-tabs v-model="tab" class="mb-4" show-arrows>
-        <v-tab value="analysis">メニュー分類</v-tab><v-tab value="tax">税</v-tab><v-tab value="payment">決済方法</v-tab>
-        <v-tab value="calendar">店舗カレンダー</v-tab><v-tab value="target">売上目標</v-tab><v-tab value="employment">雇用形態</v-tab><v-tab value="karte">{{ MESSAGES.customer.karteMasterTab }}</v-tab><v-tab value="qualification">{{ MESSAGES.bookingResources.qualificationMasterTab }}</v-tab>
+    <v-tabs v-model="tab" class="mb-4" show-arrows color="primary">
+        <v-tab value="analysis">メニュー分類</v-tab>
+        <v-tab value="tax">税</v-tab>
+        <v-tab value="payment">決済方法</v-tab>
+        <v-tab value="calendar">店舗カレンダー</v-tab>
+        <v-tab value="target">売上目標</v-tab>
+        <v-tab value="employment">雇用形態</v-tab>
+        <v-tab value="karte">{{ MESSAGES.customer.karteMasterTab }}</v-tab>
+        <v-tab value="qualification">{{ MESSAGES.bookingResources.qualificationMasterTab }}</v-tab>
     </v-tabs>
+
     <v-window v-model="tab">
-        <v-window-item value="analysis"><SectionCard title="分析カテゴリ">
-            <v-table><thead><tr><th>コード</th><th>名称</th><th>状態</th><th></th></tr></thead><tbody><tr v-for="item in analysisCategories" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td><StatusChip :status="item.is_active ? 'active' : 'canceled'" :label="item.is_active ? '有効' : '無効'" /></td><td><v-btn size="small" variant="text" @click="toggleMaster(item, '/admin/settings/business-masters/analysis-categories')">{{ item.is_active ? '無効化' : '有効化' }}</v-btn></td></tr></tbody></v-table>
-            <v-form class="inline-form mt-5" @submit.prevent="saveNewMaster(masterForm, '/admin/settings/business-masters/analysis-categories')"><v-text-field v-model="masterForm.code" label="コード" /><v-text-field v-model="masterForm.name" label="名称" /><v-text-field v-model.number="masterForm.sort_order" label="表示順" type="number" /><v-btn type="submit" color="primary">追加</v-btn></v-form>
-        </SectionCard></v-window-item>
-        <v-window-item value="tax"><SectionCard title="税区分と適用期間">
-            <div v-for="category in taxCategories" :key="category.id" class="mb-5"><div class="d-flex align-center ga-3"><strong>{{ category.name }} ({{ category.code }})</strong><StatusChip :status="category.is_active ? 'active' : 'canceled'" :label="category.is_active ? '有効' : '無効'" /><v-btn size="small" variant="text" @click="toggleMaster(category, '/admin/settings/business-masters/tax-categories')">{{ category.is_active ? '無効化' : '有効化' }}</v-btn></div><div v-for="rate in category.rates" :key="rate.id" class="text-body-2 ml-4">{{ rate.effective_from }} 〜 {{ rate.effective_to || '期限なし' }}: {{ (rate.rate_bps / 100).toFixed(2) }}% <v-btn size="x-small" variant="text" @click="editRate(rate)">編集</v-btn></div></div>
-            <v-form class="inline-form" @submit.prevent="taxCategoryForm.post('/admin/settings/business-masters/tax-categories', { preserveScroll: true, onSuccess: () => taxCategoryForm.reset() })"><v-text-field v-model="taxCategoryForm.code" label="税区分コード" /><v-text-field v-model="taxCategoryForm.name" label="名称" /><v-text-field v-model.number="taxCategoryForm.sort_order" label="表示順" type="number" /><v-btn type="submit" color="primary">税区分追加</v-btn></v-form>
-            <v-divider class="my-5" /><v-form class="inline-form" @submit.prevent="saveRate"><v-select v-model="rateForm.tax_category_id" :items="taxCategories" item-title="name" item-value="id" label="税区分" /><v-text-field v-model.number="rateForm.rate_bps" label="税率(bp)" type="number" /><DateField v-model="rateForm.effective_from" label="開始日" :clearable="false" /><DateField :model-value="rateForm.effective_to ?? ''" label="終了日（当日含まず）" @update:model-value="rateForm.effective_to = $event || null" /><v-btn type="submit" color="primary">{{ editingRateId === null ? '税率追加' : '税率更新' }}</v-btn></v-form>
-        </SectionCard></v-window-item>
-        <v-window-item value="payment"><SectionCard title="決済方法">
-            <v-table><thead><tr><th>表示順</th><th>コード</th><th>名称</th><th>状態</th><th></th></tr></thead><tbody><tr v-for="item in paymentMethods" :key="item.id"><td>{{ item.display_order }}</td><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.is_enabled ? '有効' : '無効' }}</td><td><v-btn size="small" variant="text" @click="editPayment(item)">編集</v-btn><v-btn size="small" variant="text" @click="togglePayment(item)">{{ item.is_enabled ? '無効化' : '有効化' }}</v-btn></td></tr></tbody></v-table>
-            <v-form class="inline-form mt-5" @submit.prevent="savePayment"><v-text-field v-model="paymentForm.code" label="コード" /><v-text-field v-model="paymentForm.name" label="名称" /><v-text-field v-model.number="paymentForm.display_order" label="表示順" type="number" /><v-text-field v-model="paymentForm.external_provider" label="外部provider（任意）" /><v-btn type="submit" color="primary">{{ editingPaymentId === null ? '追加' : '更新' }}</v-btn></v-form>
-        </SectionCard></v-window-item>
-        <v-window-item value="calendar"><SectionCard title="店舗カレンダー">
-            <p class="text-body-2 mb-4">通常営業 {{ business.default_opens_at }}〜{{ business.default_closes_at }}。例外日のみ登録します。</p>
-            <v-form class="inline-form" @submit.prevent="calendarForm.put('/admin/settings/business-masters/calendar', { preserveScroll: true, onSuccess: () => calendarForm.reset() })"><DateField v-model="calendarForm.business_date" label="営業日" :clearable="false" /><v-select v-model="calendarForm.status" label="状態" :items="[{title:'休業',value:'closed'},{title:'特別営業時間',value:'special_hours'}]" /><v-text-field v-if="calendarForm.status === 'special_hours'" v-model="calendarForm.opens_at" label="開店" type="time" /><v-text-field v-if="calendarForm.status === 'special_hours'" v-model="calendarForm.closes_at" label="閉店" type="time" /><v-text-field v-model="calendarForm.note" label="備考" /><v-btn type="submit" color="primary">保存</v-btn></v-form>
-            <v-table class="mt-5">
-                <thead><tr><th>日付</th><th>状態</th><th>時間</th><th>備考</th><th></th></tr></thead>
-                <tbody>
-                    <tr v-for="day in calendarDays" :key="day.id">
-                        <td>{{ day.business_date }}</td>
-                        <td>{{ day.status === 'closed' ? '休業' : '特別営業' }}</td>
-                        <td>
-                            <span v-if="day.opens_at && day.closes_at">{{ day.opens_at }}〜{{ day.closes_at }}</span>
-                            <EmptyValue v-else-if="day.status === 'closed'" />
-                            <span v-else>{{ MESSAGES.common.notEntered }}</span>
-                        </td>
-                        <td>{{ day.note || MESSAGES.common.notEntered }}</td>
-                        <td><v-btn size="small" variant="text" @click="router.delete(`/admin/settings/business-masters/calendar/${day.id}`, { preserveScroll: true })">通常営業に戻す</v-btn></td>
-                    </tr>
-                </tbody>
-            </v-table>
-        </SectionCard></v-window-item>
-        <v-window-item value="target"><SectionCard title="売上目標">
-            <v-form class="inline-form" @submit.prevent="defaultTargetForm.put('/admin/settings/business-masters/sales-target/default', { preserveScroll: true })"><v-text-field v-model.number="defaultTargetForm.target_amount" label="デフォルト月間目標（円）" type="number" min="0" /><v-btn type="submit" color="primary">保存</v-btn></v-form>
-            <v-form class="inline-form mt-5" @submit.prevent="monthlyTargetForm.put('/admin/settings/business-masters/sales-target/monthly', { preserveScroll: true, onSuccess: () => monthlyTargetForm.reset() })"><MonthField v-model="monthlyTargetForm.target_month" :label="MESSAGES.calendar.targetMonth" /><v-text-field v-model.number="monthlyTargetForm.target_amount" label="月別目標（円）" type="number" min="0" /><v-btn type="submit" color="primary">月別設定</v-btn></v-form>
-            <v-list><v-list-item v-for="item in salesTargets.monthly" :key="item.id" :title="item.target_month" :subtitle="`${money(item.target_amount)}円`"><template #append><v-btn size="small" variant="text" @click="router.delete(`/admin/settings/business-masters/sales-target/monthly/${item.id}`, { preserveScroll: true })">削除</v-btn></template></v-list-item></v-list>
-        </SectionCard></v-window-item>
-        <v-window-item value="employment"><SectionCard title="雇用形態">
-            <v-table><thead><tr><th>コード</th><th>名称</th><th>状態</th><th></th></tr></thead><tbody><tr v-for="item in employmentTypes" :key="item.id"><td>{{ item.code }}</td><td>{{ item.name }}</td><td>{{ item.is_active ? '有効' : '無効' }}</td><td><v-btn size="small" variant="text" @click="toggleMaster(item, '/admin/settings/business-masters/employment-types')">{{ item.is_active ? '無効化' : '有効化' }}</v-btn></td></tr></tbody></v-table>
-            <v-form class="inline-form mt-5" @submit.prevent="employmentForm.post('/admin/settings/business-masters/employment-types', { preserveScroll: true, onSuccess: () => employmentForm.reset() })"><v-text-field v-model="employmentForm.code" label="コード" /><v-text-field v-model="employmentForm.name" label="名称" /><v-text-field v-model.number="employmentForm.sort_order" label="表示順" type="number" /><v-btn type="submit" color="primary">追加</v-btn></v-form>
-        </SectionCard></v-window-item>
-    <v-window-item v-for="panel in ['karte', 'qualification']" :key="panel" :value="panel">
-            <SectionCard v-for="kind in (panel === 'qualification' ? ['qualifications'] : ['acquisition-channels', 'visit-purposes']) as KarteKind[]" :key="kind" :title="kind === 'acquisition-channels' ? MESSAGES.customer.acquisitionChannel : kind === 'qualifications' ? MESSAGES.bookingResources.qualificationMaster : MESSAGES.customer.karteVisitPurposeMaster" class="mb-4">
-                <v-table><thead><tr><th>コード</th><th>名称</th><th>状態</th><th></th></tr></thead><tbody>
-                    <tr v-for="(item, index) in karteLists(kind)" :key="item.id">
-                        <td>{{ item.code }}</td><td>{{ item.name }}</td>
-                        <td><StatusChip :status="item.is_active ? 'active' : 'canceled'" :label="item.is_active ? '有効' : '無効'" /></td>
-                        <td>
-                            <v-btn size="small" variant="text" icon="mdi-arrow-up" :disabled="index === 0" :aria-label="MESSAGES.customer.karteMoveUp" @click="moveKarte(kind, item, -1)" />
-                            <v-btn size="small" variant="text" icon="mdi-arrow-down" :disabled="index === karteLists(kind).length - 1" :aria-label="MESSAGES.customer.karteMoveDown" @click="moveKarte(kind, item, 1)" />
-                            <v-btn size="small" variant="text" @click="toggleMaster(item, `${karteBase}/${kind}`)">{{ item.is_active ? '無効化' : '有効化' }}</v-btn>
-                        </td>
-                    </tr>
-                </tbody></v-table>
-                <v-form class="d-flex ga-3 flex-wrap mt-3" @submit.prevent="saveNewMaster(karteForms[kind] as typeof masterForm, `${karteBase}/${kind}`)">
-                    <v-text-field v-model="karteForms[kind].code" label="コード" density="compact" style="max-width: 180px" :error-messages="karteForms[kind].errors.code" />
-                    <v-text-field v-model="karteForms[kind].name" label="名称" density="compact" style="max-width: 240px" :error-messages="karteForms[kind].errors.name" />
-                    <v-btn type="submit" color="primary" :loading="karteForms[kind].processing">追加</v-btn>
+        <!-- メニュー分類 -->
+        <v-window-item value="analysis">
+            <SectionCard title="分析カテゴリ" subtitle="メニューを集計（M・T・A など）でまとめるための分類です。">
+                <v-table class="bm-table">
+                    <thead><tr><th>コード</th><th>名称</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <tbody>
+                        <tr v-for="item in analysisCategories" :key="item.id">
+                            <td>{{ item.code }}</td><td>{{ item.name }}</td>
+                            <td><StatusChip :status="item.is_active ? 'active' : 'canceled'" :label="item.is_active ? '有効' : '無効'" /></td>
+                            <td class="text-end"><v-btn size="small" variant="tonal" @click="toggleMaster(item, '/admin/settings/business-masters/analysis-categories')">{{ item.is_active ? '無効にする' : '有効にする' }}</v-btn></td>
+                        </tr>
+                    </tbody>
+                </v-table>
+                <div class="bm-add">
+                    <p class="bm-add__title">分類を追加</p>
+                    <v-form class="bm-form" @submit.prevent="saveNewMaster(masterForm, '/admin/settings/business-masters/analysis-categories')">
+                        <v-text-field v-model="masterForm.code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="masterForm.errors.code" />
+                        <v-text-field v-model="masterForm.name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="masterForm.errors.name" />
+                        <v-text-field v-model.number="masterForm.sort_order" label="表示順" type="number" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" />
+                        <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="masterForm.processing">追加</v-btn>
+                    </v-form>
+                </div>
+            </SectionCard>
+        </v-window-item>
+
+        <!-- 税 -->
+        <v-window-item value="tax">
+            <SectionCard title="税区分と税率" subtitle="税区分ごとに、いつから何%かを登録します。会計の税額はこの税率で計算します。">
+                <v-table class="bm-table">
+                    <thead><tr><th>税区分</th><th>税率（適用期間）</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <tbody>
+                        <tr v-for="category in taxCategories" :key="category.id">
+                            <td><strong>{{ category.name }}</strong><div class="text-caption text-medium-emphasis">{{ category.code }}</div></td>
+                            <td>
+                                <div v-for="rate in category.rates" :key="rate.id" class="bm-rate">
+                                    <span>{{ (rate.rate_bps / 100).toFixed(rate.rate_bps % 100 === 0 ? 0 : 2) }}%</span>
+                                    <span class="text-medium-emphasis">{{ rate.effective_from }} 〜 {{ rate.effective_to || '期限なし' }}</span>
+                                    <v-btn size="x-small" variant="text" color="primary" @click="editRate(rate)">編集</v-btn>
+                                </div>
+                                <span v-if="category.rates.length === 0" class="text-error text-body-2">{{ MESSAGES.settings.taxRateMissing }}</span>
+                            </td>
+                            <td><StatusChip :status="category.is_active ? 'active' : 'canceled'" :label="category.is_active ? '有効' : '無効'" /></td>
+                            <td class="text-end"><v-btn size="small" variant="tonal" @click="toggleMaster(category, '/admin/settings/business-masters/tax-categories')">{{ category.is_active ? '無効にする' : '有効にする' }}</v-btn></td>
+                        </tr>
+                    </tbody>
+                </v-table>
+                <div class="bm-add">
+                    <p class="bm-add__title">{{ editingRateId === null ? '税率を追加' : '税率を変更' }}</p>
+                    <v-form class="bm-form" @submit.prevent="saveRate">
+                        <v-select v-model="rateForm.tax_category_id" :items="taxCategories" item-title="name" item-value="id" label="税区分" density="comfortable" hide-details="auto" class="bm-field" :error-messages="rateForm.errors.tax_category_id" />
+                        <v-text-field v-model.number="ratePercent" label="税率" suffix="%" type="number" step="0.01" min="0" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" :error-messages="rateForm.errors.rate_bps" />
+                        <DateField v-model="rateForm.effective_from" label="開始日" :clearable="false" density="comfortable" class="bm-field bm-field--s" />
+                        <DateField :model-value="rateForm.effective_to ?? ''" label="終了日（任意・当日含まず）" density="comfortable" class="bm-field bm-field--s" @update:model-value="rateForm.effective_to = $event || null" />
+                        <v-btn type="submit" color="primary" :prepend-icon="editingRateId === null ? 'mdi-plus' : 'mdi-content-save-outline'" class="bm-submit" :loading="rateForm.processing">{{ editingRateId === null ? '追加' : '更新' }}</v-btn>
+                        <v-btn v-if="editingRateId !== null" variant="text" class="bm-submit" @click="editingRateId = null; rateForm.reset()">やめる</v-btn>
+                    </v-form>
+                </div>
+                <div class="bm-add">
+                    <p class="bm-add__title">税区分を追加</p>
+                    <v-form class="bm-form" @submit.prevent="taxCategoryForm.post('/admin/settings/business-masters/tax-categories', { preserveScroll: true, onSuccess: () => taxCategoryForm.reset() })">
+                        <v-text-field v-model="taxCategoryForm.code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="taxCategoryForm.errors.code" />
+                        <v-text-field v-model="taxCategoryForm.name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="taxCategoryForm.errors.name" />
+                        <v-text-field v-model.number="taxCategoryForm.sort_order" label="表示順" type="number" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" />
+                        <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="taxCategoryForm.processing">追加</v-btn>
+                    </v-form>
+                </div>
+            </SectionCard>
+        </v-window-item>
+
+        <!-- 決済方法 -->
+        <v-window-item value="payment">
+            <SectionCard title="決済方法" subtitle="会計の支払方法と、月計・Excel の列に使います。">
+                <v-table class="bm-table">
+                    <thead><tr><th>表示順</th><th>コード</th><th>名称</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <tbody>
+                        <tr v-for="item in paymentMethods" :key="item.id">
+                            <td>{{ item.display_order }}</td><td>{{ item.code }}</td><td>{{ item.name }}</td>
+                            <td><StatusChip :status="item.is_enabled ? 'active' : 'canceled'" :label="item.is_enabled ? '有効' : '無効'" /></td>
+                            <td class="text-end">
+                                <div class="bm-actions">
+                                    <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-pencil-outline" @click="editPayment(item)">編集</v-btn>
+                                    <v-btn size="small" variant="tonal" @click="togglePayment(item)">{{ item.is_enabled ? '無効にする' : '有効にする' }}</v-btn>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </v-table>
+                <div class="bm-add">
+                    <p class="bm-add__title">{{ editingPaymentId === null ? '決済方法を追加' : '決済方法を変更' }}</p>
+                    <v-form class="bm-form" @submit.prevent="savePayment">
+                        <v-text-field v-model="paymentForm.code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="paymentForm.errors.code" />
+                        <v-text-field v-model="paymentForm.name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="paymentForm.errors.name" />
+                        <v-text-field v-model.number="paymentForm.display_order" label="表示順" type="number" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" />
+                        <v-text-field v-model="paymentForm.external_provider" label="外部連携（任意）" density="comfortable" hide-details="auto" class="bm-field bm-field--s" />
+                        <v-btn type="submit" color="primary" :prepend-icon="editingPaymentId === null ? 'mdi-plus' : 'mdi-content-save-outline'" class="bm-submit" :loading="paymentForm.processing">{{ editingPaymentId === null ? '追加' : '更新' }}</v-btn>
+                        <v-btn v-if="editingPaymentId !== null" variant="text" class="bm-submit" @click="editingPaymentId = null; paymentForm.reset()">やめる</v-btn>
+                    </v-form>
+                </div>
+            </SectionCard>
+        </v-window-item>
+
+        <!-- 店舗カレンダー -->
+        <v-window-item value="calendar">
+            <SectionCard title="定休日（毎週）" :subtitle="`通常の営業時間は ${business.default_opens_at}〜${business.default_closes_at} です。毎週休む曜日を選んでください。`" class="mb-4">
+                <v-form class="bm-form" @submit.prevent="closedWeekdaysForm.put('/admin/settings/business-masters/calendar/closed-weekdays', { preserveScroll: true })">
+                    <v-chip-group v-model="closedWeekdaysForm.weekdays" multiple column selected-class="bm-weekday--on" aria-label="定休日の曜日">
+                        <v-chip v-for="day in weekdayOptions" :key="day.value" :value="day.value" filter variant="outlined" class="bm-weekday">{{ day.label }}</v-chip>
+                    </v-chip-group>
+                    <v-btn type="submit" color="primary" prepend-icon="mdi-content-save-outline" class="bm-submit" :loading="closedWeekdaysForm.processing">保存</v-btn>
                 </v-form>
+                <p class="text-body-2 text-medium-emphasis mt-2">{{ closedWeekdaysForm.weekdays.length === 0 ? '定休日なし（毎日営業）' : `毎週 ${weekdayOptions.filter((d) => closedWeekdaysForm.weekdays.includes(d.value)).map((d) => d.label).join('・')} 曜日は休業` }}</p>
+            </SectionCard>
+
+            <SectionCard title="特定の日の休業・営業" subtitle="臨時休業・営業時間の変更・定休日の営業など、いつもと違う日だけ登録します。">
+                <v-form class="bm-form" @submit.prevent="saveCalendarDay">
+                    <DateField v-model="calendarForm.business_date" label="日付" :clearable="false" density="comfortable" class="bm-field bm-field--s" />
+                    <v-select v-model="calendarForm.status" label="区分" :items="calendarStatusItems" density="comfortable" hide-details="auto" class="bm-field" />
+                    <TimeField v-if="calendarForm.status === 'special_hours'" :model-value="calendarForm.opens_at ?? ''" label="開店" @update:model-value="calendarForm.opens_at = $event || null" density="comfortable" class="bm-field bm-field--xs" />
+                    <TimeField v-if="calendarForm.status === 'special_hours'" :model-value="calendarForm.closes_at ?? ''" label="閉店" @update:model-value="calendarForm.closes_at = $event || null" density="comfortable" class="bm-field bm-field--xs" />
+                    <v-text-field v-model="calendarForm.note" label="備考（任意）" density="comfortable" hide-details="auto" class="bm-field" />
+                    <v-btn type="submit" color="primary" prepend-icon="mdi-content-save-outline" class="bm-submit" :loading="calendarForm.processing">保存</v-btn>
+                </v-form>
+                <p v-if="calendarForm.errors.closes_at || calendarForm.errors.business_date" class="text-error text-body-2 mt-2">{{ calendarForm.errors.closes_at || calendarForm.errors.business_date }}</p>
+                <v-table class="bm-table mt-4">
+                    <thead><tr><th>日付</th><th>区分</th><th>営業時間</th><th>備考</th><th class="text-end">操作</th></tr></thead>
+                    <tbody>
+                        <tr v-for="day in calendarDays" :key="day.id">
+                            <td>{{ day.business_date }}</td>
+                            <td><StatusChip :status="day.status === 'closed' ? 'canceled' : 'active'" :label="calendarStatusLabel(day.status)" /></td>
+                            <td>
+                                <span v-if="day.opens_at && day.closes_at">{{ day.opens_at }}〜{{ day.closes_at }}</span>
+                                <span v-else-if="day.status === 'open'">{{ business.default_opens_at }}〜{{ business.default_closes_at }}</span>
+                                <EmptyValue v-else />
+                            </td>
+                            <td>{{ day.note || '' }}</td>
+                            <td class="text-end"><v-btn size="small" variant="tonal" @click="router.delete(`/admin/settings/business-masters/calendar/${day.id}`, { preserveScroll: true })">登録を取り消す</v-btn></td>
+                        </tr>
+                        <tr v-if="calendarDays.length === 0"><td colspan="5" class="text-medium-emphasis">登録はありません。</td></tr>
+                    </tbody>
+                </v-table>
+            </SectionCard>
+        </v-window-item>
+
+        <!-- 売上目標 -->
+        <v-window-item value="target">
+            <SectionCard title="売上目標" subtitle="月計の達成率に使います。月別の目標が無い月はデフォルトの目標を使います。">
+                <div class="bm-add bm-add--first">
+                    <p class="bm-add__title">デフォルトの月間目標</p>
+                    <v-form class="bm-form" @submit.prevent="defaultTargetForm.put('/admin/settings/business-masters/sales-target/default', { preserveScroll: true })">
+                        <MoneyField v-model="defaultTargetForm.target_amount" label="月間目標" density="comfortable" hide-details="auto" class="bm-field" :error-messages="defaultTargetForm.errors.target_amount" />
+                        <v-btn type="submit" color="primary" prepend-icon="mdi-content-save-outline" class="bm-submit" :loading="defaultTargetForm.processing">保存</v-btn>
+                    </v-form>
+                </div>
+                <div class="bm-add">
+                    <p class="bm-add__title">月別の目標</p>
+                    <v-form class="bm-form" @submit.prevent="monthlyTargetForm.put('/admin/settings/business-masters/sales-target/monthly', { preserveScroll: true, onSuccess: () => monthlyTargetForm.reset() })">
+                        <MonthField v-model="monthlyTargetForm.target_month" :label="MESSAGES.calendar.targetMonth" density="comfortable" class="bm-field bm-field--s" />
+                        <MoneyField v-model="monthlyTargetForm.target_amount" label="目標" density="comfortable" hide-details="auto" class="bm-field" :error-messages="monthlyTargetForm.errors.target_amount" />
+                        <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="monthlyTargetForm.processing">設定</v-btn>
+                    </v-form>
+                    <v-table class="bm-table mt-4">
+                        <thead><tr><th>対象月</th><th class="text-end">目標</th><th class="text-end">操作</th></tr></thead>
+                        <tbody>
+                            <tr v-for="item in salesTargets.monthly" :key="item.id">
+                                <td>{{ item.target_month }}</td>
+                                <td class="text-end">{{ money(item.target_amount) }}円</td>
+                                <td class="text-end"><v-btn size="small" variant="tonal" @click="router.delete(`/admin/settings/business-masters/sales-target/monthly/${item.id}`, { preserveScroll: true })">取り消す</v-btn></td>
+                            </tr>
+                            <tr v-if="salesTargets.monthly.length === 0"><td colspan="3" class="text-medium-emphasis">月別の目標はありません。</td></tr>
+                        </tbody>
+                    </v-table>
+                </div>
+            </SectionCard>
+        </v-window-item>
+
+        <!-- 雇用形態 -->
+        <v-window-item value="employment">
+            <SectionCard title="雇用形態" subtitle="稼働率（社員・アルバイト）の集計に使います。">
+                <v-table class="bm-table">
+                    <thead><tr><th>コード</th><th>名称</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <tbody>
+                        <tr v-for="item in employmentTypes" :key="item.id">
+                            <td>{{ item.code }}</td><td>{{ item.name }}</td>
+                            <td><StatusChip :status="item.is_active ? 'active' : 'canceled'" :label="item.is_active ? '有効' : '無効'" /></td>
+                            <td class="text-end"><v-btn size="small" variant="tonal" @click="toggleMaster(item, '/admin/settings/business-masters/employment-types')">{{ item.is_active ? '無効にする' : '有効にする' }}</v-btn></td>
+                        </tr>
+                    </tbody>
+                </v-table>
+                <div class="bm-add">
+                    <p class="bm-add__title">雇用形態を追加</p>
+                    <v-form class="bm-form" @submit.prevent="employmentForm.post('/admin/settings/business-masters/employment-types', { preserveScroll: true, onSuccess: () => employmentForm.reset() })">
+                        <v-text-field v-model="employmentForm.code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="employmentForm.errors.code" />
+                        <v-text-field v-model="employmentForm.name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="employmentForm.errors.name" />
+                        <v-text-field v-model.number="employmentForm.sort_order" label="表示順" type="number" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" />
+                        <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="employmentForm.processing">追加</v-btn>
+                    </v-form>
+                </div>
+            </SectionCard>
+        </v-window-item>
+
+        <!-- カルテ選択肢・資格 -->
+        <v-window-item v-for="panel in ['karte', 'qualification']" :key="panel" :value="panel">
+            <SectionCard v-for="kind in (panel === 'qualification' ? ['qualifications'] : ['acquisition-channels', 'visit-purposes']) as KarteKind[]" :key="kind" :title="kind === 'acquisition-channels' ? MESSAGES.customer.acquisitionChannel : kind === 'qualifications' ? MESSAGES.bookingResources.qualificationMaster : MESSAGES.customer.karteVisitPurposeMaster" class="mb-4">
+                <v-table class="bm-table">
+                    <thead><tr><th>コード</th><th>名称</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <tbody>
+                        <tr v-for="(item, index) in karteLists(kind)" :key="item.id">
+                            <td>{{ item.code }}</td><td>{{ item.name }}</td>
+                            <td><StatusChip :status="item.is_active ? 'active' : 'canceled'" :label="item.is_active ? '有効' : '無効'" /></td>
+                            <td class="text-end">
+                                <div class="bm-actions">
+                                    <v-btn size="small" variant="text" icon="mdi-arrow-up" :disabled="index === 0" :aria-label="MESSAGES.customer.karteMoveUp" @click="moveKarte(kind, item, -1)" />
+                                    <v-btn size="small" variant="text" icon="mdi-arrow-down" :disabled="index === karteLists(kind).length - 1" :aria-label="MESSAGES.customer.karteMoveDown" @click="moveKarte(kind, item, 1)" />
+                                    <v-btn size="small" variant="tonal" @click="toggleMaster(item, `${karteBase}/${kind}`)">{{ item.is_active ? '無効にする' : '有効にする' }}</v-btn>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </v-table>
+                <div class="bm-add">
+                    <p class="bm-add__title">追加</p>
+                    <v-form class="bm-form" @submit.prevent="saveNewMaster(karteForms[kind] as typeof masterForm, `${karteBase}/${kind}`)">
+                        <v-text-field v-model="karteForms[kind].code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="karteForms[kind].errors.code" />
+                        <v-text-field v-model="karteForms[kind].name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="karteForms[kind].errors.name" />
+                        <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="karteForms[kind].processing">追加</v-btn>
+                    </v-form>
+                </div>
             </SectionCard>
         </v-window-item>
     </v-window>
 </template>
-<style scoped>.inline-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:start}</style>
+
+<style scoped>
+/* 一覧 → 追加フォームの順にそろえる。入力欄は横に並べ、ボタンは入力欄と同じ高さ・並びに置く。 */
+.bm-table th {
+    white-space: nowrap;
+}
+
+.bm-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ark-space-2);
+}
+
+.bm-rate {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ark-space-2);
+    font-size: 0.875rem;
+}
+
+.bm-add {
+    margin-top: var(--ark-space-5, 20px);
+    padding-top: var(--ark-space-4);
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.bm-add--first {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+
+.bm-add__title {
+    margin: 0 0 var(--ark-space-3);
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+
+.bm-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--ark-space-3);
+}
+
+.bm-field {
+    flex: 1 1 220px;
+    max-width: 320px;
+}
+
+.bm-field--s {
+    flex-basis: 170px;
+    max-width: 220px;
+}
+
+.bm-field--xs {
+    flex-basis: 110px;
+    max-width: 140px;
+}
+
+/* density=comfortable の入力欄（48px）と同じ高さにして、上端をそろえる。 */
+.bm-submit {
+    height: 48px !important;
+}
+
+.bm-weekday {
+    min-width: 48px;
+    justify-content: center;
+}
+
+.bm-weekday--on {
+    background: rgb(var(--v-theme-error));
+    color: rgb(var(--v-theme-on-error));
+    border-color: rgb(var(--v-theme-error));
+}
+</style>

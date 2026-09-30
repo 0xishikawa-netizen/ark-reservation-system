@@ -34,6 +34,7 @@ final class BusinessMasterSettingsController extends Controller
         SalesTargetService $salesTargets,
         Settings $settings,
         BusinessTime $businessTime,
+        StoreCalendarService $calendar,
     ): Response {
         return Inertia::render('Admin/Settings/BusinessMasters', [
             'analysisCategories' => ServiceAnalysisCategory::query()
@@ -66,6 +67,7 @@ final class BusinessMasterSettingsController extends Controller
             'qualifications' => Qualification::query()->orderBy('sort_order')->orderBy('id')->get(),
             'employmentTypes' => EmploymentType::query()
                 ->orderBy('sort_order')->orderBy('id')->get(),
+            'closedWeekdays' => $calendar->closedWeekdays(),
             'business' => [
                 'timezone' => $businessTime->timezone(),
                 'default_opens_at' => (string) ($settings->get('business_hours.open', config('reservation.business_hours.open', '10:00')) ?? config('reservation.business_hours.open', '10:00')),
@@ -177,6 +179,7 @@ final class BusinessMasterSettingsController extends Controller
             'status' => ['required', Rule::in([
                 StoreCalendarDay::STATUS_CLOSED,
                 StoreCalendarDay::STATUS_SPECIAL_HOURS,
+                StoreCalendarDay::STATUS_OPEN,
             ])],
             'opens_at' => ['nullable', 'date_format:H:i'],
             'closes_at' => ['nullable', 'date_format:H:i'],
@@ -185,6 +188,18 @@ final class BusinessMasterSettingsController extends Controller
         $service->save($validated, $request->user());
 
         return back()->with('success', __('messages.business.calendar_saved'));
+    }
+
+    /** 毎週の定休日（ISO 曜日 1=月〜7=日）。 */
+    public function saveClosedWeekdays(Request $request, StoreCalendarService $service): RedirectResponse
+    {
+        $validated = $request->validate([
+            'weekdays' => ['present', 'array', 'max:7'],
+            'weekdays.*' => ['integer', 'between:1,7'],
+        ]);
+        $service->setClosedWeekdays(array_map('intval', $validated['weekdays']), $request->user());
+
+        return back()->with('success', __('messages.business.closed_weekdays_saved'));
     }
 
     public function clearCalendarDay(Request $request, StoreCalendarDay $calendarDay, StoreCalendarService $service): RedirectResponse

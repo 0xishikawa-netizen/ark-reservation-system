@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Actions\Booth\CreateBooth;
 use App\Actions\Booth\ToggleBoothActive;
 use App\Actions\Booth\UpdateBooth;
+use App\Domain\Masters\MasterDeletionService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreBoothRequest;
 use App\Http\Requests\Admin\UpdateBoothRequest;
@@ -26,6 +27,8 @@ class BoothController extends Controller
         $booths = $query->get($search);
 
         return Inertia::render('Admin/Booths/Index', [
+            // 削除済み（復元用）は管理者（masters.delete）にだけ渡す。
+            'trashed' => request()->user()?->can('masters.delete') ? app(MasterDeletionService::class)->trashed('booths') : [],
             'booths' => $booths->map(fn (Booth $booth): array => [
                 'id' => $booth->id,
                 'name' => $booth->name,

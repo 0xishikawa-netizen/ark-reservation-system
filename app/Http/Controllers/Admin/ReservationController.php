@@ -151,6 +151,31 @@ final class ReservationController extends Controller
     }
 
     /**
+     * 指定した時刻で予約できない理由（ブッキングボードのトースト用）。予約できる時は空配列。
+     */
+    public function unavailableReasons(
+        Request $request,
+        AvailabilityService $availabilityService,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'service_id' => ['required', 'integer', 'exists:services,id'],
+            'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
+            'booth_id' => ['nullable', 'integer', 'exists:booths,id'],
+            'starts_at' => ['required', 'date'],
+            'buffer_min' => ['nullable', 'integer', 'min:0', 'max:60'],
+        ]);
+        $reasons = $availabilityService->explainUnavailable(
+            (int) $validated['service_id'],
+            isset($validated['staff_id']) ? (int) $validated['staff_id'] : null,
+            isset($validated['booth_id']) ? (int) $validated['booth_id'] : null,
+            CarbonImmutable::parse((string) $validated['starts_at']),
+            (int) ($validated['buffer_min'] ?? 0),
+        );
+
+        return response()->json(['reasons' => $reasons]);
+    }
+
+    /**
      * メニュー選択時にブースを自動提案する（空いていなければ null）。
      * あくまで初期提案。実際の予約作成時はサーバー側で改めて検証される。
      */

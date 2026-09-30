@@ -54,6 +54,22 @@ class StaffShiftManagementTest extends TestCase
                 ->where('auth.can.shiftsManage', true));
     }
 
+    public function test_shift_list_includes_origin_so_manual_shifts_are_listed(): void
+    {
+        $admin = $this->admin();
+        $staff = $this->staff('担当手動');
+        $date = now('Asia/Tokyo')->addDay()->toDateString();
+        StaffShift::query()->create([
+            'staff_id' => $staff->user_id, 'work_date' => $date, 'start_at' => '12:00:00', 'end_at' => '18:00:00',
+            'origin' => StaffShift::ORIGIN_MANUAL,
+        ]);
+
+        $this->actingAs($admin)
+            ->get('/admin/staff-shifts?staff_id='.$staff->user_id)
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('shifts.0.origin', StaffShift::ORIGIN_MANUAL));
+    }
+
     public function test_admin_can_create_update_and_delete_shift(): void
     {
         $admin = $this->admin();

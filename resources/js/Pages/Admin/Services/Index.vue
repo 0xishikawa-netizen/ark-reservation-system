@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
-import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip, MasterDeleteButton, TrashedMasterList } from '@/components/ark';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
@@ -26,26 +26,33 @@ interface ServiceListItem {
 interface Filters {
     search: string;
     only_active: boolean;
+    category: string | null;
 }
 
 const props = defineProps<{
+    trashed?: Array<{ id: number; name: string; deleted_at: string | null }>;
     services: ServiceListItem[];
     filters: Filters;
+    categoryOptions?: string[];
+    nameOptions?: string[];
 }>();
 
 const headers = [
     { title: 'メニュー名', key: 'name' },
+    { title: 'カテゴリ', key: 'category' },
     { title: '集計分類', key: 'analysis_category_name' },
     { title: '税区分', key: 'tax_category_name' },
-    { title: '所要時間', key: 'duration_min', sortable: false },
-    { title: '価格', key: 'price', sortable: false },
+    { title: '所要時間', key: 'duration_min' },
+    { title: '価格', key: 'price' },
+    { title: '表示順', key: 'sort_order' },
     { title: 'オンライン予約', key: 'is_online_bookable', sortable: false },
     { title: '有効', key: 'is_active', sortable: false },
     { title: '施術スタッフ', key: 'staff_names', sortable: false },
     { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
-const search = ref<string | null>(props.filters.search);
+const search = ref<string | null>(props.filters.search || null);
+const category = ref<string | null>(props.filters.category);
 const onlyActive = ref(props.filters.only_active);
 
 const applyFilters = (): void => {
@@ -53,6 +60,7 @@ const applyFilters = (): void => {
         '/admin/services',
         {
             search: search.value || undefined,
+            category: category.value || undefined,
             only_active: onlyActive.value ? 1 : undefined,
         },
         {
@@ -95,12 +103,26 @@ const formatPrice = (price: number): string =>
                 class="d-flex align-center ga-4 flex-wrap"
                 @submit.prevent="applyFilters"
             >
-                <v-text-field
-                    v-model="search"
-                    label="メニュー名・カテゴリを検索"
+                <!-- 何を入れればよいか分かるよう、検索は候補から選ぶ形にする。 -->
+                <v-select
+                    v-model="category"
+                    :items="categoryOptions ?? []"
+                    label="カテゴリで絞り込み"
                     clearable
                     hide-details
-                    max-width="420"
+                    autocomplete="off"
+                    max-width="260"
+                    @update:model-value="applyFilters"
+                />
+                <v-autocomplete
+                    v-model="search"
+                    :items="nameOptions ?? []"
+                    label="メニュー名で絞り込み（選択または入力）"
+                    clearable
+                    hide-details
+                    autocomplete="off"
+                    max-width="360"
+                    @update:model-value="applyFilters"
                 />
                 <v-switch
                     v-model="onlyActive"
@@ -109,7 +131,6 @@ const formatPrice = (price: number): string =>
                     hide-details
                     @update:model-value="applyFilters"
                 />
-                <v-btn type="submit" variant="tonal">検索</v-btn>
             </v-form>
         </div>
 
@@ -118,6 +139,7 @@ const formatPrice = (price: number): string =>
         <v-data-table
             :headers="headers"
             :items="services"
+            :sort-by="[{ key: 'sort_order', order: 'asc' }]"
             item-value="id"
             no-data-text="該当するメニューはありません。"
         >
@@ -183,9 +205,11 @@ const formatPrice = (price: number): string =>
                 >
                     編集
                 </v-btn>
+                <MasterDeleteButton type="services" :id="item.id" :name="item.name" label="メニュー" />
             </template>
         </v-data-table>
     </SectionCard>
+    <TrashedMasterList type="services" label="メニュー" :items="trashed ?? []" />
 </template>
 
 <style scoped>

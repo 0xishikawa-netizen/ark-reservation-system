@@ -95,4 +95,13 @@ describe('PanelCustomerSearchBar', () => {
         expect(wrapper.find('.psb__dropdown').attributes('style')).toContain('display: none');
         expect((wrapper.find('input').element as HTMLInputElement).value).toBe('林');
     });
+    it('新規予約の入力中は、選んだ顧客が予約に入ることを案内する', () => {
+        const normal = mount(PanelCustomerSearchBar, { props: { canSearch: true } });
+        expect(normal.find('[data-testid="psb-mode-hint"]').exists()).toBe(false);
+        normal.unmount();
+
+        const creating = mount(PanelCustomerSearchBar, { props: { canSearch: true, selectsForReservation: true } });
+        expect(creating.get('[data-testid="psb-mode-hint"]').text()).toContain('選んだ顧客は予約の顧客に入ります');
+        creating.unmount();
+    });
 });

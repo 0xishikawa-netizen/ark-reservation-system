@@ -18,6 +18,7 @@ interface AuthPermissions {
     customersManage: boolean;
     reservationsView: boolean;
     reservationsManage: boolean;
+    mastersDelete?: boolean;
     failedJobsView: boolean;
     auditLogsView: boolean;
     ticketPolicyManage: boolean;

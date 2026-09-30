@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Domain\Accounting\CheckoutEntryService;
+use App\Domain\Business\StoreCalendarService;
 use App\Domain\Business\TaxRateService;
 use App\Enums\Accounting\CheckoutStatus;
 use App\Enums\Accounting\TenderAllocationCategory;
@@ -77,6 +78,8 @@ final class CheckoutEntryController extends Controller
         return Inertia::render('Admin/Checkouts/Index', [
             'date' => $date,
             'rows' => $visits->concat($sales)->values(),
+            // 開始時刻はこの日の営業時間の中から選ぶ（休業日は通常の営業時間）。
+            'businessHours' => $this->businessHours($date),
             'customerSearchEndpoint' => route('admin.reservations.customer-search'),
         ]);
     }
@@ -204,8 +207,18 @@ final class CheckoutEntryController extends Controller
             ])->values();
 
         return [
-            'services' => Service::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')
-                ->get(['id', 'name', 'price', 'duration_min', 'tax_category_id', 'requires_staff'])->values(),
+            // booth_ids: そのメニューで使えるブース（空なら全ブース）。施術ごとのブース選択肢を絞る。
+            'services' => Service::query()->where('is_active', true)->with('booths:id')->orderBy('sort_order')->orderBy('id')
+                ->get(['id', 'name', 'price', 'duration_min', 'tax_category_id', 'requires_staff'])
+                ->map(fn (Service $service): array => [
+                    'id' => $service->id,
+                    'name' => $service->name,
+                    'price' => $service->price,
+                    'duration_min' => $service->duration_min,
+                    'tax_category_id' => $service->tax_category_id,
+                    'requires_staff' => $service->requires_staff,
+                    'booth_ids' => $service->booths->pluck('id')->map(static fn (mixed $id): int => (int) $id)->values()->all(),
+                ])->values(),
             'products' => Product::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')
                 ->get(['id', 'name', 'price', 'tax_category_id'])->values(),
             'ticketProducts' => TicketProduct::query()->where('is_active', true)->orderBy('id')
@@ -219,8 +232,21 @@ final class CheckoutEntryController extends Controller
             'booths' => Booth::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->get(['id', 'name']),
             'paymentMethods' => PaymentMethod::query()->where('is_enabled', true)->orderBy('display_order')->orderBy('id')
                 ->get(['id', 'code', 'name'])->values(),
+            // 開始時刻はこの日の営業時間の中から選ぶ（休業日は通常の営業時間）。
+            'businessHours' => $this->businessHours($date),
             'customerSearchEndpoint' => route('admin.reservations.customer-search'),
             'canVoid' => request()->user()?->can('checkouts.void') ?? false,
+        ];
+    }
+
+    /** @return array{opens_at: string, closes_at: string} */
+    private function businessHours(string $date): array
+    {
+        $day = app(StoreCalendarService::class)->resolve($date);
+
+        return [
+            'opens_at' => $day['opens_at'] ?? (string) config('reservation.business_hours.open', '10:00'),
+            'closes_at' => $day['closes_at'] ?? (string) config('reservation.business_hours.close', '22:00'),
         ];
     }
 

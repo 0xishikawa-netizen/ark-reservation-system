@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature\Checkout;
 
 use App\Domain\Accounting\TaxAmountCalculator;
+use App\Domain\Business\StoreCalendarService;
 use App\Domain\Reporting\DailyReportService;
 use App\Domain\Reporting\Excel\ReportWorkbookService;
 use App\Domain\Reporting\MonthlyReportService;
 use App\Enums\Accounting\CheckoutStatus;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Visit\VisitStatus;
+use App\Models\Booth;
 use App\Models\Checkout;
 use App\Models\CheckoutTenderAllocation;
 use App\Models\Customer;
@@ -437,6 +439,26 @@ class CheckoutEntryTest extends TestCase
             ->assertInertia(fn ($page) => $page->component('Admin/Checkouts/Entry')->where('mode', 'visit')->has('taxCategories', 2));
         $this->actingAs($admin)->get(route('admin.checkouts.index', ['date' => '2026-09-15']))->assertOk()
             ->assertInertia(fn ($page) => $page->component('Admin/Checkouts/Index')->has('rows', 1));
+    }
+
+    public function test_entry_screen_offers_business_hours_and_booths_mapped_to_each_service(): void
+    {
+        $admin = $this->admin();
+        $service = Service::factory()->create(['is_active' => true]);
+        $booth = Booth::factory()->create(['is_active' => true]);
+        $service->booths()->attach($booth->id);
+        app(StoreCalendarService::class)->save(
+            ['business_date' => '2026-09-15', 'status' => 'special_hours', 'opens_at' => '11:00', 'closes_at' => '19:00'], null,
+        );
+
+        $this->actingAs($admin)->post(route('admin.checkouts.store'), ['sale_date' => '2026-09-15'])->assertRedirect();
+        $checkout = Checkout::query()->whereNull('visit_id')->sole();
+
+        $this->actingAs($admin)->get(route('admin.checkouts.show', $checkout))
+            ->assertInertia(fn ($page) => $page
+                ->where('businessHours.opens_at', '11:00')
+                ->where('businessHours.closes_at', '19:00')
+                ->where('services.0.booth_ids', [$booth->id]));
     }
 
     private function admin(): User

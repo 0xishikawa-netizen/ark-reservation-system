@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Actions\Ticket\CreateTicketProduct;
 use App\Actions\Ticket\ToggleTicketProductActive;
 use App\Actions\Ticket\UpdateTicketProduct;
+use App\Domain\Masters\MasterDeletionService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreTicketProductRequest;
 use App\Http\Requests\Admin\UpdateTicketProductRequest;
@@ -22,6 +23,8 @@ class TicketProductController extends Controller
     public function index(TicketProductListQuery $query): Response
     {
         return Inertia::render('Admin/TicketProducts/Index', [
+            // 削除済み（復元用）は管理者（masters.delete）にだけ渡す。
+            'trashed' => request()->user()?->can('masters.delete') ? app(MasterDeletionService::class)->trashed('ticket-products') : [],
             'ticketProducts' => $query->get()->values(),
         ]);
     }

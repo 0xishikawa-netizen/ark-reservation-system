@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, useAttrs, watch } from 'vue';
 
-// 親から渡された class/style は v-menu ではなく実際の入力欄(v-text-field)に当てる。
+// 親から渡された class/style は外側の div に当てる（v-menu が根要素だと親の scoped スタイルの幅指定が
+// 効かず、時刻が見切れるため）。それ以外の属性は実際の入力欄(v-text-field)へ渡す。
 defineOptions({ inheritAttrs: false });
 
 type FieldDensity = 'default' | 'comfortable' | 'compact';
@@ -16,6 +17,8 @@ const props = withDefaults(defineProps<{
     stepMinutes?: number;
     minTime?: string;
     maxTime?: string;
+    /** 読み取り専用（確定済みの画面など）。時刻の一覧を開かない。 */
+    readonly?: boolean;
 }>(), {
     clearable: false,
     hideDetails: true,
@@ -23,11 +26,20 @@ const props = withDefaults(defineProps<{
     stepMinutes: 10,
     minTime: '00:00',
     maxTime: '23:50',
+    readonly: false,
 });
 
 const emit = defineEmits<{
     'update:modelValue': [value: string];
 }>();
+
+const attrs = useAttrs();
+const rootAttrs = computed(() => ({ class: attrs.class, style: attrs.style }));
+const fieldAttrs = computed(() => {
+    const { class: _class, style: _style, ...rest } = attrs;
+
+    return rest;
+});
 
 const menuOpen = ref(false);
 const listEl = ref<HTMLElement | null>(null);
@@ -79,44 +91,52 @@ watch(menuOpen, async (open) => {
 </script>
 
 <template>
-    <v-menu
-        v-model="menuOpen"
-        :close-on-content-click="false"
-        location="bottom start"
-        min-width="auto"
-        offset="6"
-    >
-        <template #activator="{ props: activatorProps }">
-            <v-text-field
-                v-bind="{ ...activatorProps, ...$attrs }"
-                :model-value="modelValue"
-                :label="label"
-                :clearable="clearable"
-                :hide-details="hideDetails"
-                :density="density"
-                variant="outlined"
-                prepend-inner-icon="mdi-clock-time-four-outline"
-                readonly
-                @click:clear.stop="clearValue"
-            />
-        </template>
+    <div class="tf" v-bind="rootAttrs">
+        <v-menu
+            v-model="menuOpen"
+            :disabled="readonly"
+            :close-on-content-click="false"
+            location="bottom start"
+            min-width="auto"
+            offset="6"
+        >
+            <template #activator="{ props: activatorProps }">
+                <v-text-field
+                    autocomplete="off"
+                    v-bind="{ ...activatorProps, ...fieldAttrs }"
+                    :model-value="modelValue"
+                    :label="label"
+                    :clearable="clearable && !readonly"
+                    :hide-details="hideDetails"
+                    :density="density"
+                    variant="outlined"
+                    prepend-inner-icon="mdi-clock-time-four-outline"
+                    readonly
+                    @click:clear.stop="clearValue"
+                />
+            </template>
 
-        <div ref="listEl" class="tf__list">
-            <button
-                v-for="opt in options"
-                :key="opt"
-                type="button"
-                class="tf__opt"
-                :class="{ 'tf__opt--selected': opt === modelValue }"
-                @click="select(opt)"
-            >
-                {{ opt }}
-            </button>
-        </div>
-    </v-menu>
+            <div ref="listEl" class="tf__list">
+                <button
+                    v-for="opt in options"
+                    :key="opt"
+                    type="button"
+                    class="tf__opt"
+                    :class="{ 'tf__opt--selected': opt === modelValue }"
+                    @click="select(opt)"
+                >
+                    {{ opt }}
+                </button>
+            </div>
+        </v-menu>
+    </div>
 </template>
 
 <style scoped>
+.tf {
+    min-width: 0;
+}
+
 .tf__list {
     display: flex;
     flex-direction: column;

@@ -16,6 +16,9 @@ class StoreCalendarDay extends Model
 
     public const STATUS_SPECIAL_HOURS = 'special_hours';
 
+    /** 定休日の曜日でも、この日は通常の営業時間で営業する。 */
+    public const STATUS_OPEN = 'open';
+
     /** @var list<string> */
     protected $fillable = [
         'business_date',

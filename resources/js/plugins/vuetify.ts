@@ -83,8 +83,18 @@ export default createVuetify({
         VTextField: {
             color: 'primary',
         },
+        // 選択欄にブラウザの入力履歴（過去に入力した日付など）の候補が重なって出ないようにする。
         VSelect: {
             color: 'primary',
+            autocomplete: 'off',
+        },
+        VAutocomplete: {
+            color: 'primary',
+            autocomplete: 'off',
+        },
+        VCombobox: {
+            color: 'primary',
+            autocomplete: 'off',
         },
         VTextarea: {
             color: 'primary',

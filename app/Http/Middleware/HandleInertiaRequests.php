@@ -60,6 +60,7 @@ class HandleInertiaRequests extends Middleware
                     'reportsManage' => $user?->can('reports.manage') ?? false,
                     'salesView' => $user?->can('sales.view') ?? false,
                     'checkoutsManage' => $user?->can('checkouts.manage') ?? false,
+                    'mastersDelete' => $user?->can('masters.delete') ?? false,
                 ],
                 'reportRoutes' => [
                     'dailyNotes' => route('admin.reports.daily-notes'),

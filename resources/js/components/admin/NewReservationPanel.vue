@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import PanelChoiceCard from '@/components/admin/PanelChoiceCard.vue';
 import PanelShell from '@/components/admin/PanelShell.vue';
 import MenuPicker from '@/components/admin/MenuPicker.vue';
 import { DateField } from '@/components/ark';
 import { applyReservationPrefill, type ReservationDraft } from '@/composables/reservationDraft';
+import { isPastDateTime } from '@/utils/pastDateTime';
 import { MESSAGES, unavailableDesiredTimeMessage } from '@/constants/messages';
 
 interface CustomerOption {
@@ -82,6 +84,8 @@ const emit = defineEmits<{
     close: [];
     back: [];
     switchToBlock: [];
+    /** 選んだ顧客の詳細を開く（入力中の内容は下書きとして残る）。 */
+    openCustomer: [customerId: number];
 }>();
 
 const dateTimeLocked = computed(
@@ -245,10 +249,24 @@ const staffItems = computed<StaffOption[]>(() => {
     return props.staff.filter((staff) => selectedService.value?.staff_ids.includes(staff.user_id));
 });
 
-const staffSelectItems = computed(() => [
-    { title: '指名なし（自動割当）', value: null as number | null },
-    ...staffItems.value.map((s) => ({ title: s.display_name, value: s.user_id })),
-]);
+const staffSelectItems = computed(() => {
+    const items = [
+        { title: '指名なし（自動割当）', value: null as number | null },
+        ...staffItems.value.map((s) => ({ title: s.display_name, value: s.user_id as number | null })),
+    ];
+    // 空き枠クリック等で、このメニューを担当できない（施術可否・資格なし）スタッフが選ばれている時も、
+    // ID の数字ではなく名前で出し、担当できないことが分かるようにする。
+    const current = props.staff.find((s) => s.user_id === selectedStaffId.value);
+    if (current && !staffItems.value.some((s) => s.user_id === current.user_id)) {
+        items.push({ title: `${current.display_name}${MESSAGES.reservation.staffNotEligibleSuffix}`, value: current.user_id });
+    }
+
+    return items;
+});
+
+/** 選択中の担当がこのメニューを担当できない時の案内。 */
+const selectedStaffIneligible = computed(() => selectedService.value !== null && selectedStaffId.value !== null
+    && !selectedService.value.staff_ids.includes(selectedStaffId.value));
 
 let availabilityRequestId = 0;
 
@@ -265,7 +283,14 @@ const boothManuallySet = ref(props.draft.booth_manually_set);
 /** 選択中メニューで使えるブース（紐付けが無いメニューは全ブース）。 */
 const boothOptions = computed(() => {
     const allowed = selectedService.value?.booth_ids ?? [];
-    return allowed.length === 0 ? props.booths : props.booths.filter((booth) => allowed.includes(booth.id));
+    const list = allowed.length === 0 ? [...props.booths] : props.booths.filter((booth) => allowed.includes(booth.id));
+    // メニュー変更前に選んだブースが対象外になっても、ID の数字ではなく名前で出す。
+    const current = props.booths.find((booth) => booth.id === selectedBoothId.value);
+    if (current && !list.some((booth) => booth.id === current.id)) {
+        list.push({ ...current, name: `${current.name}${MESSAGES.reservation.boothNotAllowedSuffix}` });
+    }
+
+    return list;
 });
 let assigningBoothAutomatically = false;
 
@@ -544,6 +569,47 @@ const unavailableDesiredTime = computed<string | null>(() => {
     return timeLabel(desiredStartsAt.value);
 });
 
+/**
+ * 取れなかった理由（担当不可・資格・勤務外・他予約・ブース満室など）。サーバーが空き枠計算と同じ規則で返す。
+ * 以前は「このメニュー・担当では空いていません」だけで、何を直せば取れるのか分からなかった。
+ */
+const unavailableReasons = ref<string[]>([]);
+const reasonToast = ref(false);
+let reasonsRequestId = 0;
+
+watch(unavailableDesiredTime, async (time) => {
+    unavailableReasons.value = [];
+    if (time === null || desiredStartsAt.value === null || selectedServiceId.value === null) {
+        return;
+    }
+    const requestId = ++reasonsRequestId;
+    const params = new URLSearchParams({
+        service_id: String(selectedServiceId.value),
+        starts_at: desiredStartsAt.value,
+        buffer_min: String(form.buffer_min),
+    });
+    if (selectedStaffId.value !== null) {
+        params.set('staff_id', String(selectedStaffId.value));
+    }
+    if (selectedBoothId.value !== null) {
+        params.set('booth_id', String(selectedBoothId.value));
+    }
+    try {
+        const response = await fetch(`/admin/reservations/unavailable-reasons?${params.toString()}`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        const json = response.ok ? ((await response.json()) as { reasons: string[] }) : { reasons: [] };
+        if (requestId !== reasonsRequestId) {
+            return;
+        }
+        unavailableReasons.value = json.reasons.length > 0 ? json.reasons : [MESSAGES.reservation.unavailableUnknown];
+    } catch {
+        unavailableReasons.value = [MESSAGES.reservation.unavailableUnknown];
+    }
+    reasonToast.value = true;
+});
+
 // SlotUnavailableException 等の競合エラーは 'reservation' バッグ・キーで返る
 // （既存 Admin/Create.vue と同じサーバー契約）。フォームの型にはない動的キーのため個別に読む。
 const reservationConflictError = computed<string | null>(
@@ -562,6 +628,24 @@ function submitUrl(path: string): string {
     const query = params.toString();
 
     return query === '' ? path : `${path}?${query}`;
+}
+
+const pastConfirmOpen = ref(false);
+const pastConfirmLabel = computed(() => {
+    const value = form.starts_at;
+
+    return value ? value.slice(0, 16).replace(/-/g, '/') : '';
+});
+
+/** 作成ボタン。過去の日時なら確認ダイアログを挟む。 */
+function requestSubmit(): void {
+    const value = form.starts_at;
+    if (isPastDateTime(value)) {
+        pastConfirmOpen.value = true;
+
+        return;
+    }
+    submit();
 }
 
 function submit(): void {
@@ -602,9 +686,12 @@ function submit(): void {
                     <span class="nrp__slotbox-label">担当</span>{{ selectedStaffName }}
                 </span>
             </div>
-            <p v-if="unavailableDesiredTime !== null" class="nrp__error">
-                {{ unavailableDesiredTimeMessage(unavailableDesiredTime) }}
-            </p>
+            <div v-if="unavailableDesiredTime !== null" class="nrp__error" data-testid="nrp-unavailable">
+                <p class="nrp__error-title">{{ unavailableDesiredTimeMessage(unavailableDesiredTime) }}</p>
+                <ul v-if="unavailableReasons.length > 0" class="nrp__reasons">
+                    <li v-for="reason in unavailableReasons" :key="reason">{{ reason }}</li>
+                </ul>
+            </div>
             <p v-else-if="dateTimeLocked && selectedServiceId === null" class="nrp__muted">
                 {{ MESSAGES.reservation.pickMenuToFixTime }}
             </p>
@@ -625,6 +712,14 @@ function submit(): void {
                             {{ selectedCustomer.kana }}
                         </span>
                     </span>
+                    <button
+                        type="button"
+                        class="nrp__customer-clear"
+                        data-testid="nrp-open-customer"
+                        @click="emit('openCustomer', selectedCustomer.user_id)"
+                    >
+                        {{ MESSAGES.customer.openDetail }}
+                    </button>
                     <button type="button" class="nrp__customer-clear" @click="clearCustomer">
                         変更
                     </button>
@@ -779,6 +874,8 @@ function submit(): void {
                     variant="outlined"
                     hide-details="auto"
                     :error-messages="form.errors.staff_id"
+                    :hint="selectedStaffIneligible ? MESSAGES.reservation.staffNotEligibleHint : undefined"
+                    persistent-hint
                 />
                 <v-checkbox
                     v-if="selectedStaffId !== null"
@@ -844,12 +941,15 @@ function submit(): void {
                 />
             </div>
 
-            <!-- 予約ではない「スタッフ予定」（休憩・清掃など）は控えめな補助操作にする（Task 11-30）。 -->
-            <div class="nrp__secondary">
-                <v-btn variant="text" size="x-small" prepend-icon="mdi-calendar-clock-outline" data-testid="switch-to-block" @click="emit('switchToBlock')">
-                    {{ MESSAGES.schedule.addStaffBlock }}
-                </v-btn>
-            </div>
+            <!-- 予約ではない「スタッフ予定」へ切り替える。予定パネルの「予約に切り替え」と同じ形にそろえる。 -->
+            <PanelChoiceCard
+                kind="block"
+                compact
+                :title="MESSAGES.schedule.switchToBlock"
+                :description="MESSAGES.schedule.choiceBlockDesc"
+                data-testid="switch-to-block"
+                @click="emit('switchToBlock')"
+            />
 
             <p v-if="reservationConflictError" class="nrp__error">{{ reservationConflictError }}</p>
 
@@ -869,15 +969,47 @@ function submit(): void {
                 block
                 :disabled="form.starts_at === null || form.customer_id === null"
                 :loading="form.processing"
-                @click="submit"
+                @click="requestSubmit"
             >
                 予約を作成
             </v-btn>
         </template>
+        <!-- 取れなかった理由のトースト。画面下に出して、パネルを見ていなくても気づけるようにする。 -->
+        <v-snackbar v-model="reasonToast" color="warning" location="bottom" timeout="8000" multi-line>
+            <strong>{{ unavailableDesiredTime !== null ? unavailableDesiredTimeMessage(unavailableDesiredTime) : '' }}</strong>
+            <ul class="nrp__toast-reasons">
+                <li v-for="reason in unavailableReasons" :key="reason">{{ reason }}</li>
+            </ul>
+            <template #actions>
+                <v-btn variant="text" @click="reasonToast = false">閉じる</v-btn>
+            </template>
+        </v-snackbar>
+        <!-- 過去の日時に入れる時だけ確認する（入力ミス防止）。 -->
+        <v-dialog v-model="pastConfirmOpen" max-width="400">
+            <v-card>
+                <v-card-title class="text-subtitle-1 font-weight-bold">{{ MESSAGES.schedule.pastConfirmTitle }}</v-card-title>
+                <v-card-text>{{ MESSAGES.schedule.pastConfirmBody.replace('{when}', pastConfirmLabel) }}</v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="pastConfirmOpen = false">やめる</v-btn>
+                    <v-btn color="primary" variant="flat" data-testid="past-confirm" @click="pastConfirmOpen = false; submit()">この日時で登録する</v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
     </PanelShell>
 </template>
 
 <style scoped>
+.nrp__error-title {
+    margin: 0;
+}
+
+.nrp__reasons,
+.nrp__toast-reasons {
+    margin: 4px 0 0;
+    padding-left: 1.2em;
+}
+
 .nrp__slotbox {
     display: flex;
     align-items: baseline;
@@ -1166,11 +1298,6 @@ function submit(): void {
     color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
-.nrp__secondary {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: -4px;
-}
 
 .nrp__summary {
     display: flex;

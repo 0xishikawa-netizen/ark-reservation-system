@@ -40,6 +40,8 @@ class RolePermissionSeeder extends Seeder
         'sales.view',
         'checkouts.manage',
         'checkouts.void',
+        // マスタ（メニュー・ブース・商品・スタッフ・回数券・月額プラン）の削除と復元。admin 専用。
+        'masters.delete',
         // ロール別の権限セット自体を管理する権限。admin 専用（§権限管理画面）。
         'roles.manage',
     ];

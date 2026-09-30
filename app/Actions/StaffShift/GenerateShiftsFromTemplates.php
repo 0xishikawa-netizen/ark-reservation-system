@@ -48,7 +48,8 @@ final class GenerateShiftsFromTemplates
             return ['created' => 0, 'staff_ids' => [], 'through' => $last->toDateString()];
         }
 
-        $closed = array_flip($this->bookingWindow->closedDates());
+        // 例外日の休業と毎週の定休日には勤務枠を作らない。
+        $closed = array_flip($this->bookingWindow->closedDatesBetween($today, $last));
 
         /** @var Collection<int, Collection<int, StaffShiftTemplate>> $byStaff */
         $byStaff = StaffShiftTemplate::query()

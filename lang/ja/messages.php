@@ -29,6 +29,34 @@ return [
     ],
 
     // 認証・アカウント
+    // 予約できない理由（ブッキングボードのトースト）
+    'availability_reason' => [
+        'service_inactive' => 'このメニューは現在「無効」のため予約できません。',
+        'staff_cannot_perform' => ':staffさんは「:service」を担当できません（スタッフ設定の「実施できる施術」に入っていません）。',
+        'staff_not_qualified' => ':staffさんは「:service」に必要な資格（:qualifications）を持っていません。',
+        'store_closed' => 'この日は店舗の休業日です。',
+        'outside_business_hours' => '営業時間（:hours）を外れます（終了はインターバル込みで :end）。',
+        'not_boundary' => '開始時刻は :minutes 分単位で選んでください。',
+        'staff_no_shift' => ':staffさんはこの日の勤務予定がありません。',
+        'staff_outside_shift' => ':staffさんの勤務時間（:shift）を外れます（終了はインターバル込みで :end）。',
+        'staff_booked' => ':staffさんは :range に別の予約があります（インターバルを含む）。',
+        'staff_blocked' => ':staffさんのスタッフ予定（休憩など）と重なります。',
+        'no_capable_staff' => '「:service」を担当できるスタッフがいません（実施できる施術・資格を確認してください）。',
+        'all_staff_busy' => '「:service」を担当できるスタッフが全員、勤務外か別の予約・予定で埋まっています。',
+        'booth_not_allowed' => ':boothは「:service」で使えるブースではありません。',
+        'booth_busy' => ':boothは別の予約・予定で使用中です。',
+        'no_active_booth' => '「:service」で使えるブースがすべて「無効」です（メニュー設定の「利用できるブース」を確認してください）。',
+        'all_booths_busy' => 'このメニューで使えるブース（:booths）がすべて使用中です。',
+        'unknown' => 'この時間は予約できません。別の時間を選んでください。',
+    ],
+
+    // マスタの削除・復元
+    'masters' => [
+        'in_use' => ':labelは:usagesで使われているため削除できません。使わなくなった場合は「無効」にしてください。',
+        'deleted' => '「:name」を削除しました。一覧の「削除済み」から復元できます。',
+        'restored' => '「:name」を復元しました。必要に応じて「有効」に戻してください。',
+    ],
+
     'auth' => [
         'email_already_registered' => 'このメールアドレスは登録済みです。ログインして予約してください。',
         'account_disabled' => 'このアカウントは無効化されています。管理者にお問い合わせください。',
@@ -199,6 +227,8 @@ return [
         'tax_rate_overlap' => '同じ税区分の適用期間が重複しています。',
         'payment_method_saved' => '決済方法を保存しました。',
         'calendar_saved' => '店舗カレンダーを保存しました。',
+        'regular_holiday' => '定休日',
+        'closed_weekdays_saved' => '定休日を保存しました。',
         'calendar_cleared' => '店舗カレンダーを通常営業に戻しました。',
         'calendar_invalid_status' => '店舗カレンダーの状態が不正です。',
         'calendar_hours_invalid' => '特別営業時間は開店時刻より閉店時刻を後にしてください。',

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
-import { DateField, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { DateField, EmptyValue, PageHeader, SectionCard, StatusChip, MoneyField } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import {
     reservationSourceColor,
@@ -36,6 +36,8 @@ interface ServiceOption {
     duration_min: number;
     requires_staff: boolean;
     staff_ids: number[];
+    /** メニューで使えるブース（空＝全有効ブース）。 */
+    booth_ids?: number[];
 }
 
 interface StaffOption {
@@ -124,9 +126,32 @@ const service = computed<ServiceOption | null>(() =>
     props.services.find((item) => item.id === props.reservation.service_id) ?? null,
 );
 
-const eligibleStaff = computed(() => props.staff.filter((staff) =>
-    service.value?.staff_ids.includes(staff.user_id) ?? false,
-));
+const eligibleStaff = computed(() => {
+    const list = props.staff.filter((staff) => service.value?.staff_ids.includes(staff.user_id) ?? false);
+    // 今の担当がこのメニューを担当できなくなっていても（施術可否・資格の変更後）、ID の数字ではなく名前で出す。
+    const current = props.staff.find((staff) => staff.user_id === selectedStaffId.value);
+    if (current && !list.some((staff) => staff.user_id === current.user_id)) {
+        list.push({ ...current, display_name: `${current.display_name}${MESSAGES.reservation.staffNotEligibleSuffix}` });
+    }
+
+    return list;
+});
+
+/** 選択中の担当がこのメニューを担当できない時の案内。 */
+const selectedStaffIneligible = computed(() => selectedStaffId.value !== null
+    && !(service.value?.staff_ids.includes(selectedStaffId.value) ?? false));
+
+/** メニューで使えるブースだけを選択肢にする（紐付けが無いメニューは全ブース）。 */
+const boothItems = computed(() => {
+    const allowed = service.value?.booth_ids ?? [];
+    const list = allowed.length === 0 ? [...props.booths] : props.booths.filter((booth) => allowed.includes(booth.id));
+    const current = props.booths.find((booth) => booth.id === selectedBoothId.value);
+    if (current && !list.some((booth) => booth.id === current.id)) {
+        list.push({ ...current, name: `${current.name}${MESSAGES.reservation.boothNotAllowedSuffix}` });
+    }
+
+    return list;
+});
 
 const form = useForm({
     starts_at: props.reservation.starts_at as string | null,
@@ -416,13 +441,15 @@ function submitAdjustment(): void {
                     hide-details="auto"
                     :disabled="!isConfirmed"
                     :error-messages="form.errors.staff_id"
+                    :hint="selectedStaffIneligible ? MESSAGES.reservation.staffNotEligibleHint : undefined"
+                    persistent-hint
                 />
                 <v-select
                     v-model="selectedBoothId"
-                    :items="booths"
+                    :items="boothItems"
                     item-title="name"
                     item-value="id"
-                    label="ブース（任意）"
+                    :label="(service?.booth_ids ?? []).length > 0 ? MESSAGES.reservation.boothMappedLabel : 'ブース（任意）'"
                     variant="outlined"
                     density="comfortable"
                     clearable
@@ -583,11 +610,9 @@ function submitAdjustment(): void {
         </v-row>
 
         <v-form class="d-flex align-start ga-3 flex-wrap mb-5" @submit.prevent="submitAdjustment">
-            <v-text-field
-                v-model.number="adjustmentForm.final_amount"
-                type="number"
-                min="0"
-                label="最終施術金額（円）"
+            <MoneyField
+                v-model="adjustmentForm.final_amount"
+                label="最終施術金額"
                 :error-messages="adjustmentForm.errors.final_amount"
                 style="max-width: 280px"
             />

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { MoneyField } from '@/components/ark';
 import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
@@ -37,11 +38,9 @@ function submit(): void {
                     required
                 />
                 <div class="d-flex ga-4 flex-wrap">
-                    <v-text-field
-                        v-model.number="form.price"
-                        label="月額（円）"
-                        type="number"
-                        min="0"
+                    <MoneyField
+                        v-model="form.price"
+                        label="月額"
                         :error-messages="form.errors.price"
                         required
                     />

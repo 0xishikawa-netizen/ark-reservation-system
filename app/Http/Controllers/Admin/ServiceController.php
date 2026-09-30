@@ -9,6 +9,7 @@ use App\Actions\Service\SetServiceResources;
 use App\Actions\Service\SetServiceStaff;
 use App\Actions\Service\ToggleServiceActive;
 use App\Actions\Service\UpdateService;
+use App\Domain\Masters\MasterDeletionService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreServiceRequest;
 use App\Http\Requests\Admin\UpdateServiceRequest;
@@ -32,9 +33,13 @@ class ServiceController extends Controller
         $searchInput = $request->query('search');
         $search = is_string($searchInput) ? trim($searchInput) : '';
         $onlyActive = $request->boolean('only_active');
-        $services = $query->get($search, $onlyActive);
+        $categoryInput = $request->query('category');
+        $category = is_string($categoryInput) && $categoryInput !== '' ? $categoryInput : null;
+        $services = $query->get($search, $onlyActive, $category);
 
         return Inertia::render('Admin/Services/Index', [
+            // 削除済み（復元用）は管理者（masters.delete）にだけ渡す。
+            'trashed' => request()->user()?->can('masters.delete') ? app(MasterDeletionService::class)->trashed('services') : [],
             'services' => $services->map(fn (Service $service): array => [
                 'id' => $service->id,
                 'name' => $service->name,
@@ -56,7 +61,13 @@ class ServiceController extends Controller
             'filters' => [
                 'search' => $search,
                 'only_active' => $onlyActive,
+                'category' => $category,
             ],
+            // 検索欄を選択式にするための候補（登録済みのカテゴリとメニュー名）。
+            // 表示順の既定の並び（グローバルスコープ）は DISTINCT と両立しないため外す（MySQL の ONLY_FULL_GROUP_BY）。
+            'categoryOptions' => Service::query()->withoutGlobalScope('sort_order')->whereNotNull('category')->where('category', '!=', '')
+                ->distinct()->orderBy('category')->pluck('category')->values(),
+            'nameOptions' => Service::query()->orderBy('sort_order')->orderBy('name')->pluck('name')->values(),
         ]);
     }
 

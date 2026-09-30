@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Actions\Product\CreateProduct;
 use App\Actions\Product\ToggleProductActive;
 use App\Actions\Product\UpdateProduct;
+use App\Domain\Masters\MasterDeletionService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreProductRequest;
 use App\Http\Requests\Admin\UpdateProductRequest;
@@ -22,6 +23,8 @@ class ProductController extends Controller
     public function index(): Response
     {
         return Inertia::render('Admin/Products/Index', [
+            // 削除済み（復元用）は管理者（masters.delete）にだけ渡す。
+            'trashed' => request()->user()?->can('masters.delete') ? app(MasterDeletionService::class)->trashed('products') : [],
             'products' => Product::query()
                 ->with('taxCategory:id,name')
                 ->orderByDesc('is_active')

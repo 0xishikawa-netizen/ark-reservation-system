@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { ColorField, PageHeader, SectionCard } from '@/components/ark';
+import { ColorField, PageHeader, SectionCard, MoneyField } from '@/components/ark';
 import ServiceResourceFields from '@/components/admin/ServiceResourceFields.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -120,11 +120,9 @@ const submit = (): void => {
                             :error-messages="form.errors.duration_min"
                             required
                         />
-                        <v-text-field
-                            v-model.number="form.price"
-                            label="価格（税込・円）"
-                            type="number"
-                            min="0"
+                        <MoneyField
+                            v-model="form.price"
+                            label="価格（税込）"
                             :error-messages="form.errors.price"
                             required
                         />

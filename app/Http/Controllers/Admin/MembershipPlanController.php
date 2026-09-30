@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Actions\Membership\CreateMembershipPlan;
 use App\Actions\Membership\ToggleMembershipPlanActive;
 use App\Actions\Membership\UpdateMembershipPlan;
+use App\Domain\Masters\MasterDeletionService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreMembershipPlanRequest;
 use App\Http\Requests\Admin\UpdateMembershipPlanRequest;
@@ -22,6 +23,8 @@ class MembershipPlanController extends Controller
     public function index(MembershipPlanListQuery $query): Response
     {
         return Inertia::render('Admin/MembershipPlans/Index', [
+            // 削除済み（復元用）は管理者（masters.delete）にだけ渡す。
+            'trashed' => request()->user()?->can('masters.delete') ? app(MasterDeletionService::class)->trashed('membership-plans') : [],
             'membershipPlans' => $query->get()->values(),
         ]);
     }

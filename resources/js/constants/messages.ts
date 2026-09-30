@@ -6,6 +6,12 @@
  */
 export const MESSAGES = {
     /** 共通 */
+    masters: {
+        confirmTitle: '{label}を削除しますか？',
+        confirmBody: '予約・会計などで使われているものは削除できません（その場合は「無効」にしてください）。削除したものは一覧の下の「削除済み」から復元できます。',
+        deleteFailed: '削除できませんでした。時間をおいてもう一度お試しください。',
+        trashedTitle: '削除済みの{label}（{count}件）',
+    },
     common: {
         notApplicable: '―',
         notApplicableLabel: '該当なし',
@@ -50,6 +56,11 @@ export const MESSAGES = {
     },
     /** 予約 */
     reservation: {
+        staffNotEligibleSuffix: '（このメニューを担当できません）',
+        staffNotEligibleHint: 'このスタッフは今のメニューを担当できません（スタッフ設定の「実施できる施術」・「保有資格」を確認するか、担当を変更してください）。',
+        boothNotAllowedSuffix: '（このメニューでは使えません）',
+        boothMappedLabel: 'ブース（このメニューで使えるブース）',
+        unavailableUnknown: 'この時間は予約できません。別の時間を選んでください。',
         notConfirmedNotEditable: 'この予約は確定状態ではないため、変更操作はできません。',
         confirmMove: '予約を変更しますか？',
         moveConflict: '他の予約が入ったため、この時間には変更できません。台帳を更新して再度お試しください。',
@@ -70,6 +81,12 @@ export const MESSAGES = {
     },
     /** ブッキングボードの予定 */
     schedule: {
+        pastConfirmTitle: '過去の日時に登録しますか？',
+        pastConfirmBody: '{when} は現在より前の日時です。このまま登録してよいか確認してください。',
+        choiceReservationDesc: '顧客・メニューを選んで予約を登録します',
+        choiceBlockDesc: '休憩・清掃・ミーティングなど、予約以外でスタッフの時間を押さえます',
+        switchToBlock: '代わりにスタッフ予定を入れる',
+        switchToReservation: '代わりに予約を入れる',
         bufferSegment: 'インターバル（終了後{min}分）',
         addStaffBlock: 'スタッフ予定を追加',
         staffBlock: 'スタッフ予定（休憩など）',
@@ -101,6 +118,8 @@ export const MESSAGES = {
     },
     /** 顧客 */
     customer: {
+        openDetail: '詳細',
+        searchSelectsForReservation: '新規予約の入力中です。選んだ顧客は予約の顧客に入ります（顧客詳細は選んだ後の「詳細」から開けます）。',
         karteTitle: 'カルテ（分析項目）',
         karteSubtitle: '新規統計に使う項目です。初診完了時点の値が統計に固定されます。',
         acquisitionChannel: '来店動機',
@@ -181,8 +200,8 @@ export const MESSAGES = {
     },
     /** 勤務枠・シフト */
     shift: {
-        noUpcomingExceptions: '今後の例外日はありません。',
-        noIndividualShifts: '個別の勤務枠はありません。',
+        noUpcomingExceptions: '今日以降に登録した日はありません。',
+        noIndividualShifts: 'この期間に手動で追加した勤務はありません。',
         noClosedDates: '休業日は登録されていません。',
     },
     /** 認証・2段階認証 */
@@ -517,28 +536,36 @@ export const MESSAGES = {
         futureDay: '未実績',
     },
     attendance: {
-        tab: '実勤怠',
-        title: '実出退勤・休憩',
-        subtitle: '勤務予定とは別に実際の出退勤を記録します。複数勤務も追加できます。',
-        date: '営業日',
+        tab: '出退勤の記録',
+        title: '出退勤の記録（実績）',
+        subtitle: '実際に出勤・退勤・休憩した時刻を記録します。',
+        help: 'スタッフ稼働率の「出勤時間」に使います。記録しない日は勤務枠（予定）で代わりに計算するので、入力は必須ではありません。タイムカード等との自動連携はありません。',
+        newTitle: '新しく記録する',
+        editTitle: '記録を修正する',
+        listTitle: 'この期間の出退勤の記録',
+        date: '日付',
         clockIn: '出勤',
         clockOut: '退勤',
+        breakLabel: '休憩',
         breakStart: '休憩開始',
         breakEnd: '休憩終了',
+        statusLabel: '状態',
         note: 'メモ',
         draft: '入力中',
         confirmed: '確定',
         addBreak: '休憩を追加',
-        removeBreak: '休憩を削除',
-        save: '勤怠を保存',
-        new: '新規入力',
-        edit: '編集',
-        none: 'この期間に実勤怠はありません。',
+        removeBreak: '削除',
+        save: '記録を保存',
+        new: '新しく記録',
+        edit: '修正',
+        none: 'この期間の出退勤の記録はありません。',
         selectStaff: 'スタッフを選択してください。',
         formError: '入力内容を確認してください。',
     },
+
     /** 設定 */
     settings: {
+        taxRateMissing: '税率が未登録です（この税区分の商品・メニューは会計できません）',
         notificationSpeakerHint: '聞こえにくい場合はパソコン本体の音量も上げてください。',
         cancellationTierHint: '予約開始までの残り時間が条件以上となる最初の段階を適用します。0時間の段階は必須です。',
     },
@@ -578,8 +605,11 @@ export const MESSAGES = {
         treatments: '施術',
         addTreatment: '施術を追加',
         service: 'メニュー',
-        startTime: '開始',
-        minutes: '分',
+        startTime: '開始時刻',
+        minutes: '実施時間',
+        minutesUnit: '分',
+        staffMinutes: '担当時間',
+        treatmentStaff: '担当スタッフ（実際に施術した人）',
         staff: '担当',
         addStaff: '担当を追加',
         primaryStaff: '主担当',
@@ -596,10 +626,17 @@ export const MESSAGES = {
         quantity: '数量',
         unitAmount: '単価（税込）',
         taxCategory: '税区分',
-        linkedTreatment: '対象施術',
-        allocatable: 'スタッフ売上に配分',
-        allocations: 'スタッフ売上配分',
-        allocateByMinutes: '担当時間で按分',
+        linkedTreatment: 'どの施術の料金か',
+        allocatable: '担当スタッフの売上にする',
+        allocations: 'スタッフごとの売上',
+        addAllocation: 'スタッフを追加',
+        allocateByMinutes: '担当時間で自動で分ける',
+        lineTotal: '金額（税込）',
+        addLineLabel: '明細を追加：',
+        linesEmpty: '明細はまだありません。上のボタンから追加してください。',
+        linesHelp: '会計明細は、お客様に請求する内容の内訳です。施術料・物販・回数券・月額・その他を1行ずつ入れます（単価は税込）。明細の合計が右側の「税込合計」になります。',
+        linesHelpAllocation: '「担当スタッフの売上にする」をオンにすると、その金額をスタッフごとの売上として記録します（スタッフ別売上の集計に使います）。「担当時間で自動で分ける」で施術の担当時間に応じて分けられます。',
+        tendersHelp: 'お客様から受け取った方法と金額を入れます。支払合計を税込合計と一致させてから確定します。',
         amount: '金額',
         tenders: '支払',
         addTender: '支払を追加',
@@ -650,7 +687,7 @@ export function confirmStaffUnbookableMessage(name: string): string {
 
 /** 指定した開始時刻が予約できない時の案内。 */
 export function unavailableDesiredTimeMessage(time: string): string {
-    return `${time} はこのメニュー・担当では空いていません。別の空き枠をクリックしてください。`;
+    return `${time} は予約できません。`;
 }
 
 /** メニュー別空き枠プレビューの予約不可案内。 */

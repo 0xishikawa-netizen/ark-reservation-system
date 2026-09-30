@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PanelChoiceCard from '@/components/admin/PanelChoiceCard.vue';
 import PanelShell from '@/components/admin/PanelShell.vue';
 import { MESSAGES } from '@/constants/messages';
 
@@ -51,55 +52,27 @@ function fmtDay(iso: string): string {
 
         <p class="sch__lead">{{ MESSAGES.reservation.slotChoiceQuestion }}</p>
 
+        <!-- 予約とスタッフ予定を同じ形のボタンで並べる（予約が上）。 -->
         <div class="sch__choices">
-            <button
-                type="button"
-                class="sch__choice sch__choice--reservation"
+            <PanelChoiceCard
+                kind="reservation"
+                title="予約を作成"
+                :description="MESSAGES.schedule.choiceReservationDesc"
+                data-testid="choose-reservation"
                 @click="emit('chooseReservation')"
-            >
-                <span class="sch__choice-icon">
-                    <v-icon icon="mdi-calendar-plus-outline" size="20" />
-                </span>
-                <span class="sch__choice-body">
-                    <span class="sch__choice-title">予約を作成</span>
-                    <span class="sch__choice-desc">顧客・メニューを選んで登録</span>
-                </span>
-                <v-icon icon="mdi-chevron-right" size="18" class="sch__choice-arrow" />
-            </button>
-
-            <!-- 予約ではない予定（休憩・清掃・ミーティング）は補助操作として控えめに出す（Task 11-30）。 -->
-            <v-btn
-                variant="outlined"
-                size="small"
-                prepend-icon="mdi-calendar-clock-outline"
-                class="sch__block-btn"
+            />
+            <PanelChoiceCard
+                kind="block"
+                :title="MESSAGES.schedule.staffBlock"
+                :description="MESSAGES.schedule.choiceBlockDesc"
                 data-testid="choose-block"
                 @click="emit('chooseBlock')"
-            >
-                {{ MESSAGES.schedule.staffBlock }}
-            </v-btn>
+            />
         </div>
     </PanelShell>
 </template>
 
 <style scoped>
-/* 予約は主要操作（塗りつぶし）、スタッフ予定は右寄せの小さな補助ボタン。 */
-.sch__choice--reservation {
-    background: rgb(var(--v-theme-primary));
-    color: rgb(var(--v-theme-on-primary));
-    border-color: rgb(var(--v-theme-primary));
-}
-
-.sch__choice--reservation .sch__choice-desc,
-.sch__choice--reservation .sch__choice-arrow,
-.sch__choice--reservation .sch__choice-icon {
-    color: rgba(var(--v-theme-on-primary), 0.85);
-}
-
-.sch__block-btn {
-    align-self: flex-end;
-}
-
 .sch__when {
     padding: var(--ark-space-3);
     border-radius: var(--ark-radius);
@@ -166,91 +139,4 @@ function fmtDay(iso: string): string {
     gap: var(--ark-space-2);
 }
 
-/* 縦に積んだ一覧型（横2分割だと文字が詰まって読みにくいため）。
-   予約＝navy／予定＝azure で、左端の色帯だけ変えて控えめに区別する。 */
-.sch__choice {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: var(--ark-space-3);
-    width: 100%;
-    padding: var(--ark-space-3);
-    padding-left: calc(var(--ark-space-3) + 4px);
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
-    border-radius: var(--ark-radius);
-    background: rgb(var(--v-theme-surface));
-    overflow: hidden;
-    text-align: left;
-    cursor: pointer;
-    transition: border-color 0.12s ease, background-color 0.12s ease;
-}
-
-/* 左端の色帯。 */
-.sch__choice::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 4px;
-}
-
-.sch__choice--reservation::before {
-    background: rgb(var(--v-theme-primary));
-}
-
-.sch__choice--block::before {
-    background: rgb(var(--v-theme-secondary));
-}
-
-.sch__choice--reservation:hover {
-    border-color: rgb(var(--v-theme-primary));
-    background: rgba(var(--v-theme-primary), 0.06);
-}
-
-.sch__choice--block:hover {
-    border-color: rgb(var(--v-theme-secondary));
-    background: rgba(var(--v-theme-secondary), 0.07);
-}
-
-.sch__choice-icon {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    border-radius: 999px;
-    background: rgba(var(--v-theme-primary), 0.1);
-    color: rgb(var(--v-theme-primary));
-}
-
-.sch__choice--block .sch__choice-icon {
-    background: rgba(var(--v-theme-secondary), 0.14);
-    color: rgb(var(--v-theme-secondary));
-}
-
-.sch__choice-body {
-    display: flex;
-    flex: 1 1 auto;
-    min-width: 0;
-    flex-direction: column;
-    gap: 1px;
-}
-
-.sch__choice-title {
-    font-size: 0.8125rem;
-    font-weight: 800;
-    color: rgb(var(--v-theme-on-surface));
-}
-
-.sch__choice-desc {
-    font-size: 0.625rem;
-    color: rgba(var(--v-theme-on-surface), 0.7);
-}
-
-.sch__choice-arrow {
-    flex: 0 0 auto;
-    color: rgba(var(--v-theme-on-surface), 0.4);
-}
 </style>

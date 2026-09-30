@@ -68,6 +68,7 @@ const clearValue = (): void => {
     >
         <template #activator="{ props: activatorProps }">
             <v-text-field
+                autocomplete="off"
                 v-bind="{ ...activatorProps, ...$attrs }"
                 :model-value="displayValue"
                 :label="label"

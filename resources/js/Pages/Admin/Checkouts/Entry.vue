@@ -2,7 +2,7 @@
 import type { RequestPayload } from '@inertiajs/core';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { PageHeader, SectionCard } from '@/components/ark';
+import { MoneyField, PageHeader, SectionCard, TimeField } from '@/components/ark';
 import { allocateByWeight, splitInclusive } from '@/components/checkout/amounts';
 import { ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
@@ -12,7 +12,7 @@ defineOptions({ layout: AdminLayout });
 
 type ItemType = 'service' | 'product' | 'ticket' | 'membership' | 'other';
 interface Priced { id: number; name: string; price: number; tax_category_id: number | null }
-interface ServiceMaster extends Priced { duration_min: number; requires_staff: boolean }
+interface ServiceMaster extends Priced { duration_min: number; requires_staff: boolean; booth_ids?: number[] }
 interface TaxCategoryMaster { id: number; name: string; rate_bps: number | null }
 interface Option { id: number; name: string }
 interface StaffRow { staff_id: number | null; actual_minutes: number; started_at: string | null }
@@ -42,6 +42,7 @@ const props = defineProps<{
     date: string;
     services: ServiceMaster[];
     booths?: Option[];
+    businessHours?: { opens_at: string; closes_at: string };
     products: Priced[];
     ticketProducts: Priced[];
     membershipPlans: Priced[];
@@ -84,6 +85,22 @@ const treatmentItems = computed(() => treatments.value.map((row, index) => ({
     title: `${index + 1}. ${props.services.find((s) => s.id === row.service_id)?.name ?? labels.treatments}`,
     value: index,
 })));
+/** 開始時刻の選択肢はこの日の営業時間に合わせる。 */
+const hours = computed(() => ({
+    opens_at: props.businessHours?.opens_at ?? '00:00',
+    closes_at: props.businessHours?.closes_at ?? '23:55',
+}));
+/** 施術のブースは、そのメニューで使えるブースだけ（未設定のメニューは全ブース）。選択済みの対象外ブースは残して注記する。 */
+function boothItemsFor(row: TreatmentRow): Option[] {
+    const all = props.booths ?? [];
+    const allowed = props.services.find((s) => s.id === row.service_id)?.booth_ids ?? [];
+    const list = allowed.length === 0 ? [...all] : all.filter((booth) => allowed.includes(booth.id));
+    const current = all.find((booth) => booth.id === row.booth_id);
+    if (current && !list.some((booth) => booth.id === current.id)) {
+        list.push({ ...current, name: `${current.name}${MESSAGES.reservation.boothNotAllowedSuffix}` });
+    }
+    return list;
+}
 const typeLabel: Record<ItemType, string> = {
     service: labels.itemService, product: labels.itemProduct, ticket: labels.itemTicket, membership: labels.itemMembership, other: labels.itemOther,
 };
@@ -134,10 +151,11 @@ function addLine(type: ItemType): void {
     touch();
 }
 
-function masterItems(type: ItemType): { title: string; value: number }[] {
+/** 選択後の表示が見切れないよう、名前だけを表示し、価格は候補一覧の補足に出す。 */
+function masterItems(type: ItemType): { title: string; value: number; props: { subtitle: string } }[] {
     const list = type === 'service' ? props.services : type === 'product' ? props.products
         : type === 'ticket' ? props.ticketProducts : type === 'membership' ? props.membershipPlans : [];
-    return list.map((m) => ({ title: `${m.name}（${m.price.toLocaleString()}円）`, value: m.id }));
+    return list.map((m) => ({ title: m.name, value: m.id, props: { subtitle: `${m.price.toLocaleString()}円` } }));
 }
 
 function masterId(line: LineRow): number | null {
@@ -316,25 +334,30 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                 </div>
                 <p class="hint">{{ labels.nominationsHint }}</p>
                 <div v-for="(row, index) in treatments" :key="index" class="treatment" :data-testid="`treatment-${index}`">
-                    <div class="line-head">
-                        <strong>{{ index + 1 }}.</strong>
+                    <div class="field-row">
+                        <strong class="row-no">{{ index + 1 }}.</strong>
                         <v-select :model-value="row.service_id" :items="serviceItems" :label="labels.service" :readonly="!visitEditable"
-                            density="compact" variant="outlined" hide-details class="field-lg" @update:model-value="(v: number | null) => onTreatmentService(row, v)" />
-                        <v-text-field v-model="row.started_at" :label="labels.startTime" placeholder="11:30" :readonly="!visitEditable"
-                            density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
-                        <v-text-field v-model.number="row.actual_minutes" type="number" min="1" :label="labels.minutes" :readonly="!visitEditable"
-                            density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
-                        <v-select v-if="(booths ?? []).length > 0" v-model="row.booth_id" :items="booths ?? []" item-title="name" item-value="id" :label="MESSAGES.checkout.booth"
-                            :readonly="!visitEditable" density="compact" variant="outlined" hide-details clearable class="field-sm" @update:model-value="touch" />
+                            density="compact" variant="outlined" hide-details class="f-grow" @update:model-value="(v: number | null) => onTreatmentService(row, v)" />
+                        <div class="f-time">
+                            <TimeField :model-value="row.started_at ?? ''" :label="labels.startTime" :min-time="hours.opens_at" :max-time="hours.closes_at" :step-minutes="5"
+                                :readonly="!visitEditable" clearable density="compact" @update:model-value="(v: string) => { row.started_at = v || null; touch(); }" />
+                        </div>
+                        <v-text-field v-model.number="row.actual_minutes" type="number" min="1" :label="labels.minutes" :suffix="labels.minutesUnit" :readonly="!visitEditable"
+                            density="compact" variant="outlined" hide-details class="f-min" @update:model-value="touch" />
+                        <v-select v-if="(booths ?? []).length > 0" v-model="row.booth_id" :items="boothItemsFor(row)" item-title="name" item-value="id" :label="MESSAGES.checkout.booth"
+                            :readonly="!visitEditable" density="compact" variant="outlined" hide-details clearable class="f-mid" @update:model-value="touch" />
                         <v-btn v-if="visitEditable" icon="mdi-delete-outline" variant="text" size="small" :aria-label="labels.remove" @click="treatments.splice(index, 1); touch()" />
                     </div>
-                    <div v-for="(staffRow, staffIndex) in row.staff" :key="staffIndex" class="staff-row indent">
+                    <p class="sub-label">{{ labels.treatmentStaff }}</p>
+                    <div v-for="(staffRow, staffIndex) in row.staff" :key="staffIndex" class="field-row indent">
                         <v-select v-model="staffRow.staff_id" :items="staffItems" :label="labels.staff" :readonly="!visitEditable"
-                            density="compact" variant="outlined" hide-details class="field-md" @update:model-value="touch" />
-                        <v-text-field v-model.number="staffRow.actual_minutes" type="number" min="1" :label="labels.minutes" :readonly="!visitEditable"
-                            density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
-                        <v-text-field v-model="staffRow.started_at" :label="labels.startTime" :readonly="!visitEditable"
-                            density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
+                            density="compact" variant="outlined" hide-details class="f-mid" @update:model-value="touch" />
+                        <div class="f-time">
+                            <TimeField :model-value="staffRow.started_at ?? ''" :label="labels.startTime" :min-time="hours.opens_at" :max-time="hours.closes_at" :step-minutes="5"
+                                :readonly="!visitEditable" clearable density="compact" @update:model-value="(v: string) => { staffRow.started_at = v || null; touch(); }" />
+                        </div>
+                        <v-text-field v-model.number="staffRow.actual_minutes" type="number" min="1" :label="labels.staffMinutes" :suffix="labels.minutesUnit" :readonly="!visitEditable"
+                            density="compact" variant="outlined" hide-details class="f-min" @update:model-value="touch" />
                         <v-btn v-if="visitEditable" icon="mdi-close" variant="text" size="small" :aria-label="labels.remove" @click="row.staff.splice(staffIndex, 1); touch()" />
                     </div>
                     <div class="indent">
@@ -353,47 +376,58 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
             </SectionCard>
 
             <SectionCard :title="labels.lines" class="mt-4">
+                <!-- 会計明細の意味が分かるよう、何を入れる欄かを先に説明する。 -->
+                <div class="help" data-testid="lines-help">
+                    <p>{{ labels.linesHelp }}</p>
+                    <p>{{ labels.linesHelpAllocation }}</p>
+                </div>
                 <div v-if="checkoutEditable" class="add-buttons">
+                    <span class="sub-label">{{ labels.addLineLabel }}</span>
                     <v-btn v-if="mode === 'visit'" size="small" variant="outlined" prepend-icon="mdi-plus" data-testid="add-service-line" @click="addLine('service')">{{ labels.addService }}</v-btn>
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-plus" data-testid="add-product-line" @click="addLine('product')">{{ labels.addProduct }}</v-btn>
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-plus" @click="addLine('ticket')">{{ labels.addTicket }}</v-btn>
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-plus" @click="addLine('membership')">{{ labels.addMembership }}</v-btn>
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-plus" @click="addLine('other')">{{ labels.addOther }}</v-btn>
                 </div>
+                <p v-if="lines.length === 0" class="muted mt-3">{{ labels.linesEmpty }}</p>
                 <div v-for="(line, index) in lines" :key="index" class="line" :data-testid="`line-${index}`">
-                    <div class="line-head">
-                        <v-chip size="small" label>{{ typeLabel[line.item_type] }}</v-chip>
+                    <div class="field-row">
+                        <v-chip size="small" label class="type-chip">{{ typeLabel[line.item_type] }}</v-chip>
                         <v-select v-if="line.item_type !== 'other'" :model-value="masterId(line)" :items="masterItems(line.item_type)" :label="labels.itemName" :readonly="!checkoutEditable"
-                            density="compact" variant="outlined" hide-details class="field-lg" @update:model-value="(v: number | null) => onMaster(line, v)" />
+                            density="compact" variant="outlined" hide-details class="f-grow" @update:model-value="(v: number | null) => onMaster(line, v)" />
                         <v-text-field v-else v-model="line.item_name" :label="labels.itemName" :readonly="!checkoutEditable"
-                            density="compact" variant="outlined" hide-details class="field-lg" @update:model-value="touch" />
+                            density="compact" variant="outlined" hide-details class="f-grow" @update:model-value="touch" />
                         <v-text-field v-model.number="line.quantity" type="number" min="1" :label="labels.quantity" :readonly="!checkoutEditable"
-                            density="compact" variant="outlined" hide-details class="field-xs" @update:model-value="touch" />
-                        <v-text-field v-model.number="line.unit_amount" type="number" min="0" :label="labels.unitAmount" :readonly="!checkoutEditable"
-                            density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
+                            density="compact" variant="outlined" hide-details class="f-qty" @update:model-value="touch" />
+                        <MoneyField :model-value="line.unit_amount" :label="labels.unitAmount" :readonly="!checkoutEditable"
+                            density="compact" variant="outlined" hide-details class="f-money" @update:model-value="(v: number | null) => { line.unit_amount = v ?? 0; touch(); }" />
                         <v-select v-model="line.tax_category_id" :items="taxItems" :label="labels.taxCategory" :readonly="!checkoutEditable"
-                            density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
-                        <span class="num strong"><ReportValue :value="lineGross(line)" format="money" /></span>
+                            density="compact" variant="outlined" hide-details class="f-tax" @update:model-value="touch" />
+                        <div class="line-total">
+                            <small class="muted">{{ labels.lineTotal }}</small>
+                            <strong class="num"><ReportValue :value="lineGross(line)" format="money" /></strong>
+                        </div>
                         <v-btn v-if="checkoutEditable" icon="mdi-delete-outline" variant="text" size="small" :aria-label="labels.remove" @click="lines.splice(index, 1); touch()" />
                     </div>
                     <div class="indent sub">
-                        <span>{{ labels.net }} <ReportValue :value="lineSplit(line)?.net ?? null" format="money" /> / {{ labels.tax }} <ReportValue :value="lineSplit(line)?.tax ?? null" format="money" /></span>
+                        <span class="muted">{{ labels.net }} <ReportValue :value="lineSplit(line)?.net ?? null" format="money" /> ／ {{ labels.tax }} <ReportValue :value="lineSplit(line)?.tax ?? null" format="money" /></span>
                         <v-select v-if="line.item_type === 'service' && mode === 'visit'" v-model="line.treatment_index" :items="treatmentItems" :label="labels.linkedTreatment"
-                            :readonly="!checkoutEditable" density="compact" variant="outlined" hide-details clearable class="field-md" @update:model-value="touch" />
+                            :readonly="!checkoutEditable" density="compact" variant="outlined" hide-details clearable class="f-mid" @update:model-value="touch" />
                         <v-checkbox v-model="line.is_staff_allocatable" :label="labels.allocatable" :readonly="!checkoutEditable" density="compact" hide-details @update:model-value="touch" />
                         <small v-if="line.item_type === 'ticket'" class="muted">{{ labels.ticketNote }}</small>
                         <small v-if="line.item_type === 'membership'" class="muted">{{ labels.membershipNote }}</small>
                     </div>
                     <div v-if="line.is_staff_allocatable" class="indent allocations">
-                        <div v-for="(allocation, allocationIndex) in line.allocations" :key="allocationIndex" class="staff-row">
+                        <p class="sub-label">{{ labels.allocations }}</p>
+                        <div v-for="(allocation, allocationIndex) in line.allocations" :key="allocationIndex" class="field-row">
                             <v-select v-model="allocation.staff_id" :items="staffItems" :label="labels.staff" :readonly="!checkoutEditable"
-                                density="compact" variant="outlined" hide-details class="field-md" @update:model-value="touch" />
-                            <v-text-field v-model.number="allocation.amount" type="number" min="0" :label="labels.amount" :readonly="!checkoutEditable"
-                                density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
+                                density="compact" variant="outlined" hide-details class="f-mid" @update:model-value="touch" />
+                            <MoneyField :model-value="allocation.amount" :label="labels.amount" :readonly="!checkoutEditable"
+                                density="compact" variant="outlined" hide-details class="f-money" @update:model-value="(v: number | null) => { allocation.amount = v ?? 0; touch(); }" />
                             <v-btn v-if="checkoutEditable" icon="mdi-close" variant="text" size="small" :aria-label="labels.remove" @click="line.allocations.splice(allocationIndex, 1); touch()" />
                         </div>
                         <div v-if="checkoutEditable">
-                            <v-btn size="small" variant="text" prepend-icon="mdi-plus" @click="line.allocations.push({ staff_id: primaryStaffId ?? staff[0]?.id ?? 0, amount: 0 }); touch()">{{ labels.allocations }}</v-btn>
+                            <v-btn size="small" variant="text" prepend-icon="mdi-plus" @click="line.allocations.push({ staff_id: primaryStaffId ?? staff[0]?.id ?? 0, amount: 0 }); touch()">{{ labels.addAllocation }}</v-btn>
                             <v-btn size="small" variant="text" prepend-icon="mdi-scale-balance" @click="allocateByMinutes(line)">{{ labels.allocateByMinutes }}</v-btn>
                         </div>
                         <span v-if="!allocationOk(line)" class="warn" role="alert">{{ labels.allocationMismatch }}</span>
@@ -410,14 +444,19 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                     <dt class="strong">{{ labels.gross }}</dt><dd class="strong" data-testid="gross-total"><ReportValue :value="totals.gross" format="money" /></dd>
                 </dl>
                 <h4 class="mt-3">{{ labels.tenders }}</h4>
-                <div v-for="(tender, index) in tenders" :key="index" class="staff-row">
-                    <v-select v-model="tender.payment_method_id" :items="methodItems" :label="labels.paymentMethod" :readonly="!checkoutEditable || tender.external"
-                        density="compact" variant="outlined" hide-details class="field-md" @update:model-value="touch" />
-                    <v-text-field v-model.number="tender.amount" type="number" min="1" :label="labels.amount" :readonly="!checkoutEditable || tender.external"
-                        density="compact" variant="outlined" hide-details class="field-sm" @update:model-value="touch" />
-                    <v-text-field v-if="needsRetailSplit" v-model.number="tender.retail_amount" type="number" min="0" :label="labels.retailPortion" :readonly="!checkoutEditable || tender.external"
-                        density="compact" variant="outlined" hide-details class="field-sm" :data-testid="`tender-retail-${index}`" @update:model-value="touch" />
-                    <v-btn v-if="checkoutEditable && !tender.external" icon="mdi-close" variant="text" size="small" :aria-label="labels.remove" @click="tenders.splice(index, 1); touch()" />
+                <p class="hint">{{ labels.tendersHelp }}</p>
+                <div v-for="(tender, index) in tenders" :key="index" class="tender">
+                    <div class="tender-head">
+                        <v-select v-model="tender.payment_method_id" :items="methodItems" :label="labels.paymentMethod" :readonly="!checkoutEditable || tender.external"
+                            density="compact" variant="outlined" hide-details class="f-grow" @update:model-value="touch" />
+                        <v-btn v-if="checkoutEditable && !tender.external" icon="mdi-close" variant="text" size="small" :aria-label="labels.remove" @click="tenders.splice(index, 1); touch()" />
+                    </div>
+                    <div class="tender-amounts">
+                        <MoneyField :model-value="tender.amount" :label="labels.amount" :readonly="!checkoutEditable || tender.external"
+                            density="compact" variant="outlined" hide-details @update:model-value="(v: number | null) => { tender.amount = v ?? 0; touch(); }" />
+                        <MoneyField v-if="needsRetailSplit" :model-value="tender.retail_amount" :label="labels.retailPortion" :readonly="!checkoutEditable || tender.external"
+                            density="compact" variant="outlined" hide-details :data-testid="`tender-retail-${index}`" @update:model-value="(v: number | null) => { tender.retail_amount = v; touch(); }" />
+                    </div>
                 </div>
                 <p v-if="needsRetailSplit" class="hint">{{ labels.retailSplitHint }}</p>
                 <p v-if="needsRetailSplit && retailAllocated !== retailGross" class="warn" role="alert">{{ labels.retailSplitMismatch }}</p>
@@ -464,20 +503,39 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
 .entry-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
 .entry-side { position: sticky; top: 76px; }
 @media (max-width: 1100px) { .entry-grid { grid-template-columns: 1fr; } .entry-side { position: static; } }
-.meta-row, .staff-row, .line-head, .add-buttons, .sub { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.meta-row, .staff-row, .add-buttons, .sub { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 /* outlined入力の浮きラベルが上の行と重ならないよう、行間を空ける */
 .staff-row { row-gap: 16px; }
-.staff-row + .staff-row, h4 + .staff-row { margin-top: 16px; }
-.composition-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.field-row { display: flex; flex-wrap: wrap; gap: 16px 10px; align-items: center; }
+.field-row + .field-row { margin-top: 14px; }
+/* 見切れないよう、各欄に最低幅を持たせて折り返す */
+.f-grow { flex: 1 1 280px; min-width: 220px; }
+.f-mid { flex: 1 1 170px; min-width: 150px; }
+.f-time { flex: 0 0 150px; }
+.f-min { flex: 0 0 116px; }
+.f-qty { flex: 0 0 88px; }
+.f-money { flex: 0 0 150px; }
+.f-tax { flex: 0 0 150px; }
+.row-no { min-width: 20px; }
+.type-chip { flex: 0 0 auto; }
+.line-total { display: flex; flex-direction: column; align-items: flex-end; min-width: 96px; }
+.sub-label { margin: 12px 0 8px; font-size: 0.8125rem; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); }
+.add-buttons .sub-label { margin: 0 4px 0 0; }
+.help { background: rgba(var(--v-theme-primary), 0.05); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.85rem; line-height: 1.6; }
+.help p + p { margin-top: 4px; }
+.composition-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 8px; }
 .composition-total { font-size: 0.8125rem; color: rgba(var(--v-theme-on-surface), 0.7); }
 .reservation-summary { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin-top: 8px; font-size: 0.875rem; }
-.treatment, .line { border-top: 1px solid #e4e8ee; padding: 12px 0; }
-.indent { margin-left: 24px; margin-top: 8px; }
-.field-xs { max-width: 90px; } .field-sm { max-width: 140px; } .field-md { min-width: 180px; max-width: 220px; } .field-lg { min-width: 240px; flex: 1 1 240px; }
+.treatment, .line { border-top: 1px solid #e4e8ee; padding: 14px 0; }
+.indent { margin-left: 28px; margin-top: 8px; }
+.sub { margin-top: 10px; }
+.tender { border: 1px solid #e4e8ee; border-radius: 8px; padding: 10px; margin-top: 10px; }
+.tender-head { display: flex; gap: 4px; align-items: center; }
+.tender-amounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 12px; }
 .summary { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0; }
 .summary dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .strong { font-weight: 700; }
-.num { font-variant-numeric: tabular-nums; min-width: 88px; text-align: right; }
+.num { font-variant-numeric: tabular-nums; text-align: right; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .hint, .muted { color: #6b7785; font-size: 0.85rem; }
 .warn { color: #b42318; font-size: 0.85rem; }

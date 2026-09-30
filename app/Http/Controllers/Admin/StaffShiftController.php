@@ -12,6 +12,7 @@ use App\Actions\StaffShift\GenerateShiftsFromTemplates;
 use App\Actions\StaffShift\SaveShiftException;
 use App\Actions\StaffShift\SaveShiftTemplates;
 use App\Actions\StaffShift\UpdateShift;
+use App\Domain\Business\StoreCalendarService;
 use App\Domain\Reservation\BookingWindow;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SaveShiftExceptionRequest;
@@ -251,6 +252,8 @@ class StaffShiftController extends Controller
             'release_day_of_month' => $bookingWindow->releaseDayOfMonth(),
             'min_lead_minutes' => $bookingWindow->minLeadMinutes(),
             'closed_dates' => $bookingWindow->closedDates(),
+            // 毎週の定休日（ISO 曜日 1=月〜7=日）。店舗全体の休業設定として勤務枠画面にも出す。
+            'closed_weekdays' => app(StoreCalendarService::class)->closedWeekdays(),
             'enforced' => $bookingWindow->isHorizonEnforced(),
             'last_bookable_date' => $lastBookable?->toDateString(),
         ];

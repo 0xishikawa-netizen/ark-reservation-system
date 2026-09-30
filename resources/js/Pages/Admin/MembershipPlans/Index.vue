@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
+import { EmptyState, PageHeader, SectionCard, MasterDeleteButton, TrashedMasterList } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -17,7 +17,7 @@ interface MembershipPlanListItem {
     active_memberships_count: number;
 }
 
-defineProps<{ membershipPlans: MembershipPlanListItem[] }>();
+defineProps<{ trashed?: Array<{ id: number; name: string; deleted_at: string | null }>; membershipPlans: MembershipPlanListItem[] }>();
 
 const headers = [
     { title: 'プラン名', key: 'name' },
@@ -94,9 +94,11 @@ function formatPrice(price: number): string {
                 >
                     編集
                 </v-btn>
+                <MasterDeleteButton type="membership-plans" :id="item.id" :name="item.name" label="月額プラン" />
             </template>
         </v-data-table>
     </SectionCard>
+    <TrashedMasterList type="membership-plans" label="月額プラン" :items="trashed ?? []" />
 </template>
 
 <style scoped>

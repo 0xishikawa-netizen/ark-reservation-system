@@ -36,6 +36,7 @@ function selectMonth(value: string): void {
         <template #activator="{ props: activatorProps }">
             <div class="ark-month-field">
                 <v-text-field
+                    autocomplete="off"
                     v-bind="{ ...activatorProps, ...$attrs }"
                     :model-value="displayValue"
                     :label="label"

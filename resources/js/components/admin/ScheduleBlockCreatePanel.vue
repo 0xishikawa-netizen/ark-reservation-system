@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import PanelChoiceCard from '@/components/admin/PanelChoiceCard.vue';
 import PanelShell from '@/components/admin/PanelShell.vue';
 import { DateField, TimeField } from '@/components/ark';
 import { applyBlockPrefill, blockEndTimeFrom, type BlockDraft } from '@/composables/reservationDraft';
+import { isPastDateTime } from '@/utils/pastDateTime';
+import { MESSAGES } from '@/constants/messages';
 
 interface StaffOption {
     user_id: number;
@@ -157,6 +160,24 @@ function submitUrl(path: string): string {
     return query === '' ? path : `${path}?${query}`;
 }
 
+const pastConfirmOpen = ref(false);
+const pastConfirmLabel = computed(() => {
+    const value = form.work_date && form.start_at ? `${form.work_date} ${form.start_at}` : null;
+
+    return value ? value.slice(0, 16).replace(/-/g, '/') : '';
+});
+
+/** 作成ボタン。過去の日時なら確認ダイアログを挟む。 */
+function requestSubmit(): void {
+    const value = form.work_date && form.start_at ? `${form.work_date} ${form.start_at}` : null;
+    if (isPastDateTime(value)) {
+        pastConfirmOpen.value = true;
+
+        return;
+    }
+    submit();
+}
+
 function submit(): void {
     const afterCreate = props.afterCreate;
     form.post(submitUrl('/admin/schedule/blocks'), {
@@ -270,11 +291,15 @@ function submit(): void {
             :error-messages="form.errors.note"
         />
 
-        <button type="button" class="sbc__switch" @click="emit('switchToReservation')">
-            <v-icon icon="mdi-calendar-plus-outline" size="14" />
-            <span>代わりに予約を入れる</span>
-            <v-icon icon="mdi-chevron-right" size="14" class="sbc__switch-arrow" />
-        </button>
+        <!-- 予約へ切り替える。予約パネルの「スタッフ予定に切り替え」と同じ形にそろえる。 -->
+        <PanelChoiceCard
+            kind="reservation"
+            compact
+            :title="MESSAGES.schedule.switchToReservation"
+            :description="MESSAGES.schedule.choiceReservationDesc"
+            data-testid="switch-to-reservation"
+            @click="emit('switchToReservation')"
+        />
 
         <template #footer>
             <v-btn
@@ -284,11 +309,23 @@ function submit(): void {
                 block
                 :disabled="form.work_date === '' || form.start_at === '' || form.end_at === ''"
                 :loading="form.processing"
-                @click="submit"
+                @click="requestSubmit"
             >
                 追加する
             </v-btn>
         </template>
+        <!-- 過去の日時に入れる時だけ確認する（入力ミス防止）。 -->
+        <v-dialog v-model="pastConfirmOpen" max-width="400">
+            <v-card>
+                <v-card-title class="text-subtitle-1 font-weight-bold">{{ MESSAGES.schedule.pastConfirmTitle }}</v-card-title>
+                <v-card-text>{{ MESSAGES.schedule.pastConfirmBody.replace('{when}', pastConfirmLabel) }}</v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="pastConfirmOpen = false">やめる</v-btn>
+                    <v-btn color="primary" variant="flat" data-testid="past-confirm" @click="pastConfirmOpen = false; submit()">この日時で登録する</v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
     </PanelShell>
 </template>
 
@@ -356,30 +393,8 @@ function submit(): void {
 }
 
 /* 「代わりに予約を入れる」は、下線リンクではなく他の入力欄と同じ幅の控えめなボタンにする。 */
-.sbc__switch {
-    display: flex;
-    box-sizing: border-box;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    height: 36px;
-    padding: 0 var(--ark-space-3);
-    border: 1px dashed rgba(var(--v-theme-primary), 0.4);
-    border-radius: var(--ark-radius);
-    background: rgba(var(--v-theme-primary), 0.04);
-    font-size: 0.6875rem;
-    font-weight: 700;
-    color: rgb(var(--v-theme-primary));
-    cursor: pointer;
-}
 
-.sbc__switch:hover {
-    background: rgba(var(--v-theme-primary), 0.1);
-}
 
-.sbc__switch-arrow {
-    margin-left: auto;
-}
 
 .sbc__time-row {
     display: flex;

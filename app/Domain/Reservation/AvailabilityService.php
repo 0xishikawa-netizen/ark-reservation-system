@@ -195,6 +195,138 @@ final class AvailabilityService
     }
 
     /**
+     * 指定の開始時刻で予約できない理由（画面のトースト表示用）。予約できる時は空配列。
+     * openStartTimes と同じ判定（施術可否・資格・休業日・営業時間・勤務・他予約・予定・ブース）を1時刻について行い、
+     * 何を直せば取れるかが分かる言葉で返す（以前は「このメニュー・担当では空いていません」だけだった）。
+     *
+     * @return list<string>
+     */
+    public function explainUnavailable(int $serviceId, ?int $staffId, ?int $boothId, CarbonImmutable $startsAt, int $bufferMin = 0): array
+    {
+        $service = Service::query()->find($serviceId);
+        if ($service === null || ! $service->is_active) {
+            return [__('messages.availability_reason.service_inactive')];
+        }
+        $staffName = $staffId === null ? null : (string) DB::table('staff')->where('user_id', $staffId)->value('display_name');
+        $date = $startsAt->startOfDay();
+        $endsAt = $startsAt->addMinutes($service->duration_min + max($bufferMin, 0));
+        $reasons = [];
+
+        // 担当スタッフ：施術可否 → 資格 → 予約可否。
+        if ($staffId !== null) {
+            if (! DB::table('service_staff')->where('service_id', $service->id)->where('staff_id', $staffId)->exists()) {
+                return [__('messages.availability_reason.staff_cannot_perform', ['staff' => $staffName, 'service' => $service->name])];
+            }
+            if (! $this->resources->isQualified($service, $staffId)) {
+                $required = DB::table('qualification_service as qs')->join('qualifications as q', 'q.id', '=', 'qs.qualification_id')
+                    ->where('qs.service_id', $service->id)->pluck('q.name')->implode('・');
+
+                return [__('messages.availability_reason.staff_not_qualified', ['staff' => $staffName, 'service' => $service->name, 'qualifications' => $required])];
+            }
+        }
+
+        // 店の営業日・営業時間。
+        $calendarDay = $this->storeCalendar->resolve($date);
+        if ($calendarDay['status'] === StoreCalendarDay::STATUS_CLOSED || $calendarDay['opens_at'] === null || $calendarDay['closes_at'] === null) {
+            return [__('messages.availability_reason.store_closed')];
+        }
+        $open = $this->businessTime($date, $calendarDay['opens_at']);
+        $close = $this->businessTime($date, $calendarDay['closes_at']);
+        $hours = substr((string) $calendarDay['opens_at'], 0, 5).'〜'.substr((string) $calendarDay['closes_at'], 0, 5);
+        if ($startsAt->lessThan($open) || $endsAt->greaterThan($close)) {
+            $reasons[] = __('messages.availability_reason.outside_business_hours', ['hours' => $hours, 'end' => $endsAt->format('H:i')]);
+        }
+        if (! $this->slotKey->isBoundary($startsAt)) {
+            $reasons[] = __('messages.availability_reason.not_boundary', ['minutes' => $this->slotKey->slotMinutes()]);
+        }
+
+        $slots = $this->slotKey->occupiedSlots($startsAt, $endsAt, false);
+
+        // 担当スタッフの勤務・他予約・予定。
+        if ($staffId !== null) {
+            $shifts = $this->shiftsByStaff([$staffId], $date)[$staffId] ?? [];
+            if ($shifts === []) {
+                $reasons[] = __('messages.availability_reason.staff_no_shift', ['staff' => $staffName]);
+            } elseif (! $this->isWithinShift($startsAt, $endsAt, $shifts)) {
+                $ranges = collect($shifts)->map(fn (array $shift): string => $shift['start']->format('H:i').'〜'.$shift['end']->format('H:i'))->implode('、');
+                $reasons[] = __('messages.availability_reason.staff_outside_shift', ['staff' => $staffName, 'shift' => $ranges, 'end' => $endsAt->format('H:i')]);
+            }
+            $conflict = $this->conflictingReservation($staffId, $slots);
+            if ($conflict !== null) {
+                $reasons[] = __('messages.availability_reason.staff_booked', ['staff' => $staffName, 'range' => $conflict]);
+            }
+            if ($this->hasBlockOverlap(ResourceType::Staff, $staffId, $startsAt, $endsAt, $this->blockedRangesByResource([$staffId], [], $date))) {
+                $reasons[] = __('messages.availability_reason.staff_blocked', ['staff' => $staffName]);
+            }
+        } elseif ($service->requires_staff) {
+            $pool = $this->staffPool($service, null);
+            if ($pool === []) {
+                $reasons[] = __('messages.availability_reason.no_capable_staff', ['service' => $service->name]);
+            } else {
+                $shiftsByStaff = $this->shiftsByStaff($pool, $date);
+                $occupied = $this->occupiedByResource($pool, [], $date);
+                $blocked = $this->blockedRangesByResource($pool, [], $date);
+                $free = array_filter($pool, fn (int $id): bool => $this->isWithinShift($startsAt, $endsAt, $shiftsByStaff[$id] ?? [])
+                    && ! $this->hasOccupiedSlot(ResourceType::Staff, $id, $slots, $occupied)
+                    && ! $this->hasBlockOverlap(ResourceType::Staff, $id, $startsAt, $endsAt, $blocked));
+                if ($free === []) {
+                    $reasons[] = __('messages.availability_reason.all_staff_busy', ['service' => $service->name]);
+                }
+            }
+        }
+
+        // ブース。
+        if ($boothId !== null && ! $this->resources->boothAllowed($service, $boothId)) {
+            $reasons[] = __('messages.availability_reason.booth_not_allowed', ['booth' => (string) DB::table('booths')->where('id', $boothId)->value('name'), 'service' => $service->name]);
+        } else {
+            $mapped = $this->resources->requiresMappedBooth($service);
+            $boothPool = $boothId !== null ? [$boothId] : ($mapped ? $this->resources->candidateBoothIds($service) : []);
+            // 紐付けたブースがすべて無効だと、どの時間も予約できない。
+            if ($boothId === null && $mapped && $boothPool === []) {
+                $reasons[] = __('messages.availability_reason.no_active_booth', ['service' => $service->name]);
+            }
+            if ($boothPool !== []) {
+                $occupied = $this->occupiedByResource([], $boothPool, $date);
+                $blocked = $this->blockedRangesByResource([], $boothPool, $date);
+                $free = array_filter($boothPool, fn (int $id): bool => ! $this->hasOccupiedSlot(ResourceType::Booth, $id, $slots, $occupied)
+                    && ! $this->hasBlockOverlap(ResourceType::Booth, $id, $startsAt, $endsAt, $blocked));
+                if ($free === []) {
+                    $names = DB::table('booths')->whereIn('id', $boothPool)->orderBy('sort_order')->pluck('name')->implode('・');
+                    $reasons[] = $boothId !== null
+                        ? __('messages.availability_reason.booth_busy', ['booth' => $names])
+                        : __('messages.availability_reason.all_booths_busy', ['booths' => $names]);
+                }
+            }
+        }
+
+        return $reasons;
+    }
+
+    /**
+     * スタッフが押さえている枠（reservation_resource_slots）のうち、指定時間と重なる予約の時間帯。無ければ null。
+     * 空き枠計算と同じ「枠」で判定する（完了済みでも枠を押さえている予約は重なりとして扱う）。
+     *
+     * @param  list<CarbonImmutable>  $slots
+     */
+    private function conflictingReservation(int $staffId, array $slots): ?string
+    {
+        if ($slots === []) {
+            return null;
+        }
+        $reservationId = DB::table('reservation_resource_slots')
+            ->where('resource_type', ResourceType::Staff->value)->where('resource_id', $staffId)
+            ->whereIn('slot_start', array_map(static fn (CarbonImmutable $slot): string => $slot->format('Y-m-d H:i:s'), $slots))
+            ->orderBy('slot_start')->value('reservation_id');
+        if ($reservationId === null) {
+            return null;
+        }
+        $row = DB::table('reservations')->where('id', $reservationId)->first(['starts_at', 'ends_at']);
+
+        return $row === null ? null
+            : CarbonImmutable::parse((string) $row->starts_at)->format('H:i').'〜'.CarbonImmutable::parse((string) $row->ends_at)->format('H:i');
+    }
+
+    /**
      * 指定した開始時刻ちょうどで空いている最初のブースを返す（メニュー選択時の自動割当用）。
      * メニューに具体ブースの紐付けがあればその中から選ぶ（Task 11-28）。終了後バッファも含めて判定する。
      * あくまで画面側の初期提案であり、最終的な二重予約防止は既存の

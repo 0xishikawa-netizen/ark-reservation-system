@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Masters\MasterDeletionService;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AnnualReportController;
 use App\Http\Controllers\Admin\AuditLogController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Admin\DailyReportController;
 use App\Http\Controllers\Admin\FailedJobsController;
 use App\Http\Controllers\Admin\HistoricalImportController;
 use App\Http\Controllers\Admin\Integrations\ReservationIntegrationController;
+use App\Http\Controllers\Admin\MasterDeletionController;
 use App\Http\Controllers\Admin\MembershipPlanController;
 use App\Http\Controllers\Admin\MfaController;
 use App\Http\Controllers\Admin\MonthlyReportController;
@@ -355,6 +357,9 @@ Route::middleware([
     Route::get('reservations/availability', [AdminReservationController::class, 'availability'])
         ->middleware('can:reservations.manage')
         ->name('reservations.availability');
+    Route::get('reservations/unavailable-reasons', [AdminReservationController::class, 'unavailableReasons'])
+        ->middleware('can:reservations.manage')
+        ->name('reservations.unavailable-reasons');
     Route::get('reservations/available-booth', [AdminReservationController::class, 'availableBooth'])
         ->middleware('can:reservations.manage')
         ->name('reservations.available-booth');
@@ -492,6 +497,8 @@ Route::middleware([
             ->name('settings.business-masters.payment-methods.update');
         Route::put('settings/business-masters/calendar', [BusinessMasterSettingsController::class, 'saveCalendarDay'])
             ->name('settings.business-masters.calendar.save');
+        Route::put('settings/business-masters/calendar/closed-weekdays', [BusinessMasterSettingsController::class, 'saveClosedWeekdays'])
+            ->name('settings.business-masters.calendar.closed-weekdays');
         Route::delete('settings/business-masters/calendar/{calendarDay}', [BusinessMasterSettingsController::class, 'clearCalendarDay'])
             ->name('settings.business-masters.calendar.clear');
         Route::put('settings/business-masters/sales-target/default', [BusinessMasterSettingsController::class, 'updateDefaultSalesTarget'])
@@ -553,6 +560,15 @@ Route::middleware([
             ->name('ticket-wallets.revoke');
         Route::post('ticket-wallets/{ticketWallet}/adjust', [CustomerTicketController::class, 'adjust'])
             ->name('ticket-wallets.adjust');
+    });
+    // マスタの削除（未使用のみ・論理削除）と復元。admin 専用（masters.delete）。
+    Route::middleware('can:masters.delete')->group(function (): void {
+        Route::delete('masters/{type}/{id}', [MasterDeletionController::class, 'destroy'])
+            ->whereIn('type', array_keys(MasterDeletionService::TYPES))->whereNumber('id')
+            ->name('masters.destroy');
+        Route::post('masters/{type}/{id}/restore', [MasterDeletionController::class, 'restore'])
+            ->whereIn('type', array_keys(MasterDeletionService::TYPES))->whereNumber('id')
+            ->name('masters.restore');
     });
     Route::middleware('can:booths.manage')->group(function (): void {
         Route::resource('booths', BoothController::class)

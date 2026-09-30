@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
+import { EmptyState, PageHeader, SectionCard, MasterDeleteButton, TrashedMasterList } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -15,7 +15,7 @@ interface TicketProductListItem {
     sort_order: number;
 }
 
-defineProps<{ ticketProducts: TicketProductListItem[] }>();
+defineProps<{ trashed?: Array<{ id: number; name: string; deleted_at: string | null }>; ticketProducts: TicketProductListItem[] }>();
 
 const headers = [
     { title: '商品名', key: 'name' },
@@ -96,9 +96,11 @@ const formatPrice = (price: number): string =>
                 >
                     編集
                 </v-btn>
+                <MasterDeleteButton type="ticket-products" :id="item.id" :name="item.name" label="回数券" />
             </template>
         </v-data-table>
     </SectionCard>
+    <TrashedMasterList type="ticket-products" label="回数券" :items="trashed ?? []" />
 </template>
 
 <style scoped>

@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Collection;
 class ServiceListQuery
 {
     /** @return Collection<int, Service>|LengthAwarePaginator<int, Service> */
-    public function get(?string $search, bool $onlyActive): Collection|LengthAwarePaginator
+    public function get(?string $search, bool $onlyActive, ?string $category = null): Collection|LengthAwarePaginator
     {
         $search = trim((string) $search);
 
@@ -41,6 +41,7 @@ class ServiceListQuery
                         ->orWhere('category', 'like', "%{$search}%");
                 });
             })
+            ->when($category !== null && $category !== '', fn ($query) => $query->where('category', $category))
             ->when($onlyActive, fn ($query) => $query->active())
             ->orderByDesc('is_active')
             ->get();
