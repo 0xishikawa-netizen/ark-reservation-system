@@ -130,7 +130,7 @@
 | ST-13 | 会計不要 | PASS（不具合3を修正後） | 「会計なしで来店完了」→理由必須（無料施術）→完了。checkout 0件、理由保存、監査あり。**修正前は来店の営業日が完了操作日（9/27）になり、予約日（10/2）の日計に入らなかった（不具合3）**。修正後に別予約で再実施し 10/2 で計上 |
 | ST-14 | 予約なし来店 | PASS | 一覧「予約なし来店」→顧客→施術T30（B）→施術料→按分→現金5,500→完了 |
 | ST-15 | 来店なし物販 | PASS | 「店頭販売」→プロテイン×2 2,200→確定。日計明細の「店頭販売（来店なし）」に出て来店数は増えない |
-| ST-16 | 回数券 | 購入 PASS／利用 BLOCKED | 店頭販売で回数券4回 33,000 を確定→台帳に+4付与（明細IDで冪等）。管理画面の予約は常に現地払いで、店頭で回数券を使う操作が画面に無い（利用は回数券払いのオンライン予約か、パスワード再確認付きの回数券調整）。自動テストで予約消化は確認済み。台帳種別が `PURCHASE` でなく `GRANT`（観察4） |
+| ST-16 | 回数券 | 購入 PASS／**利用 BLOCKED（未実装導線）** | 購入：店頭販売で回数券4回 33,000 を確定→台帳に+4付与（明細IDで冪等）。利用：「来店→回数券を使用→残回数減算→施術実績→会計/売上→Reports」の店頭の通常業務フローが存在しない。管理者の回数券調整（パスワード再確認）では代替せず BLOCKED とする。内訳は下の「ST-16 の実装状況」 |
 | ST-17 | 月計 | PASS | 10月2日行：施術等 現金54,500／PayPay3,800、施術等計（税抜）53,000、物販 現金2,200／PayPay1,100、税抜56,000・税5,600・税込61,600、ロング1、来店は修正後4 |
 | ST-18 | 日計明細 | PASS | 「R8.10」相当の1来店1行（予約メニュー／実施施術／主担当／実担当／指名／物販／支払方法／次回予約／新規／性別／年代）、会計不要は「会計なし（回数券・月額の利用）」、店頭販売は別表。入力不要 |
 | ST-19 | 顧客統計 | PASS | 観察基準日10/31で新規4（男3・女1、40代）、初回担当 A1・B1・C2、次回予約なし4 |
@@ -141,8 +141,8 @@
 | ST-24 | Excel | PASS | 画面のダウンロードは200・xlsx・`ARK自由が丘店2026.10.xlsx`。同じ出力サービスで6シート、月計表2日行 C=49,000・D=3,800・J=48,000・K=2,200・P=3,000・Q=51,000、数値K5=51,000（税抜）が void 後の Web 月計と一致 |
 | ST-25 | キャンセル・無断キャンセル | PASS | 理由付きキャンセル、無断キャンセルを画面で実行。来店・売上に入らず、予約分析 canceled 1・no_show 1 |
 | ST-26 | void | PASS | 確定会計を理由付きで取消→売上 61,600→56,100、スタッフB 9,900→4,400、来店数は残る、監査 `checkout.voided` |
-| ST-27 | 権限（一般スタッフ） | BLOCKED | 一般スタッフでのブラウザログインが必要（パスワードを扱えないため未実施）。`AdminRouteAccessMatrixTest`・`CheckoutEntryTest`・`ExtensionAndCompositionTest` で 403 を確認済み |
-| ST-28 | セッション | 静的確認 PASS／明示ログアウト BLOCKED | 無操作ログアウトのコードなし（`sessionKeepAlive.ts` のみ、401/419 でログインへ）。明示ログアウトはユーザーのセッションを切るため未実施。`AdminAccessTest`（10時間後もログイン維持）で確認済み |
+| ST-27 | 権限（一般スタッフ） | **PASS（不具合7を修正後）** | 2026-09-30、ローカル専用テストアカウント（staff）で実施。禁止33画面をURL直打ち→すべて日本語の403、書き込み14操作→すべて403、メニューは権限内（ボード・ダッシュボード・予約・顧客・決済）のみ。二段階認証未設定スタッフは設定画面へ誘導され管理画面に入れない。**画面に押すと403になるボタン（新規予約を作成・予約編集・メモを追加・…）が出ていた（不具合7）** |
+| ST-28 | セッション・明示ログアウト | **PASS（不具合5・6を修正後）** | 2026-09-30 実施。ログアウト→トップへ、URL直打ち→ログイン、再ログイン→戻り先へ復帰、別タブでログアウト後の操作→419画面にならずログインへ、維持通信204。**ログアウト後のブラウザ「戻る」で前の画面（顧客名・予約）がサーバーに問い合わせず再表示された（不具合6）**。**ログイン6回連続失敗で白い429モーダルが出てフォームに案内が出なかった（不具合5）** |
 | ST-29 | 戻る | PASS（観察6） | ボード（ブース軸・10/2・予約詳細）→月計→戻るで同じ状態に復元。月計はURL正規化で履歴が1件増え、戻るに2回必要 |
 | ST-30 | Reports 移動 | PASS | 月次レポートのタブ（概要〜コース・物販）が対象年月を保って移動 |
 | ST-RESP | 1280 / 1440 / 1920px | PASS（不具合4を修正後） | 主要画面（ボード・会計入力・月計・日計明細）で横はみ出しなし。**1280px ではヘッダーの「システム」メニューがタブ列の外に押し出され操作不能だった（不具合4）** |
@@ -164,6 +164,27 @@
 | 2 | 中 | 予約パネル等を開いた後、Referer の無い画面遷移（URL直接入力・ブックマーク）が検証エラーで `back()` すると、生の JSON 画面（`/admin/reservations/{id}/panel`）へ戻され、他の URL へ移動しても戻され続ける | 画面の `fetch()` は `X-Requested-With` を付けないため、Laravel が JSON の GET を「直前の URL」としてセッションに保存していた | サーバー側で、JSON を求める GET（`expectsJson()`）を直前の URL に記録しない `App\Http\Middleware\StartSession` に差し替え（`bootstrap/app.php`）。20ファイルの fetch を個別に直すより確実 | `tests/Feature/Security/PreviousUrlIgnoresJsonTest.php`（修正前 FAIL を確認） |
 | 3 | 高 | 「会計なしで来店完了」（下書きなしの完了）で、来店の営業日が予約日ではなく完了操作の日になる。閉店後・翌日にまとめて完了した来店が翌日の日計・月計に入り、施術実績（予約日時刻）と日付が食い違う。同じ予約でも「来店・会計」を先に開いたかで営業日が変わっていた | `VisitCompletionService` は `businessDate(now)`、`CheckoutEntryService` は予約日を使っていた | 予約ありの来店は予約日（JST 壁時計）に統一（Domain）。仕様を `docs/CHECKOUT_ENTRY.md` に追記。既存テスト2件の期待値を新しい規則へ更新（1件は日付跨ぎの年齢計算の意図を保つよう予約日を調整） | `VisitCompletionServiceTest::test_late_completion_keeps_the_reservation_date_like_the_checkout_entry_path`（修正前 FAIL を確認） |
 | 4 | 中 | 1280px でヘッダーの「システム」（システム状態・失敗ジョブ・監査ログ・外部予約連携）がタブ列の外に押し出され、スクロールバー非表示のため操作できない | 8タブ＋右側（時計・氏名・ログアウト）が 1280px に収まらない | 1440px 未満はタブの左右余白を 16px→8px（`AdminLayout.vue`） | レイアウト計算はjsdomで検証できないため、ブラウザ実測を回帰手順とする：1280pxで `nav.ark-topnav` の scrollWidth＝表示幅（653px）、「システム」中央の要素が当該ボタン |
+| 5 | 低 | ログインを6回連続で失敗すると、ログイン画面の上に白い 429 のモーダル（閉じるボタンなし）が出て、フォームに案内が出ない | Inertia は Inertia 形式でない応答（素の429画面）をモーダルで表示する | Inertia の送信で 429 のときは送信元へ戻し、入力欄に「ログイン試行回数が上限を超えました。○秒後に再度お試しください。」（`bootstrap/app.php`、既存419処理と1つの `respond()` に統合） | `AuthenticationTest::test_inertia_login_throttle_returns_to_the_form_with_a_japanese_message` |
+| 6 | 高（個人情報） | ログアウト後にブラウザの「戻る」で、前の管理画面（顧客名・予約）がそのまま再表示される。店舗の共用端末で次の人に見える | Inertia はページデータをブラウザ履歴に保存し、「戻る」でサーバーに問い合わせず再表示する | 履歴を暗号化（`Inertia\Middleware\EncryptHistory`）し、ログアウト応答で `Inertia::clearHistory()`（`HistoryClearingLogoutResponse`）。戻るとサーバーへ取り直し、ログイン画面になる | `LogoutClearsBrowserHistoryTest`（修正前 FAIL を確認）。ブラウザで戻る→ログイン画面・顧客名なしを確認 |
+| 7 | 中 | 一般スタッフ（閲覧のみ）のボード・予約詳細に「新規予約を作成」「予約編集」「メモを追加」「…（新規予約）」が出て、押すと403画面になる | 画面が権限フラグを見ずにボタンを出していた（サーバー側は元から403） | 予約パネルに `can.edit_customer`（`customers.manage`）を追加し、ボタンを `can.manage`／`edit_customer`／`reservationsManage` で出し分け | `ReservationDetailPanel.spec.ts`（閲覧のみで書き込み操作を出さない）、`CustomerSearchPanel.spec.ts`、`PanelPermissionFlagsTest` |
+
+### ST-16 の実装状況（コード確認 2026-09-30）
+
+| 確認項目 | 状況 | 根拠 |
+|---|---|---|
+| 回数券購入 | あり | 会計明細 `ticket`（店頭販売・来店会計）。確定時に `CheckoutService::grantPurchasedTickets` が台帳へ付与 |
+| 顧客の保有回数券の確認 | あり | 管理画面 顧客 → 回数券（`/admin/customers/{id}/tickets`）、お客様マイページ `/mypage/tickets` |
+| Visit / Checkout 時に回数券を選んで使う | **なし** | 会計明細の `ticket` は購入のみ。管理画面の予約作成（`StoreAdminReservationRequest`）に支払区分が無く、常に現地払い |
+| 残回数を消費する Domain 処理 | あり（予約経由のみ） | `TicketReservationService::hold/consume`。回数券払いの予約（お客様の `/reserve`・`/booking`）でだけ HOLD され、来店完了（`VisitCompletionService`）で CONSUME |
+| 利用履歴 Fact | あり | `ticket_transactions`（RESERVE_HOLD / CONSUME 等）、`ticket_reservation_usages` |
+| Reports への利用実績の反映 | **構造のみ（未接続）** | `revenue_recognition_contracts` / `revenue_allocations`（`ticket_reservation_usage_id` 付き）と `RevenueRecognitionService::allocate` はあるが、アプリ内に呼び出し元が無い。施術日売上（`DailyReportQuery::allocatedTreatmentRevenue`）は空のまま |
+
+判定：**UIだけの未実装ではなく、店頭の利用操作（UI＋API）が無く、売上認識（Domain）も未接続**。予約経由の消化 Domain と履歴 Fact はある。
+
+次に必要な Task（案）：
+1. 店頭の回数券利用：管理画面の予約作成・来店会計で「回数券で支払う」を選べるようにし、既存 `TicketReservationService`（HOLD→CONSUME、FEFO、冪等キー）を使う。予約なし来店での利用の扱いも決める。
+2. 売上認識の接続：回数券購入時に `createTicketContract`、利用（CONSUME）時に `allocate` を呼び、施術日売上・コース別に反映。購入売上（決済日）と利用実績（施術日）を分けて表示する。
+3. 台帳種別：店頭購入を `GRANT` ではなく `PURCHASE` で記録するか判断（観察4）。
 
 ### 観察・改善候補（今回は修正していない）
 
@@ -179,6 +200,8 @@
 | 観察8 | 新規予約パネルの日付は台帳の表示日ではなく今日が初期値。実施施術の追加行は開始時刻が予約開始のまま、メニューは先頭の実メニュー | 入力の手間 | UI改善候補 |
 | 観察9 | 開発DBの実メニュー・回数券商品は税区分未設定、`standard` 税率も未登録のため、実メニューでは会計確定できない | 開発環境のみ。本番前に税率マスタ確定が必要 | 税率マスタの確定（店舗判断） |
 | 観察10 | 既存の開発データで来店の営業日と予約日が異なる来店が2件（id=1 既存、id=12 は本検証で不具合3の修正前に作成）。完了済み来店は変更不可のため補正していない | 当該2件のみ | 必要なら原資料で確認 |
+| 観察12 | ブラウザ幅 1024px（タブレット幅）ではヘッダーの「システム」が時計と重なり、氏名も非表示（1280px以上は不具合4で解消） | PC運用では影響なし | タブレット対応時に検討 |
+| 観察13 | ローカルでは Google OAuth 未設定でも「Google でログイン」ボタンが表示され、押すと Google 側のエラー400 | 本番で未設定のまま出すと利用者が混乱 | 未設定時はボタンを隠すか、本番で必ず設定 |
 | 観察11 | `GoogleAuthController` のコメントに廃止済み「Idle Timeout」の名前が残る | なし | — |
 | 環境 | ベースライン回帰の1件（`AdminAccessTest`）はローカル `vendor` の古いクラスマップ（削除済み `AdminIdleTimeout.php`）が原因。`composer dump-autoload -o` で解消。17件は検証者がテストを同時実行して `testing` DB を奪い合った手順ミスで、単独再実行で PASS | コード不具合ではない | — |
 
@@ -199,3 +222,13 @@
 | `git diff --check` | GREEN |
 
 関連テスト（修正ごと）: 不具合1 `createPanelCompletion.spec.ts` 2件、不具合2 `PreviousUrlIgnoresJsonTest` 1件、不具合3 Visit／BusinessFacts／Checkout／Reporting／Admin予約／延長 236件。
+
+### 追加回帰（2026-09-30、ST-27 / ST-28 実施後、不具合5〜7の修正を含む）
+
+| 項目 | 結果 |
+|---|---|
+| PHP 全テスト（最初から完全実行） | **1,165 tests / 1,165 passed / 0 failed**（173,594 assertions、約22.9分） |
+| Frontend | **116 / 116 passed**（29 files） |
+| 型チェック＋本番ビルド | GREEN |
+| Pint / `git diff --check` | GREEN |
+| 関連テスト | Auth・Security・AdminAccess 128件、`PanelPermissionFlagsTest`、`LogoutClearsBrowserHistoryTest`、`ReservationDetailPanel.spec.ts`・`CustomerSearchPanel.spec.ts` |
