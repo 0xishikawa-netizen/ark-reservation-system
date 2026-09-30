@@ -122,6 +122,7 @@ final class ReservationController extends Controller
             $reservation,
             canManage: $user?->can('reservations.manage') === true,
             canViewCustomer: $user?->can('customers.view') === true,
+            canEditCustomer: $user?->can('customers.manage') === true,
         ));
     }
 

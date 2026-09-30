@@ -34,7 +34,7 @@ final class ReservationPanelQuery
     /**
      * @return array<string, mixed>
      */
-    public function get(Reservation $reservation, bool $canManage, bool $canViewCustomer): array
+    public function get(Reservation $reservation, bool $canManage, bool $canViewCustomer, bool $canEditCustomer = false): array
     {
         $reservation->loadMissing([
             'service:id,name,price',
@@ -52,6 +52,8 @@ final class ReservationPanelQuery
             'can' => [
                 'manage' => $canManage,
                 'view_customer' => $canViewCustomer,
+                // 顧客メモの編集（customers.manage）。予約の管理権限とは別に判定する。
+                'edit_customer' => $canEditCustomer,
             ],
             'reservation' => $this->reservationPayload($reservation, $canManage),
             'today_reservation_id' => null,
@@ -75,6 +77,7 @@ final class ReservationPanelQuery
         bool $canManage,
         bool $canViewCustomer,
         ?string $referenceDate = null,
+        bool $canEditCustomer = false,
     ): array {
         $lists = $canViewCustomer
             ? $this->upcomingAndHistory($customerId)
@@ -97,6 +100,8 @@ final class ReservationPanelQuery
             'can' => [
                 'manage' => $canManage,
                 'view_customer' => $canViewCustomer,
+                // 顧客メモの編集（customers.manage）。予約の管理権限とは別に判定する。
+                'edit_customer' => $canEditCustomer,
             ],
             'reservation' => null,
             'today_reservation_id' => $todayReservationId === null ? null : (int) $todayReservationId,

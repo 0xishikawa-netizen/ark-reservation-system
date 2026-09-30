@@ -19,7 +19,8 @@ interface HistoryRow {
 }
 
 interface PanelData {
-    can: { manage: boolean; view_customer: boolean };
+    /** edit_customer は顧客メモの編集（customers.manage）。旧レスポンスとの互換のため任意。 */
+    can: { manage: boolean; view_customer: boolean; edit_customer?: boolean };
     reservation: {
         id: number;
         customer_id: number;
@@ -600,7 +601,7 @@ function submitConfirm(): void {
                 <div class="rdp__memo-head">
                     <h3 class="rdp__h rdp__h--flush">顧客メモ</h3>
                     <button
-                        v-if="!memoEditing"
+                        v-if="!memoEditing && data.can.edit_customer"
                         type="button"
                         class="rdp__morebtn"
                         @click="startMemoEdit"
@@ -862,6 +863,7 @@ function submitConfirm(): void {
                         来店・会計
                     </v-btn>
                     <v-btn
+                        v-if="data.can.manage"
                         :href="data.reservation.edit_url"
                         color="accent"
                         variant="outlined"
@@ -881,6 +883,7 @@ function submitConfirm(): void {
                         戻る
                     </v-btn>
                     <v-btn
+                        v-if="data.can.manage"
                         color="primary"
                         variant="flat"
                         size="small"
@@ -890,7 +893,8 @@ function submitConfirm(): void {
                     </v-btn>
                 </template>
 
-                <v-menu v-model="moreMenuOpen" location="top end">
+                <!-- 閲覧だけの権限（一般スタッフ）では操作が無いので「…」自体を出さない。 -->
+                <v-menu v-if="data.can.manage || data.reservation?.payment" v-model="moreMenuOpen" location="top end">
                     <template #activator="{ props: menuProps }">
                         <v-btn
                             v-bind="menuProps"
@@ -908,6 +912,7 @@ function submitConfirm(): void {
                             @click="rebookCurrent"
                         />
                         <v-list-item
+                            v-if="data.can.manage"
                             prepend-icon="mdi-calendar-plus-outline"
                             title="新規予約"
                             @click="emit('create')"

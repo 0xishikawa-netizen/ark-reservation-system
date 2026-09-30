@@ -11,7 +11,7 @@ function body(): DOMWrapper<HTMLElement> {
 }
 
 const panelData = {
-    can: { manage: true, view_customer: true },
+    can: { manage: true, view_customer: true, edit_customer: true },
     reservation: {
         id: 10,
         customer_id: 20,
@@ -171,12 +171,55 @@ describe('ReservationDetailPanel', () => {
         expect(router.post).toHaveBeenCalledWith('/admin/reservations/10/extend', { minutes: 30, service_id: null, version: 0 }, expect.any(Object));
     });
 
-    it('hides the current reservation rebook action without manage permission', async () => {
-        const wrapper = await mountPanel(false);
-
-        await wrapper.find('button[aria-label="その他の操作"]').trigger('click');
+    it('shows no write actions to view-only staff (全面検証 2026-09-30)', async () => {
+        // サーバーが一般スタッフ（reservations.view / customers.view のみ）へ返す形。
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({
+                    ...panelData,
+                    can: { manage: false, view_customer: true, edit_customer: false },
+                    reservation: {
+                        ...panelData.reservation,
+                        can_complete: false, visit_entry_url: null, can_extend: false, can_cancel: false, can_no_show: false,
+                    },
+                }),
+            }),
+        );
+        const wrapper = mount(ReservationDetailPanel, {
+            props: { reservationId: 10, customerId: null, referenceDate: '2026-09-22' },
+            attachTo: document.body,
+        });
+        activeWrapper = wrapper;
+        await flushPromises();
         await nextTick();
 
-        expect(body().text()).not.toContain('この内容で新規予約');
+        // 押すと 403 になる操作は出さない。顧客・予約の閲覧はできる。
+        expect(wrapper.text()).toContain('山本 花');
+        expect(wrapper.text()).not.toContain('予約編集');
+        expect(wrapper.text()).not.toContain('来店・会計');
+        expect(wrapper.text()).not.toContain('メモを追加');
+        expect(wrapper.find('button[aria-label="その他の操作"]').exists()).toBe(false);
+    });
+
+    it('keeps the memo action for users who can edit customers', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({ ...panelData, can: { manage: true, view_customer: true, edit_customer: true } }),
+            }),
+        );
+        const wrapper = mount(ReservationDetailPanel, {
+            props: { reservationId: 10, customerId: null, referenceDate: '2026-09-22' },
+            attachTo: document.body,
+        });
+        activeWrapper = wrapper;
+        await flushPromises();
+        await nextTick();
+
+        expect(wrapper.text()).toContain('メモを追加');
+        expect(wrapper.text()).toContain('予約編集');
     });
 });

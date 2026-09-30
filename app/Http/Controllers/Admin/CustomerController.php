@@ -111,6 +111,7 @@ class CustomerController extends Controller
             canManage: $user?->can('reservations.manage') === true,
             canViewCustomer: $user?->can('customers.view') === true,
             referenceDate: $validated['date'] ?? null,
+            canEditCustomer: $user?->can('customers.manage') === true,
         ));
     }
 

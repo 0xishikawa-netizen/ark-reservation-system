@@ -3450,6 +3450,7 @@ function menuSegments(lane: ScheduleLane): {
             <CustomerSearchPanel
                 v-else-if="panelKind === 'search'"
                 :can-search="canSearchCustomers"
+                :can-create="canManage"
                 :can-go-back="canGoBackPanel"
                 @close="closePanel"
                 @back="goBackPanel"

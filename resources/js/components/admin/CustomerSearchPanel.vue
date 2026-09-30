@@ -2,8 +2,14 @@
 import PanelShell from '@/components/admin/PanelShell.vue';
 import { MESSAGES } from '@/constants/messages';
 
-withDefaults(defineProps<{ canSearch: boolean; canGoBack?: boolean }>(), {
+withDefaults(defineProps<{
+    canSearch: boolean;
+    canGoBack?: boolean;
+    /** 予約の作成権限（reservations.manage）。閲覧だけのスタッフには作成ボタンを出さない。 */
+    canCreate?: boolean;
+}>(), {
     canGoBack: false,
+    canCreate: true,
 });
 
 const emit = defineEmits<{
@@ -26,6 +32,7 @@ const emit = defineEmits<{
         </p>
 
         <v-btn
+            v-if="canCreate"
             variant="flat"
             color="primary"
             size="small"
