@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import PanelChoiceCard from '@/components/admin/PanelChoiceCard.vue';
 import PanelShell from '@/components/admin/PanelShell.vue';
 import MenuPicker from '@/components/admin/MenuPicker.vue';
 import { DateField } from '@/components/ark';
@@ -941,15 +940,12 @@ function submit(): void {
                 />
             </div>
 
-            <!-- 予約ではない「スタッフ予定」へ切り替える。予定パネルの「予約に切り替え」と同じ形にそろえる。 -->
-            <PanelChoiceCard
-                kind="block"
-                compact
-                :title="MESSAGES.schedule.switchToBlock"
-                :description="MESSAGES.schedule.choiceBlockDesc"
-                data-testid="switch-to-block"
-                @click="emit('switchToBlock')"
-            />
+            <!-- 予約ではない「スタッフ予定」（休憩・清掃など）は控えめな補助操作にする（予定パネルの「予約に切り替え」も同じ形）。 -->
+            <div class="nrp__secondary">
+                <v-btn variant="text" size="x-small" prepend-icon="mdi-calendar-clock-outline" data-testid="switch-to-block" @click="emit('switchToBlock')">
+                    {{ MESSAGES.schedule.addStaffBlock }}
+                </v-btn>
+            </div>
 
             <p v-if="reservationConflictError" class="nrp__error">{{ reservationConflictError }}</p>
 
@@ -1298,6 +1294,12 @@ function submit(): void {
     color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
+
+.nrp__secondary {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -4px;
+}
 
 .nrp__summary {
     display: flex;

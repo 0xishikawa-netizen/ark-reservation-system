@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
-import PanelChoiceCard from '@/components/admin/PanelChoiceCard.vue';
 import PanelShell from '@/components/admin/PanelShell.vue';
 import { DateField, TimeField } from '@/components/ark';
 import { applyBlockPrefill, blockEndTimeFrom, type BlockDraft } from '@/composables/reservationDraft';
@@ -291,15 +290,12 @@ function submit(): void {
             :error-messages="form.errors.note"
         />
 
-        <!-- 予約へ切り替える。予約パネルの「スタッフ予定に切り替え」と同じ形にそろえる。 -->
-        <PanelChoiceCard
-            kind="reservation"
-            compact
-            :title="MESSAGES.schedule.switchToReservation"
-            :description="MESSAGES.schedule.choiceReservationDesc"
-            data-testid="switch-to-reservation"
-            @click="emit('switchToReservation')"
-        />
+        <!-- 予約へ切り替える。予約パネルの「スタッフ予定を追加」と同じ控えめな補助操作の形にする。 -->
+        <div class="sbc__secondary">
+            <v-btn variant="text" size="x-small" prepend-icon="mdi-calendar-plus-outline" data-testid="switch-to-reservation" @click="emit('switchToReservation')">
+                {{ MESSAGES.schedule.switchToReservation }}
+            </v-btn>
+        </div>
 
         <template #footer>
             <v-btn
@@ -330,6 +326,12 @@ function submit(): void {
 </template>
 
 <style scoped>
+.sbc__secondary {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -4px;
+}
+
 .sbc__slotbox {
     display: flex;
     align-items: baseline;
