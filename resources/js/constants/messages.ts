@@ -501,6 +501,8 @@ export const MESSAGES = {
         customerReach6: '6回目到達率',
         customerReach10: '10回目到達率',
         customerBreakdown: '新規患者内訳',
+        customerBreakdownNote: '人数の多い順。割合は各項目の合計（複数選択は新規人数）に対する割合です。',
+        customerFunnelTitle: '新規の継続（何回目まで来店したか）',
         customerCohortMeta: '対象の新規月',
         customerSectionProfile: '基本属性',
         customerSectionFirstVisit: '初回来店',

@@ -627,7 +627,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
 .help p + p { margin-top: 6px; }
 
 /* 担当・指名 */
-.assign { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.4fr); gap: 12px; margin-bottom: 18px; padding: 14px;
+.assign { display: grid; grid-template-columns: 280px minmax(0, 420px); justify-content: start; gap: 12px; margin-bottom: 18px; padding: 14px;
     border-radius: 10px; background: rgba(var(--v-theme-on-surface), 0.025); }
 .assign__hint { grid-column: 1 / -1; margin: 0; font-size: 0.75rem; color: rgba(var(--v-theme-on-surface), 0.6); }
 @media (max-width: 700px) { .assign { grid-template-columns: 1fr; } }
@@ -640,13 +640,13 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
     background: rgba(var(--v-theme-primary), 0.14); color: rgb(var(--v-theme-primary)); font-size: 0.75rem; font-weight: 800; }
 .tcard__name { min-width: 0; overflow: hidden; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .tcard__remove { margin-left: auto; }
-.tcard__grid { display: grid; grid-template-columns: minmax(220px, 2fr) 150px 130px minmax(150px, 1fr); gap: 12px; padding: 16px 14px 4px; }
-@media (max-width: 1280px) { .tcard__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tcard__menu { grid-column: 1 / -1; } }
+.tcard__grid { display: grid; grid-template-columns: minmax(220px, 340px) 140px 120px 200px; justify-content: start; gap: 12px; padding: 16px 14px 4px; }
+@media (max-width: 1280px) { .tcard__grid { grid-template-columns: minmax(0, 340px) minmax(0, 200px); } .tcard__menu { grid-column: 1 / -1; } }
 .staffbox { margin: 12px 14px 14px; padding: 12px; border-radius: 10px; background: rgba(var(--v-theme-on-surface), 0.03); }
 .staffbox__title { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 0.8125rem; font-weight: 700;
     color: rgba(var(--v-theme-on-surface), 0.75); }
-.staffbox__row { display: grid; grid-template-columns: minmax(160px, 1fr) 150px 130px 36px; gap: 10px; align-items: center; margin-bottom: 10px; }
-@media (max-width: 1280px) { .staffbox__row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .staffbox__row > :first-child { grid-column: 1 / -1; } }
+.staffbox__row { display: grid; grid-template-columns: 260px 140px 120px 36px; justify-content: start; gap: 10px; align-items: center; margin-bottom: 10px; }
+@media (max-width: 1280px) { .staffbox__row { grid-template-columns: minmax(0, 260px) 140px 120px 36px; } }
 
 /* 追加ボタン（破線） */
 .adder { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 12px; padding: 12px;
@@ -681,7 +681,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
 .lcard--ticket::before { background: #e8a33d; }
 .lcard--membership::before { background: #7e57c2; }
 .lcard--other::before { background: #5a6b7b; }
-.lcard__main { display: grid; grid-template-columns: 56px minmax(220px, 1fr) 76px 136px 128px 100px 36px; gap: 10px; align-items: center; }
+.lcard__main { display: grid; grid-template-columns: 56px minmax(220px, 340px) 84px 150px 140px minmax(100px, 1fr) 36px; gap: 10px; align-items: center; }
 @media (max-width: 1360px) {
     .lcard__main { grid-template-columns: 56px minmax(0, 1fr) 36px; }
     .lcard__main > :nth-child(n+3):not(:last-child) { grid-column: 2 / 3; }
@@ -693,14 +693,14 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
 .lcard__total strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
 .lcard__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 10px; padding-left: 66px; }
 @media (max-width: 1360px) { .lcard__meta { padding-left: 0; } }
-.lcard__link { flex: 0 1 300px; min-width: 220px; }
+.lcard__link { flex: 0 0 300px; }
 .alloc { margin: 12px 0 0 66px; padding: 12px; border-radius: 10px; background: rgba(var(--v-theme-primary), 0.04); }
 @media (max-width: 1360px) { .alloc { margin-left: 0; } }
 .alloc__title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 0.8125rem; font-weight: 700; }
 .alloc__state { margin-left: auto; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 .alloc__state--ok { background: #e6f4ea; color: #1e6b34; }
 .alloc__state--ng { background: #fdecea; color: #b42318; }
-.alloc__row { display: grid; grid-template-columns: minmax(160px, 1fr) 160px 36px; gap: 10px; align-items: center; margin-bottom: 8px; }
+.alloc__row { display: grid; grid-template-columns: 260px 160px 36px; justify-content: start; gap: 10px; align-items: center; margin-bottom: 8px; }
 .alloc__actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ---- お会計（右） ---- */

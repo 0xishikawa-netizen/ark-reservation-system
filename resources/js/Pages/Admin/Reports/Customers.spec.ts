@@ -52,7 +52,9 @@ describe('Customer report page', () => {
 
     it('groups attributes into sections and shows the back navigation as a button', () => {
         const page = render();
-        expect(page.findAll('.breakdown-section:not([data-testid]) h3').map((heading) => heading.text())).toEqual(['基本属性', '到達状況', '初回来店', '集客経路', '地域']);
+        expect(page.findAll('.breakdown-section:not([data-testid]) h3').map((heading) => heading.text())).toEqual(['基本属性', '初回来店', '集客経路', '地域']);
+        // 2・6・10回目の到達は継続ファネルにまとめる。
+        expect(page.get('[data-testid="funnel"]').text()).toContain('2回目');
         expect(page.findAll('[data-testid^="cross-"] h3').map((heading) => heading.text())).toEqual(['来店動機', '初回担当']);
         const back = page.get('[data-testid="back-to-monthly"]');
         expect(back.classes()).toContain('v-btn');

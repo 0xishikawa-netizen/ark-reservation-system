@@ -185,3 +185,26 @@ body {
     max-width: 100%;
     flex: 0 0 auto;
 }
+
+/*
+ * ── 入力欄の最大幅（全画面共通）──
+ * 入力欄が画面いっぱいに伸びて長くなりすぎないよう、内容に応じた上限を決める。
+ * 一般の入力・選択 400px／数値・金額 200px／複数選択 560px／メモ 640px。
+ * ブッキングボードの左パネル（.panel-shell）は対象外。並べ方（グリッド）で幅を決めている欄は、
+ * それより狭いのでこの上限の影響を受けない。
+ */
+.v-main .v-input:not(.v-checkbox):not(.v-switch):not(.v-radio-group):not(.v-slider):not(.v-textarea):not(.panel-shell .v-input) {
+    max-width: 400px;
+}
+
+.v-main .v-input:is(.v-select--multiple, .v-autocomplete--multiple, .v-combobox--multiple):not(.panel-shell .v-input) {
+    max-width: 560px;
+}
+
+.v-main .v-input:has(input[type="number"], input[inputmode="numeric"]):not(.panel-shell .v-input) {
+    max-width: 200px;
+}
+
+.v-main .v-textarea:not(.panel-shell .v-textarea) {
+    max-width: 640px;
+}
