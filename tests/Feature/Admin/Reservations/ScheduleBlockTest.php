@@ -68,6 +68,22 @@ final class ScheduleBlockTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'schedule_block.created']);
     }
 
+    public function test_work_and_mtg_types_are_accepted_and_labelled(): void
+    {
+        $staff = $this->staffWithShift();
+        $admin = $this->admin();
+
+        foreach (['WORK' => ['14:00', '15:00'], 'MEETING' => ['15:00', '16:00']] as $type => [$start, $end]) {
+            $this->actingAs($admin)->post('/admin/schedule/blocks', [
+                'staff_id' => $staff->user_id, 'work_date' => '2026-10-01', 'start_at' => $start, 'end_at' => $end, 'type' => $type,
+            ])->assertSessionHasNoErrors();
+        }
+
+        $this->assertSame('業務', ScheduleBlockType::Work->label());
+        $this->assertSame('MTG', ScheduleBlockType::Meeting->label());
+        $this->assertDatabaseHas('staff_schedule_blocks', ['staff_id' => $staff->user_id, 'type' => 'WORK']);
+    }
+
     public function test_other_type_requires_a_title(): void
     {
         $staff = $this->staffWithShift();

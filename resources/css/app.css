@@ -112,3 +112,76 @@ body {
 .v-application .v-pagination .v-btn--disabled {
     opacity: 0.35;
 }
+
+/* ── 入力欄の標準幅（全画面共通。日付・月・年・時刻・人の名前） ── */
+:root {
+    --ark-field-date: 200px;
+    --ark-field-month: 180px;
+    --ark-field-year: 150px;
+    --ark-field-time: 140px;
+    --ark-field-name: 300px;
+}
+
+/* 人の名前（顧客・スタッフ）の入力欄。 */
+.ark-field-name {
+    width: var(--ark-field-name);
+    max-width: 100%;
+    flex: 0 0 auto;
+}
+
+/*
+ * ── 文字サイズの共通化（全画面）──
+ * 入力欄・選択欄・ラベル・表・ボタンの文字を 14px 基準にそろえる。
+ * 見出しや集計の大きな数字（KPI）は各画面のまま。ブッキングボードの左パネルは PanelShell 側の 13px が優先される。
+ */
+.v-main .v-field,
+.v-main .v-field__input,
+.v-main .v-field input,
+.v-main .v-field textarea,
+.v-main .v-select__selection-text,
+.v-main .v-autocomplete__selection-text,
+.v-main .v-label {
+    font-size: 0.875rem;
+}
+
+.v-main .v-field-label--floating {
+    font-size: 0.75rem;
+}
+
+.v-main .v-messages,
+.v-main .v-messages__message {
+    font-size: 0.75rem;
+}
+
+.v-main .v-table > .v-table__wrapper > table > tbody > tr > td {
+    font-size: 0.875rem;
+}
+
+.v-main .v-table > .v-table__wrapper > table > thead > tr > th {
+    font-size: 0.8125rem;
+}
+
+.v-main .v-btn.v-btn--size-default {
+    font-size: 0.875rem;
+}
+
+.v-main .v-btn.v-btn--size-small {
+    font-size: 0.8125rem;
+}
+
+/*
+ * ── ボタンのアイコンは付けない（全画面共通）──
+ * 文字のボタンにアイコンが付いたり付かなかったりしてそろわないため、文字だけに統一する。
+ * アイコンだけのボタン（削除の×など）はそのまま。
+ */
+.v-btn:not(.v-btn--icon) > .v-btn__prepend,
+.v-btn:not(.v-btn--icon) > .v-btn__append {
+    display: none;
+}
+
+/* 日付を直接入力する欄（生年月日など）も、カレンダー付きの日付欄と同じ幅にする。 */
+.ark-field-date {
+    width: var(--ark-field-date);
+    max-width: 100%;
+    flex: 0 0 auto;
+}

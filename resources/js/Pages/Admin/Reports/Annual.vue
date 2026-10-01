@@ -142,13 +142,13 @@ function changeAsOf(value: string): void {
             <ReportSelect :model-value="period" :items="periodItems" :label="labels.annualPeriod" data-testid="period-select" @update:model-value="changePeriod" />
         </ReportFilterField>
         <ReportFilterField size="sm">
-            <YearField :model-value="year" :label="period === 'fiscal' ? labels.annualFiscalYear : labels.annualYear" density="compact" data-testid="year-input" @update:model-value="changeYear" />
+            <YearField :model-value="year" :label="period === 'fiscal' ? labels.annualFiscalYear : labels.annualYear" data-testid="year-input" @update:model-value="changeYear" />
         </ReportFilterField>
         <ReportFilterField size="md">
             <ReportSelect :model-value="basis" :items="basisItems" :label="labels.annualBasis" data-testid="basis-select" @update:model-value="changeBasis" />
         </ReportFilterField>
         <ReportFilterField size="lg">
-            <DateField :model-value="asOfDate" :label="labels.annualAsOf" :min="asOfMin" :max="asOfMax" density="compact" data-testid="as-of-input" @update:model-value="changeAsOf" />
+            <DateField :model-value="asOfDate" :label="labels.annualAsOf" :min="asOfMin" :max="asOfMax" data-testid="as-of-input" @update:model-value="changeAsOf" />
         </ReportFilterField>
         <template #meta>{{ labels.annualAsOfMeta }}</template>
     </ReportFilterBar>

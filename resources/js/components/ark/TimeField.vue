@@ -19,6 +19,8 @@ const props = withDefaults(defineProps<{
     maxTime?: string;
     /** 読み取り専用（確定済みの画面など）。時刻の一覧を開かない。 */
     readonly?: boolean;
+    /** 幅いっぱいに広げる（例外の画面だけで使う）。 */
+    block?: boolean;
 }>(), {
     clearable: false,
     hideDetails: true,
@@ -91,7 +93,7 @@ watch(menuOpen, async (open) => {
 </script>
 
 <template>
-    <div class="tf" v-bind="rootAttrs">
+    <div class="tf" :class="{ 'tf--block': block }" v-bind="rootAttrs">
         <v-menu
             v-model="menuOpen"
             :disabled="readonly"
@@ -134,7 +136,15 @@ watch(menuOpen, async (open) => {
 
 <style scoped>
 .tf {
+    width: var(--ark-field-time);
+    max-width: 100%;
     min-width: 0;
+    flex: 0 0 auto;
+}
+
+.tf--block {
+    width: 100%;
+    flex: 1 1 auto;
 }
 
 .tf__list {

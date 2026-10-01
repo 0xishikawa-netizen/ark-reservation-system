@@ -72,7 +72,7 @@ function create(): void {
     </PageHeader>
     <ReportFilterBar>
         <ReportFilterField size="lg">
-            <DateField :model-value="date" :label="labels.date" density="compact" :clearable="false" data-testid="checkout-date" @update:model-value="changeDate" />
+            <DateField :model-value="date" :label="labels.date" :clearable="false" data-testid="checkout-date" @update:model-value="changeDate" />
         </ReportFilterField>
     </ReportFilterBar>
     <SectionCard :title="labels.indexTitle">

@@ -8,6 +8,7 @@ enum ScheduleBlockType: string
 {
     case Break = 'BREAK';
     case Meeting = 'MEETING';
+    case Work = 'WORK';
     case Admin = 'ADMIN';
     case Cleaning = 'CLEANING';
     case Training = 'TRAINING';
@@ -18,7 +19,8 @@ enum ScheduleBlockType: string
     {
         return match ($this) {
             self::Break => '休憩',
-            self::Meeting => 'ミーティング',
+            self::Meeting => 'MTG',
+            self::Work => '業務',
             self::Admin => '事務作業',
             self::Cleaning => '清掃',
             self::Training => '研修',

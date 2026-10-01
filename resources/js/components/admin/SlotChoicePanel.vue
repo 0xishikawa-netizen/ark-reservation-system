@@ -36,17 +36,20 @@ function fmtDay(iso: string): string {
         @close="emit('close')"
         @back="emit('back')"
     >
-        <!-- 選んだ枠（日付・時刻・スタッフ）を最初に大きく確認させる。 -->
+        <!-- 選んだ枠（日付・開始時間・担当）を、予約パネルと同じ3セルのカードで確認させる。 -->
         <div class="sch__when">
-            <div class="sch__when-head">
-                <span class="sch__date">{{ fmtDay(date) }}</span>
-                <span v-if="staffName" class="sch__staff">{{ staffName }}</span>
+            <div class="sch__when-cell">
+                <span class="sch__when-label">日付</span>
+                <span class="sch__when-value">{{ fmtDay(date) }}</span>
             </div>
-            <div class="sch__time">
-                <v-icon icon="mdi-clock-outline" size="16" class="sch__time-icon" />
-                <span v-if="time">{{ time }}</span>
-                <span v-else class="sch__time--empty">時間未選択</span>
-                <span v-if="time" class="sch__time-suffix">から</span>
+            <div class="sch__when-cell">
+                <span class="sch__when-label">開始時間</span>
+                <span v-if="time" class="sch__when-value sch__when-value--time">{{ time }}</span>
+                <span v-else class="sch__when-value sch__when-value--muted">{{ MESSAGES.common.emptyValue }}</span>
+            </div>
+            <div v-if="staffName" class="sch__when-cell sch__when-cell--staff">
+                <span class="sch__when-label">担当</span>
+                <span class="sch__when-value">{{ staffName }}</span>
             </div>
         </div>
 
@@ -74,55 +77,51 @@ function fmtDay(iso: string): string {
 
 <style scoped>
 .sch__when {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: var(--ark-space-3);
     padding: var(--ark-space-3);
-    border-radius: var(--ark-radius);
-    background: rgba(var(--v-theme-primary), 0.06);
+    background: rgba(var(--v-theme-primary), 0.05);
     border: 1px solid rgba(var(--v-theme-primary), 0.14);
+    border-radius: 10px;
 }
 
-.sch__when-head {
+.sch__when-cell {
     display: flex;
-    align-items: baseline;
-    gap: var(--ark-space-2);
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.sch__date {
-    font-size: 0.75rem;
-    font-weight: 800;
+.sch__when-cell--staff {
+    grid-column: 1 / -1;
+    padding-top: var(--ark-space-2);
+    border-top: 1px dashed rgba(var(--v-theme-primary), 0.2);
 }
 
-.sch__staff {
-    margin-left: auto;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    color: rgba(var(--v-theme-on-surface), 0.74);
+.sch__when-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(var(--v-theme-on-surface), 0.62);
 }
 
-.sch__time {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 2px;
-    font-size: 1.125rem;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-    color: rgb(var(--v-theme-primary));
-}
-
-.sch__time-icon {
-    margin-right: 2px;
-}
-
-.sch__time--empty {
+.sch__when-value {
     font-size: 0.8125rem;
     font-weight: 700;
-    color: rgba(var(--v-theme-on-surface), 0.68);
+    line-height: 1.3;
+    word-break: break-word;
 }
 
-.sch__time-suffix {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    color: rgba(var(--v-theme-on-surface), 0.68);
+.sch__when-value--time {
+    font-size: 1rem;
+    font-weight: 800;
+    color: rgb(var(--v-theme-primary));
+    font-variant-numeric: tabular-nums;
+}
+
+.sch__when-value--muted {
+    color: rgba(var(--v-theme-on-surface), 0.5);
 }
 
 .sch__lead {

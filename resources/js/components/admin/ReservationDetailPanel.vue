@@ -33,6 +33,7 @@ interface PanelData {
         staff_id: number | null;
         staff_name: string | null;
         is_staff_requested: boolean;
+        staff_gender_preference?: 'male' | 'female' | null;
         booth_name: string | null;
         status: string;
         status_label: string;
@@ -501,7 +502,7 @@ function submitConfirm(): void {
                         data.customer.member_no
                     }}</span>
                 </div>
-                <p class="rdp__tel">TEL {{ data.customer.phone ?? "---" }}</p>
+                <p class="rdp__tel">TEL {{ data.customer.phone ?? MESSAGES.common.emptyValue }}</p>
 
                 <!-- 表示切替タブ：顧客詳細／履歴／今後の予約（§タブ）。既定は「今回の予約」。 -->
                 <div class="rdp__tabs" role="tablist" aria-label="表示の切り替え">
@@ -660,7 +661,7 @@ function submitConfirm(): void {
                         </button>
                     </template>
 
-                    <p v-else class="rdp__memo-empty">---</p>
+                    <p v-else class="rdp__memo-empty">{{ MESSAGES.common.emptyValue }}</p>
                 </div>
             </section>
 
@@ -698,11 +699,14 @@ function submitConfirm(): void {
                             >
                                 <v-icon icon="mdi-star" size="10" />指名
                             </span>
+                            <span v-if="data.reservation.staff_gender_preference" class="rdp__nomination">
+                                {{ data.reservation.staff_gender_preference === "male" ? "男性希望" : "女性希望" }}
+                            </span>
                         </dd>
                     </div>
                     <div>
                         <dt>ブース</dt>
-                        <dd>{{ data.reservation.booth_name ?? "---" }}</dd>
+                        <dd>{{ data.reservation.booth_name ?? MESSAGES.common.emptyValue }}</dd>
                     </div>
                 </dl>
 

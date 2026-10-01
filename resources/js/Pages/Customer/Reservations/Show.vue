@@ -305,7 +305,6 @@ function cancelReservation(): void {
                     :items="slotItems"
                     :loading="loadingSlots"
                     label="時間"
-                    variant="outlined"
                     class="mb-4"
                     :disabled="slotItems.length === 0"
                 />

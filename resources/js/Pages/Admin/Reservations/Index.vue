@@ -174,7 +174,6 @@ function openReservation(reservationId: number): void {
                     <DateField
                         v-model="date"
                         label="日付"
-                        density="compact"
                         @update:model-value="applyFilters"
                     />
                 </div>
@@ -184,7 +183,6 @@ function openReservation(reservationId: number): void {
                     item-title="display_name"
                     item-value="user_id"
                     label="担当"
-                    density="compact"
                     clearable
                     hide-details
                     class="filter-grid__staff"
@@ -194,7 +192,6 @@ function openReservation(reservationId: number): void {
                     v-model="status"
                     :items="statusItems"
                     label="状態"
-                    density="compact"
                     clearable
                     hide-details
                     class="filter-grid__status"

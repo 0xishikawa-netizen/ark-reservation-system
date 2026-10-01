@@ -41,7 +41,7 @@ const submit = (): void => {
                     label="氏名"
                     autocomplete="name"
                     hide-details="auto"
-                    class="mb-4"
+                    class="ark-field-name mb-4"
                     :error-messages="form.errors.name"
                     required
                 />
@@ -49,7 +49,7 @@ const submit = (): void => {
                     v-model="form.display_name"
                     label="画面表示名"
                     hide-details="auto"
-                    class="mb-4"
+                    class="ark-field-name mb-4"
                     :error-messages="form.errors.display_name"
                     required
                 />

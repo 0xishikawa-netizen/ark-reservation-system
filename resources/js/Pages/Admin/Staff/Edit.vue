@@ -78,7 +78,7 @@ const deactivate = (): void => {
                     label="表示名"
                     maxlength="50"
                     hide-details="auto"
-                    class="mb-4"
+                    class="ark-field-name mb-4"
                     :error-messages="form.errors.display_name"
                     required
                 />

@@ -128,7 +128,7 @@ function changeStaff(value: number | null): void {
 
     <ReportFilterBar :loading="loading" :loading-text="labels.staffLoading" :error="error">
         <ReportFilterField size="md">
-            <MonthField :model-value="month" :label="labels.staffMonth" density="compact" data-testid="month-input" @update:model-value="changeMonth" />
+            <MonthField :model-value="month" :label="labels.staffMonth" data-testid="month-input" @update:model-value="changeMonth" />
         </ReportFilterField>
         <ReportFilterField size="sm">
             <ReportSelect :model-value="typeId" :items="typeItems" :label="labels.staffType" data-testid="type-filter" @update:model-value="changeType" />

@@ -137,6 +137,50 @@ final class ReservationNominationTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('reservation.is_staff_requested', false));
     }
 
+    public function test_staff_gender_preference_is_saved_on_create_and_editable_alone(): void
+    {
+        [$customer, $service, $staff, $booth] = $this->masters('gender-pref');
+        $admin = $this->admin();
+
+        $this->actingAs($admin)->post('/admin/reservations', [
+            'customer_id' => $customer->user_id,
+            'service_id' => $service->id,
+            'staff_id' => $staff->user_id,
+            'booth_id' => $booth->id,
+            'starts_at' => '2026-10-01 10:00:00',
+            'staff_gender_preference' => 'female',
+        ])->assertSessionHasNoErrors();
+
+        $reservation = Reservation::query()->where('customer_id', $customer->user_id)->firstOrFail();
+        $this->assertSame('female', $reservation->staff_gender_preference);
+
+        // 日時・担当を変えず、性別希望だけ「男性」に変える（版が1つ進む）。
+        $this->actingAs($admin)->put("/admin/reservations/{$reservation->id}", [
+            'starts_at' => $reservation->starts_at->format('Y-m-d H:i:s'),
+            'staff_id' => $staff->user_id,
+            'booth_id' => $booth->id,
+            'version' => $reservation->version,
+            'staff_gender_preference' => 'male',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('male', $reservation->fresh()->staff_gender_preference);
+
+        // 空にすると希望なしへ戻る。
+        $reservation->refresh();
+        $this->actingAs($admin)->put("/admin/reservations/{$reservation->id}", [
+            'starts_at' => $reservation->starts_at->format('Y-m-d H:i:s'),
+            'staff_id' => $staff->user_id,
+            'booth_id' => $booth->id,
+            'version' => $reservation->version,
+            'staff_gender_preference' => null,
+        ])->assertSessionHasNoErrors();
+        $this->assertNull($reservation->fresh()->staff_gender_preference);
+
+        $this->actingAs($admin)->post('/admin/reservations', [
+            'customer_id' => $customer->user_id, 'service_id' => $service->id, 'staff_id' => $staff->user_id,
+            'booth_id' => $booth->id, 'starts_at' => '2026-10-02 10:00:00', 'staff_gender_preference' => 'robot',
+        ])->assertSessionHasErrors('staff_gender_preference');
+    }
+
     public function test_dragging_a_reservation_to_a_new_time_preserves_the_nomination_flag(): void
     {
         [$customer, $service, $staff, $booth] = $this->masters('nom-drag');

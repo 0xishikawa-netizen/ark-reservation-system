@@ -43,7 +43,7 @@ function reload(month: string): void {
     <PageHeader :title="hub.title" :subtitle="hub.ledgerSubtitle" />
     <MonthlyReportTabs active="ledger" :month="report.month_key" />
     <ReportFilterBar>
-        <ReportFilterField size="md"><MonthField :model-value="report.month_key" :label="MESSAGES.calendar.targetMonth" density="compact" data-testid="month-input" @update:model-value="reload" /></ReportFilterField>
+        <ReportFilterField size="md"><MonthField :model-value="report.month_key" :label="MESSAGES.calendar.targetMonth" data-testid="month-input" @update:model-value="reload" /></ReportFilterField>
         <span class="legacy" data-testid="legacy-sheet">{{ hub.ledgerLegacy.replace('{sheet}', report.legacy_sheet_name) }}</span>
     </ReportFilterBar>
 

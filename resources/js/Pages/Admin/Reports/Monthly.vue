@@ -182,7 +182,7 @@ function changeBasis(value: SalesBasis): void {
 
     <ReportFilterBar :loading="loading" :loading-text="labels.monthlyLoading" :error="error">
         <ReportFilterField size="md">
-            <MonthField :model-value="selectedMonth" :label="MESSAGES.calendar.targetMonth" density="compact" data-testid="month-input" @update:model-value="changeMonth" />
+            <MonthField :model-value="selectedMonth" :label="MESSAGES.calendar.targetMonth" data-testid="month-input" @update:model-value="changeMonth" />
         </ReportFilterField>
         <ReportFilterField size="md">
             <ReportSelect :model-value="selectedBasis" :items="basisItems" :label="labels.annualBasis" data-testid="basis-select" @update:model-value="changeBasis" />

@@ -123,9 +123,9 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
                 <div class="bm-add">
                     <p class="bm-add__title">分類を追加</p>
                     <v-form class="bm-form" @submit.prevent="saveNewMaster(masterForm, '/admin/settings/business-masters/analysis-categories')">
-                        <v-text-field v-model="masterForm.code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="masterForm.errors.code" />
-                        <v-text-field v-model="masterForm.name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="masterForm.errors.name" />
-                        <v-text-field v-model.number="masterForm.sort_order" label="表示順" type="number" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" />
+                        <v-text-field v-model="masterForm.code" label="コード" hide-details="auto" class="bm-field bm-field--s" :error-messages="masterForm.errors.code" />
+                        <v-text-field v-model="masterForm.name" label="名称" hide-details="auto" class="bm-field" :error-messages="masterForm.errors.name" />
+                        <v-text-field v-model.number="masterForm.sort_order" label="表示順" type="number" hide-details="auto" class="bm-field bm-field--xs" />
                         <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="masterForm.processing">追加</v-btn>
                     </v-form>
                 </div>
@@ -156,10 +156,10 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
                 <div class="bm-add">
                     <p class="bm-add__title">{{ editingRateId === null ? '税率を追加' : '税率を変更' }}</p>
                     <v-form class="bm-form" @submit.prevent="saveRate">
-                        <v-select v-model="rateForm.tax_category_id" :items="taxCategories" item-title="name" item-value="id" label="税区分" density="comfortable" hide-details="auto" class="bm-field" :error-messages="rateForm.errors.tax_category_id" />
-                        <v-text-field v-model.number="ratePercent" label="税率" suffix="%" type="number" step="0.01" min="0" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" :error-messages="rateForm.errors.rate_bps" />
-                        <DateField v-model="rateForm.effective_from" label="開始日" :clearable="false" density="comfortable" class="bm-field bm-field--s" />
-                        <DateField :model-value="rateForm.effective_to ?? ''" label="終了日（任意・当日含まず）" density="comfortable" class="bm-field bm-field--s" @update:model-value="rateForm.effective_to = $event || null" />
+                        <v-select v-model="rateForm.tax_category_id" :items="taxCategories" item-title="name" item-value="id" label="税区分" hide-details="auto" class="bm-field" :error-messages="rateForm.errors.tax_category_id" />
+                        <v-text-field v-model.number="ratePercent" label="税率" suffix="%" type="number" step="0.01" min="0" hide-details="auto" class="bm-field bm-field--xs" :error-messages="rateForm.errors.rate_bps" />
+                        <DateField v-model="rateForm.effective_from" label="開始日" :clearable="false" />
+                        <DateField :model-value="rateForm.effective_to ?? ''" label="終了日（任意・当日含まず）" @update:model-value="rateForm.effective_to = $event || null" />
                         <v-btn type="submit" color="primary" :prepend-icon="editingRateId === null ? 'mdi-plus' : 'mdi-content-save-outline'" class="bm-submit" :loading="rateForm.processing">{{ editingRateId === null ? '追加' : '更新' }}</v-btn>
                         <v-btn v-if="editingRateId !== null" variant="text" class="bm-submit" @click="editingRateId = null; rateForm.reset()">やめる</v-btn>
                     </v-form>
@@ -167,9 +167,9 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
                 <div class="bm-add">
                     <p class="bm-add__title">税区分を追加</p>
                     <v-form class="bm-form" @submit.prevent="taxCategoryForm.post('/admin/settings/business-masters/tax-categories', { preserveScroll: true, onSuccess: () => taxCategoryForm.reset() })">
-                        <v-text-field v-model="taxCategoryForm.code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="taxCategoryForm.errors.code" />
-                        <v-text-field v-model="taxCategoryForm.name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="taxCategoryForm.errors.name" />
-                        <v-text-field v-model.number="taxCategoryForm.sort_order" label="表示順" type="number" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" />
+                        <v-text-field v-model="taxCategoryForm.code" label="コード" hide-details="auto" class="bm-field bm-field--s" :error-messages="taxCategoryForm.errors.code" />
+                        <v-text-field v-model="taxCategoryForm.name" label="名称" hide-details="auto" class="bm-field" :error-messages="taxCategoryForm.errors.name" />
+                        <v-text-field v-model.number="taxCategoryForm.sort_order" label="表示順" type="number" hide-details="auto" class="bm-field bm-field--xs" />
                         <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="taxCategoryForm.processing">追加</v-btn>
                     </v-form>
                 </div>
@@ -197,10 +197,10 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
                 <div class="bm-add">
                     <p class="bm-add__title">{{ editingPaymentId === null ? '決済方法を追加' : '決済方法を変更' }}</p>
                     <v-form class="bm-form" @submit.prevent="savePayment">
-                        <v-text-field v-model="paymentForm.code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="paymentForm.errors.code" />
-                        <v-text-field v-model="paymentForm.name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="paymentForm.errors.name" />
-                        <v-text-field v-model.number="paymentForm.display_order" label="表示順" type="number" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" />
-                        <v-text-field v-model="paymentForm.external_provider" label="外部連携（任意）" density="comfortable" hide-details="auto" class="bm-field bm-field--s" />
+                        <v-text-field v-model="paymentForm.code" label="コード" hide-details="auto" class="bm-field bm-field--s" :error-messages="paymentForm.errors.code" />
+                        <v-text-field v-model="paymentForm.name" label="名称" hide-details="auto" class="bm-field" :error-messages="paymentForm.errors.name" />
+                        <v-text-field v-model.number="paymentForm.display_order" label="表示順" type="number" hide-details="auto" class="bm-field bm-field--xs" />
+                        <v-text-field v-model="paymentForm.external_provider" label="外部連携（任意）" hide-details="auto" class="bm-field bm-field--s" />
                         <v-btn type="submit" color="primary" :prepend-icon="editingPaymentId === null ? 'mdi-plus' : 'mdi-content-save-outline'" class="bm-submit" :loading="paymentForm.processing">{{ editingPaymentId === null ? '追加' : '更新' }}</v-btn>
                         <v-btn v-if="editingPaymentId !== null" variant="text" class="bm-submit" @click="editingPaymentId = null; paymentForm.reset()">やめる</v-btn>
                     </v-form>
@@ -222,11 +222,11 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
 
             <SectionCard title="特定の日の休業・営業" subtitle="臨時休業・営業時間の変更・定休日の営業など、いつもと違う日だけ登録します。">
                 <v-form class="bm-form" @submit.prevent="saveCalendarDay">
-                    <DateField v-model="calendarForm.business_date" label="日付" :clearable="false" density="comfortable" class="bm-field bm-field--s" />
-                    <v-select v-model="calendarForm.status" label="区分" :items="calendarStatusItems" density="comfortable" hide-details="auto" class="bm-field" />
-                    <TimeField v-if="calendarForm.status === 'special_hours'" :model-value="calendarForm.opens_at ?? ''" label="開店" @update:model-value="calendarForm.opens_at = $event || null" density="comfortable" class="bm-field bm-field--xs" />
-                    <TimeField v-if="calendarForm.status === 'special_hours'" :model-value="calendarForm.closes_at ?? ''" label="閉店" @update:model-value="calendarForm.closes_at = $event || null" density="comfortable" class="bm-field bm-field--xs" />
-                    <v-text-field v-model="calendarForm.note" label="備考（任意）" density="comfortable" hide-details="auto" class="bm-field" />
+                    <DateField v-model="calendarForm.business_date" label="日付" :clearable="false" />
+                    <v-select v-model="calendarForm.status" label="区分" :items="calendarStatusItems" hide-details="auto" class="bm-field" />
+                    <TimeField v-if="calendarForm.status === 'special_hours'" :model-value="calendarForm.opens_at ?? ''" label="開店" @update:model-value="calendarForm.opens_at = $event || null" />
+                    <TimeField v-if="calendarForm.status === 'special_hours'" :model-value="calendarForm.closes_at ?? ''" label="閉店" @update:model-value="calendarForm.closes_at = $event || null" />
+                    <v-text-field v-model="calendarForm.note" label="備考（任意）" hide-details="auto" class="bm-field" />
                     <v-btn type="submit" color="primary" prepend-icon="mdi-content-save-outline" class="bm-submit" :loading="calendarForm.processing">保存</v-btn>
                 </v-form>
                 <p v-if="calendarForm.errors.closes_at || calendarForm.errors.business_date" class="text-error text-body-2 mt-2">{{ calendarForm.errors.closes_at || calendarForm.errors.business_date }}</p>
@@ -256,15 +256,15 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
                 <div class="bm-add bm-add--first">
                     <p class="bm-add__title">デフォルトの月間目標</p>
                     <v-form class="bm-form" @submit.prevent="defaultTargetForm.put('/admin/settings/business-masters/sales-target/default', { preserveScroll: true })">
-                        <MoneyField v-model="defaultTargetForm.target_amount" label="月間目標" density="comfortable" hide-details="auto" class="bm-field" :error-messages="defaultTargetForm.errors.target_amount" />
+                        <MoneyField v-model="defaultTargetForm.target_amount" label="月間目標" hide-details="auto" class="bm-field" :error-messages="defaultTargetForm.errors.target_amount" />
                         <v-btn type="submit" color="primary" prepend-icon="mdi-content-save-outline" class="bm-submit" :loading="defaultTargetForm.processing">保存</v-btn>
                     </v-form>
                 </div>
                 <div class="bm-add">
                     <p class="bm-add__title">月別の目標</p>
                     <v-form class="bm-form" @submit.prevent="monthlyTargetForm.put('/admin/settings/business-masters/sales-target/monthly', { preserveScroll: true, onSuccess: () => monthlyTargetForm.reset() })">
-                        <MonthField v-model="monthlyTargetForm.target_month" :label="MESSAGES.calendar.targetMonth" density="comfortable" class="bm-field bm-field--s" />
-                        <MoneyField v-model="monthlyTargetForm.target_amount" label="目標" density="comfortable" hide-details="auto" class="bm-field" :error-messages="monthlyTargetForm.errors.target_amount" />
+                        <MonthField v-model="monthlyTargetForm.target_month" :label="MESSAGES.calendar.targetMonth" />
+                        <MoneyField v-model="monthlyTargetForm.target_amount" label="目標" hide-details="auto" class="bm-field" :error-messages="monthlyTargetForm.errors.target_amount" />
                         <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="monthlyTargetForm.processing">設定</v-btn>
                     </v-form>
                     <v-table class="bm-table mt-4">
@@ -298,9 +298,9 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
                 <div class="bm-add">
                     <p class="bm-add__title">雇用形態を追加</p>
                     <v-form class="bm-form" @submit.prevent="employmentForm.post('/admin/settings/business-masters/employment-types', { preserveScroll: true, onSuccess: () => employmentForm.reset() })">
-                        <v-text-field v-model="employmentForm.code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="employmentForm.errors.code" />
-                        <v-text-field v-model="employmentForm.name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="employmentForm.errors.name" />
-                        <v-text-field v-model.number="employmentForm.sort_order" label="表示順" type="number" density="comfortable" hide-details="auto" class="bm-field bm-field--xs" />
+                        <v-text-field v-model="employmentForm.code" label="コード" hide-details="auto" class="bm-field bm-field--s" :error-messages="employmentForm.errors.code" />
+                        <v-text-field v-model="employmentForm.name" label="名称" hide-details="auto" class="bm-field" :error-messages="employmentForm.errors.name" />
+                        <v-text-field v-model.number="employmentForm.sort_order" label="表示順" type="number" hide-details="auto" class="bm-field bm-field--xs" />
                         <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="employmentForm.processing">追加</v-btn>
                     </v-form>
                 </div>
@@ -329,8 +329,8 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
                 <div class="bm-add">
                     <p class="bm-add__title">追加</p>
                     <v-form class="bm-form" @submit.prevent="saveNewMaster(karteForms[kind] as typeof masterForm, `${karteBase}/${kind}`)">
-                        <v-text-field v-model="karteForms[kind].code" label="コード" density="comfortable" hide-details="auto" class="bm-field bm-field--s" :error-messages="karteForms[kind].errors.code" />
-                        <v-text-field v-model="karteForms[kind].name" label="名称" density="comfortable" hide-details="auto" class="bm-field" :error-messages="karteForms[kind].errors.name" />
+                        <v-text-field v-model="karteForms[kind].code" label="コード" hide-details="auto" class="bm-field bm-field--s" :error-messages="karteForms[kind].errors.code" />
+                        <v-text-field v-model="karteForms[kind].name" label="名称" hide-details="auto" class="bm-field" :error-messages="karteForms[kind].errors.name" />
                         <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="karteForms[kind].processing">追加</v-btn>
                     </v-form>
                 </div>

@@ -44,8 +44,6 @@ const title = (item: PickedCustomer): string => `${item.name}（${item.member_no
         return-object
         no-filter
         clearable
-        density="compact"
-        variant="outlined"
         hide-details
         data-testid="customer-picker"
         @update:model-value="(value: PickedCustomer | null) => emit('update:modelValue', value)"

@@ -2,7 +2,7 @@
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, reactive, ref, watch } from 'vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
-import { DateField, PageHeader, SectionCard, TimeField } from '@/components/ark';
+import { DateField, EmptyValue, PageHeader, SectionCard, TimeField } from '@/components/ark';
 import { MESSAGES, confirmDeleteShiftMessage } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
@@ -564,7 +564,6 @@ const horizonSummary = computed(() => {
             item-title="display_name"
             item-value="user_id"
             hide-details
-            density="comfortable"
         >
             <template #item="{ props: itemProps, item }">
                 <v-list-item
@@ -645,9 +644,9 @@ const horizonSummary = computed(() => {
                     <v-card-text>
                         <p v-if="editorRow.planned" class="ts-plan">{{ MESSAGES.attendance.planned }}：{{ editorRow.planned.start }}〜{{ editorRow.planned.end }}（{{ MESSAGES.attendance.breakLabel }} {{ editorRow.planned.break_min }}分）</p>
                         <div class="ark-att__row">
-                            <TimeField v-model="attendanceTimes.clockIn" :label="MESSAGES.attendance.clockIn" :step-minutes="5" density="comfortable" class="ark-att__time" />
+                            <TimeField v-model="attendanceTimes.clockIn" :label="MESSAGES.attendance.clockIn" :step-minutes="5" />
                             <span class="ark-weekgrid__sep">〜</span>
-                            <TimeField v-model="attendanceTimes.clockOut" :label="MESSAGES.attendance.clockOut" :step-minutes="5" clearable density="comfortable" class="ark-att__time" />
+                            <TimeField v-model="attendanceTimes.clockOut" :label="MESSAGES.attendance.clockOut" :step-minutes="5" clearable />
                         </div>
                         <!-- 遅出・早出・残業・早退を数字で素早く調整 -->
                         <div class="ts-nudge">
@@ -662,15 +661,15 @@ const horizonSummary = computed(() => {
                         </div>
                         <div v-for="(entry, index) in attendanceBreaks" :key="index" class="ark-att__row">
                             <span class="ark-att__breaklabel">{{ MESSAGES.attendance.breakLabel }}{{ index + 1 }}</span>
-                            <TimeField v-model="entry.start" :label="MESSAGES.attendance.breakStart" :step-minutes="5" density="comfortable" class="ark-att__time" />
+                            <TimeField v-model="entry.start" :label="MESSAGES.attendance.breakStart" :step-minutes="5" />
                             <span class="ark-weekgrid__sep">〜</span>
-                            <TimeField v-model="entry.end" :label="MESSAGES.attendance.breakEnd" :step-minutes="5" density="comfortable" class="ark-att__time" />
+                            <TimeField v-model="entry.end" :label="MESSAGES.attendance.breakEnd" :step-minutes="5" />
                             <v-btn variant="text" color="error" size="small" prepend-icon="mdi-close" @click="attendanceBreaks.splice(index, 1)">{{ MESSAGES.attendance.removeBreak }}</v-btn>
                         </div>
                         <v-btn variant="text" size="small" prepend-icon="mdi-plus" class="mb-3" @click="addAttendanceBreak">{{ MESSAGES.attendance.addBreak }}</v-btn>
                         <div class="ark-att__row">
-                            <v-select v-model="attendanceForm.status" :label="MESSAGES.attendance.statusLabel" :items="[{ title: MESSAGES.attendance.draft, value: 'draft' }, { title: MESSAGES.attendance.confirmed, value: 'confirmed' }]" density="comfortable" hide-details class="ark-att__status" />
-                            <v-text-field v-model="attendanceForm.note" :label="MESSAGES.attendance.note" density="comfortable" hide-details class="ark-att__note" />
+                            <v-select v-model="attendanceForm.status" :label="MESSAGES.attendance.statusLabel" :items="[{ title: MESSAGES.attendance.draft, value: 'draft' }, { title: MESSAGES.attendance.confirmed, value: 'confirmed' }]" hide-details class="ark-att__status" />
+                            <v-text-field v-model="attendanceForm.note" :label="MESSAGES.attendance.note" hide-details class="ark-att__note" />
                         </div>
                         <p v-if="Object.keys(attendanceForm.errors).length" role="alert" class="text-error text-body-2">{{ MESSAGES.attendance.formError }} {{ Object.values(attendanceForm.errors).join(' / ') }}</p>
                     </v-card-text>
@@ -717,9 +716,9 @@ const horizonSummary = computed(() => {
                                 :key="index"
                                 class="ark-weekgrid__range"
                             >
-                                <TimeField v-model="range.start" label="開始" density="compact" :step-minutes="5" class="ark-weekgrid__time" />
+                                <TimeField v-model="range.start" label="開始" :step-minutes="5" class="ark-weekgrid__time" />
                                 <span class="ark-weekgrid__sep">〜</span>
-                                <TimeField v-model="range.end" label="終了" density="compact" :step-minutes="5" class="ark-weekgrid__time" />
+                                <TimeField v-model="range.end" label="終了" :step-minutes="5" class="ark-weekgrid__time" />
                                 <v-btn
                                     icon="mdi-close"
                                     size="x-small"
@@ -833,9 +832,9 @@ const horizonSummary = computed(() => {
                                 </v-btn>
 
                                 <div class="ark-exceptions__addshift">
-                                    <TimeField v-model="addShiftForm.start_at" label="開始" density="compact" :step-minutes="5" class="ark-weekgrid__time" />
+                                    <TimeField v-model="addShiftForm.start_at" label="開始" :step-minutes="5" class="ark-weekgrid__time" />
                                     <span class="ark-weekgrid__sep">〜</span>
-                                    <TimeField v-model="addShiftForm.end_at" label="終了" density="compact" :step-minutes="5" class="ark-weekgrid__time" />
+                                    <TimeField v-model="addShiftForm.end_at" label="終了" :step-minutes="5" class="ark-weekgrid__time" />
                                     <v-btn
                                         color="primary"
                                         variant="tonal"
@@ -878,7 +877,7 @@ const horizonSummary = computed(() => {
                                         {{ e.is_off ? '休み' : '時間変更' }}
                                     </v-chip>
                                 </td>
-                                <td class="text-medium-emphasis">{{ e.note ?? MESSAGES.common.notEntered }}</td>
+                                <td class="text-medium-emphasis"><template v-if="e.note">{{ e.note }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></td>
                                 <td class="text-right">
                                     <v-btn size="small" variant="tonal" @click="clearException(e.id)">
                                         いつもの勤務に戻す
@@ -949,7 +948,6 @@ const horizonSummary = computed(() => {
                             v-model.number="bookingForm.release_day_of_month"
                             :items="releaseDayItems"
                             label="翌月分の開放日"
-                            density="comfortable"
                             hide-details
                             style="max-width: 200px"
                             suffix="日"
@@ -969,7 +967,6 @@ const horizonSummary = computed(() => {
                             v-model.number="bookingForm.horizon_days"
                             type="number"
                             label="何日先まで"
-                            density="comfortable"
                             hide-details
                             style="max-width: 200px"
                             suffix="日先"
@@ -1002,7 +999,6 @@ const horizonSummary = computed(() => {
                     item-title="title"
                     item-value="value"
                     label="開始の何分前まで受け付けるか"
-                    density="comfortable"
                     hide-details
                     style="max-width: 280px"
                 />
@@ -1012,7 +1008,6 @@ const horizonSummary = computed(() => {
                         type="number"
                         label="開始の何分前まで"
                         suffix="分前"
-                        density="comfortable"
                         hide-details
                         style="max-width: 200px"
                     />
@@ -1110,10 +1105,6 @@ const horizonSummary = computed(() => {
 
 .ark-att__date {
     flex: 0 0 220px;
-}
-
-.ark-att__time {
-    flex: 0 0 140px;
 }
 
 .ark-att__breaklabel {

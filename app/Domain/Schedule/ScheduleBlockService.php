@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * 予定ブロック（休憩・ミーティング・事務作業・清掃・研修・外出・その他）。
+ * 予定ブロック（休憩・MTG・業務・研修・外出・その他。以前の事務作業・清掃も既存データとして扱える）。
  * Reservation を無理やり流用せず、独立した概念として管理する（§27-28）。
  * 顧客予約ではないため、メール・SMS・Stripe・回数券・月額プランは一切動かさない（§46）。
  */

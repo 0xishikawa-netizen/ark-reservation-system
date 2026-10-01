@@ -89,6 +89,7 @@ final class ReservationService
                     'service_id' => $in->serviceId,
                     'staff_id' => $in->staffId,
                     'is_staff_requested' => $in->staffId !== null && $in->isStaffRequested,
+                    'staff_gender_preference' => $in->staffGenderPreference,
                     'booth_id' => $boothId,
                     'starts_at' => $in->startsAt,
                     'ends_at' => $endsAt,
@@ -215,6 +216,10 @@ final class ReservationService
                 } elseif ($in->staffId === null) {
                     // スタッフ割当が外れた場合、指名フラグも意味を持たないため一緒に落とす。
                     $changes['is_staff_requested'] = false;
+                }
+
+                if ($in->updateStaffGenderPreference) {
+                    $changes['staff_gender_preference'] = $in->staffGenderPreference;
                 }
 
                 $reservation->update($changes);

@@ -22,6 +22,8 @@ final readonly class ReservationInput
         public bool $adminContext,
         public PaymentMethod $paymentMethod = PaymentMethod::Onsite,
         public bool $isStaffRequested = false,
+        /** 担当スタッフの性別希望（male / female）。希望なしは null。 */
+        public ?string $staffGenderPreference = null,
         /** 施術後に確保する余白（分）。ends_at はこれを含めて算出する。 */
         public int $bufferMin = 0,
     ) {}

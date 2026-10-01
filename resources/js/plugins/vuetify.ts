@@ -80,24 +80,59 @@ export default createVuetify({
         VChip: {
             rounded: 'sm',
         },
+        // 入力欄は全画面で同じ見た目（枠線あり・標準の高さ）にそろえる。個別に変えるのは例外の画面だけ。
         VTextField: {
             color: 'primary',
+            variant: 'outlined',
+            density: 'comfortable',
         },
         // 選択欄にブラウザの入力履歴（過去に入力した日付など）の候補が重なって出ないようにする。
         VSelect: {
             color: 'primary',
             autocomplete: 'off',
+            variant: 'outlined',
+            density: 'comfortable',
         },
         VAutocomplete: {
             color: 'primary',
             autocomplete: 'off',
+            variant: 'outlined',
+            density: 'comfortable',
         },
         VCombobox: {
             color: 'primary',
             autocomplete: 'off',
+            variant: 'outlined',
+            density: 'comfortable',
         },
         VTextarea: {
             color: 'primary',
+            variant: 'outlined',
+            density: 'comfortable',
+        },
+        // チェック・ラジオ・スイッチ・切り替えボタンも全画面で同じ色・大きさにそろえる。
+        VCheckbox: {
+            color: 'primary',
+            density: 'compact',
+        },
+        VRadioGroup: {
+            color: 'primary',
+            density: 'compact',
+        },
+        VRadio: {
+            color: 'primary',
+            density: 'compact',
+        },
+        VSwitch: {
+            color: 'primary',
+            density: 'compact',
+            inset: false,
+        },
+        VBtnToggle: {
+            color: 'primary',
+            variant: 'outlined',
+            density: 'comfortable',
+            divided: true,
         },
         VAlert: {
             rounded: 'md',

@@ -106,7 +106,6 @@ const verifyCode = (): void => {
                     <v-text-field
                         v-model="phoneForm.phone"
                         label="携帯電話番号"
-                        density="compact"
                         hide-details="auto"
                         :error-messages="phoneForm.errors.phone"
                         style="max-width: 280px"
@@ -125,7 +124,6 @@ const verifyCode = (): void => {
                     <v-text-field
                         v-model="codeForm.code"
                         label="認証コード"
-                        density="compact"
                         hide-details="auto"
                         :error-messages="codeForm.errors.code"
                         style="max-width: 200px"

@@ -29,6 +29,7 @@ interface ReservationDetail {
     version: number;
     notes: string | null;
     is_staff_requested: boolean;
+    staff_gender_preference: 'male' | 'female' | null;
 }
 
 interface ServiceOption {
@@ -161,6 +162,7 @@ const form = useForm({
     version: props.reservation.version,
     notes: props.reservation.notes ?? '',
     is_staff_requested: props.reservation.is_staff_requested,
+    staff_gender_preference: props.reservation.staff_gender_preference as string | null,
     reservation: null as string | null,
 });
 
@@ -441,8 +443,6 @@ function submitAdjustment(): void {
                     item-title="display_name"
                     item-value="user_id"
                     label="担当スタッフ"
-                    variant="outlined"
-                    density="comfortable"
                     clearable
                     hide-details="auto"
                     :disabled="!isConfirmed"
@@ -450,14 +450,26 @@ function submitAdjustment(): void {
                     :hint="selectedStaffIneligible ? MESSAGES.reservation.staffNotEligibleHint : undefined"
                     persistent-hint
                 />
-                <v-checkbox
-                    v-model="form.is_staff_requested"
-                    label="指名"
-                    density="comfortable"
-                    hide-details
-                    :disabled="!isConfirmed || selectedStaffId === null"
-                    data-testid="edit-nomination"
-                />
+                <div class="edit-prefs" role="group" aria-label="担当の希望">
+                    <v-btn
+                        size="small"
+                        :variant="form.is_staff_requested ? 'flat' : 'outlined'"
+                        :color="form.is_staff_requested ? 'primary' : undefined"
+                        :disabled="!isConfirmed || selectedStaffId === null"
+                        data-testid="edit-nomination"
+                        @click="form.is_staff_requested = !form.is_staff_requested"
+                    >指名</v-btn>
+                    <v-btn
+                        v-for="g in [{ value: 'male', label: '男性希望' }, { value: 'female', label: '女性希望' }]"
+                        :key="g.value"
+                        size="small"
+                        :variant="form.staff_gender_preference === g.value ? 'flat' : 'outlined'"
+                        :color="form.staff_gender_preference === g.value ? 'primary' : undefined"
+                        :disabled="!isConfirmed"
+                        :data-testid="`edit-pref-${g.value}`"
+                        @click="form.staff_gender_preference = form.staff_gender_preference === g.value ? null : g.value"
+                    >{{ g.label }}</v-btn>
+                </div>
                 <v-select
                     v-model="selectedBoothId"
                     :items="boothItems"
@@ -478,7 +490,6 @@ function submitAdjustment(): void {
                     <DateField
                         v-model="date"
                         label="変更日"
-                        density="comfortable"
                         hide-details="auto"
                         :disabled="!isConfirmed"
                     />
@@ -489,8 +500,6 @@ function submitAdjustment(): void {
                         :items="slotItems"
                         :loading="loadingSlots"
                         label="時間"
-                        variant="outlined"
-                        density="comfortable"
                         hide-details="auto"
                         :disabled="!isConfirmed || slotItems.length === 0"
                         :error-messages="form.errors.starts_at"
@@ -523,7 +532,6 @@ function submitAdjustment(): void {
             <v-textarea
                 v-model="form.notes"
                 label="備考"
-                variant="outlined"
                 maxlength="1000"
                 counter
                 rows="4"
@@ -709,6 +717,12 @@ function submitAdjustment(): void {
 </template>
 
 <style scoped>
+.edit-prefs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 /* でかいモニターでも1カラムのまま最大幅を制限し、カードが横に間延びしないようにする。
    左寄せだと大画面で右側が余って見づらいため、中央寄せにする。 */
 .reservation-page {

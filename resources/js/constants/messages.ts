@@ -85,7 +85,7 @@ export const MESSAGES = {
         pastConfirmTitle: '過去の日時に登録しますか？',
         pastConfirmBody: '{when} は現在より前の日時です。このまま登録してよいか確認してください。',
         choiceReservationDesc: '顧客・メニューを選んで予約を登録します',
-        choiceBlockDesc: '休憩・清掃・ミーティングなど、予約以外でスタッフの時間を押さえます',
+        choiceBlockDesc: '休憩・MTG・業務など、予約以外でスタッフの時間を押さえます',
         switchToBlock: '代わりにスタッフ予定を入れる',
         switchToReservation: '代わりに予約を入れる',
         bufferSegment: 'インターバル（終了後{min}分）',

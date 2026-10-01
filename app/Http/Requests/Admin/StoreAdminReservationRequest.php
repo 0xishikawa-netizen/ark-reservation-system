@@ -36,6 +36,7 @@ final class StoreAdminReservationRequest extends FormRequest
             ],
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
             'is_staff_requested' => ['nullable', 'boolean'],
+            'staff_gender_preference' => ['nullable', 'string', 'in:male,female'],
             'booth_id' => ['nullable', 'integer', 'exists:booths,id'],
             'starts_at' => ['required', 'date'],
             // 施術後の着替え・片付け用の余白（分）。台帳から選べる値だけに限定する。

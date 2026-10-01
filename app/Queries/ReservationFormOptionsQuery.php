@@ -145,6 +145,7 @@ final class ReservationFormOptionsQuery
                 'reservations.version',
                 'reservations.notes',
                 'reservations.is_staff_requested',
+                'reservations.staff_gender_preference',
                 'customer_users.name as customer_name',
                 'services.name as service_name',
                 'staff.display_name as staff_name',
@@ -168,6 +169,7 @@ final class ReservationFormOptionsQuery
             'version' => (int) $row->version,
             'notes' => $row->notes === null ? null : (string) $row->notes,
             'is_staff_requested' => (bool) $row->is_staff_requested,
+            'staff_gender_preference' => $row->staff_gender_preference === null ? null : (string) $row->staff_gender_preference,
         ];
     }
 }

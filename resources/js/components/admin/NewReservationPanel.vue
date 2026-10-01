@@ -129,10 +129,9 @@ const availabilityLoaded = ref(false);
  */
 const desiredStartsAt = ref<string | null>(props.draft.starts_at);
 
-const GENDER_OPTIONS = [
-    { value: 'female', label: '女性' },
-    { value: 'male', label: '男性' },
-    { value: 'other', label: 'その他' },
+const GENDER_PREFERENCES = [
+    { value: 'male', label: '男性希望' },
+    { value: 'female', label: '女性希望' },
 ];
 
 const BUFFER_OPTIONS = [
@@ -147,6 +146,7 @@ const form = useForm({
     service_id: props.draft.service_id,
     staff_id: props.draft.staff_id,
     is_staff_requested: props.draft.is_staff_requested,
+    staff_gender_preference: props.draft.staff_gender_preference as string | null,
     booth_id: props.draft.booth_id,
     starts_at: props.draft.starts_at,
     buffer_min: props.draft.buffer_min,
@@ -194,6 +194,7 @@ watch(
         props.draft.date = date.value;
         props.draft.customer_id = form.customer_id;
         props.draft.is_staff_requested = form.is_staff_requested;
+        props.draft.staff_gender_preference = form.staff_gender_preference as 'male' | 'female' | null;
         props.draft.starts_at = form.starts_at;
         props.draft.buffer_min = form.buffer_min;
         props.draft.notes = form.notes;
@@ -378,7 +379,7 @@ async function autoAssignBooth(startsAt: string): Promise<void> {
 /* ───── 電話予約などで未登録のお客様を、その場で仮登録する（§新規のお客様） ───── */
 const provisionalSaving = ref(false);
 const provisionalError = ref<string | null>(null);
-const provisional = ref({ name: '', kana: '', phone: '', gender: '' });
+const provisional = ref({ name: '', kana: '', phone: '' });
 
 /** お客様欄の切り替え：既存のお客様（上の検索で選ぶ）／新規のお客様（名前だけダイアログで仮登録）。 */
 const customerMode = ref<'existing' | 'new'>('existing');
@@ -393,7 +394,7 @@ function setCustomerMode(mode: 'existing' | 'new'): void {
         if (form.customer_id !== null) {
             clearCustomer();
         }
-        provisional.value = { name: '', kana: '', phone: '', gender: '' };
+        provisional.value = { name: '', kana: '', phone: '' };
         provisionalError.value = null;
         provisionalOpen.value = true;
     }
@@ -469,7 +470,7 @@ watch(() => form.customer_id, () => {
 async function submitProvisional(): Promise<void> {
     const body = provisional.value;
 
-    if ([body.name, body.kana, body.phone].every((v) => v.trim() === '')) {
+    if ([body.kana, body.phone].every((v) => v.trim() === '')) {
         provisionalError.value = MESSAGES.reservation.provisionalCustomerRequired;
 
         return;
@@ -781,7 +782,10 @@ function submit(): void {
                             {{ timeLabel(form.starts_at) }}<template v-if="selectedEndLabel"><span class="nrp__when-sep">〜</span>{{ selectedEndLabel }}</template>
                         </span>
                         <span v-else-if="loadingSlots" class="nrp__when-value nrp__when-value--muted">{{ MESSAGES.common.loading }}</span>
-                        <span v-else class="nrp__when-value nrp__when-value--muted">--:-- 〜 --:--</span>
+                        <span v-else class="nrp__when-value nrp__when-value--muted" data-testid="nrp-time-empty">
+                            --:-- 〜 --:--
+                            <v-tooltip v-if="selectedServiceId === null" activator="parent" location="bottom">{{ MESSAGES.reservation.pickMenuToFixTime }}</v-tooltip>
+                        </span>
                         <small v-if="form.starts_at && selectedEndLabel && form.buffer_min > 0" class="nrp__buffer-note" data-testid="nrp-buffer-note">{{ MESSAGES.visitCompletion.bufferAfter.replace('{min}', String(form.buffer_min)) }}</small>
                     </div>
                 </template>
@@ -796,9 +800,6 @@ function submit(): void {
                     <li v-for="reason in unavailableReasons" :key="reason">{{ reason }}</li>
                 </ul>
             </div>
-            <p v-else-if="dateTimeLocked && selectedServiceId === null" class="nrp__muted">
-                {{ MESSAGES.reservation.pickMenuToFixTime }}
-            </p>
             <p v-if="dateTimeLocked && form.errors.starts_at" class="nrp__error">
                 {{ form.errors.starts_at }}
             </p>
@@ -819,7 +820,6 @@ function submit(): void {
 
                 <template v-if="selectedCustomer">
                     <div class="nrp__customer">
-                        <span class="nrp__avatar" aria-hidden="true">{{ selectedCustomer.name.trim().charAt(0) || '–' }}</span>
                         <span class="nrp__customer-body">
                             <span class="nrp__customer-name">{{ selectedCustomer.name }}</span>
                             <span v-if="selectedCustomer.kana" class="nrp__customer-kana">{{ selectedCustomer.kana }}</span>
@@ -854,22 +854,13 @@ function submit(): void {
                     <v-card-text>
                         <div class="nrp__dialog-fields">
                             <v-text-field
-                                v-model="provisional.name"
-                                label="お名前"
-                                placeholder="例：山田 太郎"
-                                density="compact"
-                                variant="outlined"
-                                hide-details
-                                autofocus
-                                @keydown.enter.prevent="submitProvisional"
-                            />
-                            <v-text-field
                                 v-model="provisional.kana"
                                 label="カナ"
                                 placeholder="例：ヤマダ タロウ"
                                 density="compact"
                                 variant="outlined"
                                 hide-details
+                                autofocus
                                 @keydown.enter.prevent="submitProvisional"
                             />
                             <v-text-field
@@ -882,19 +873,6 @@ function submit(): void {
                                 hide-details
                                 @keydown.enter.prevent="submitProvisional"
                             />
-                            <div class="nrp__gender" role="radiogroup" aria-label="性別">
-                                <span class="nrp__gender-label">性別</span>
-                                <button
-                                    v-for="g in GENDER_OPTIONS"
-                                    :key="g.value"
-                                    type="button"
-                                    class="nrp__buffer"
-                                    :class="{ 'nrp__buffer--active': provisional.gender === g.value }"
-                                    role="radio"
-                                    :aria-checked="provisional.gender === g.value"
-                                    @click="provisional.gender = provisional.gender === g.value ? '' : g.value"
-                                >{{ g.label }}</button>
-                            </div>
                         </div>
                         <p v-if="provisionalError" class="nrp__error mt-2">{{ provisionalError }}</p>
                     </v-card-text>
@@ -956,7 +934,7 @@ function submit(): void {
             <!-- ③ 日付（予約の操作順：顧客→メニュー→日時→担当→ブース→インターバル→備考。Task 11-30） -->
             <div v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__block">
                 <span class="nrp__block-label">日付</span>
-                <DateField v-model="date" label="" density="compact" :clearable="false" />
+                <DateField block v-model="date" label="" density="compact" :clearable="false" />
             </div>
 
             <!-- ④ 開始時間 -->
@@ -966,7 +944,7 @@ function submit(): void {
                     <span v-if="loadingSlots" class="nrp__block-note">{{ MESSAGES.common.loading }}</span>
                 </span>
 
-                <p v-if="selectedServiceId === null" class="nrp__value nrp__value--empty">---</p>
+                <p v-if="selectedServiceId === null" class="nrp__value nrp__value--empty">{{ MESSAGES.common.emptyValue }}</p>
                 <p v-else-if="availabilityLoaded && slots.length === 0" class="nrp__muted">
                     {{ MESSAGES.availability.noneForCondition }}
                 </p>
@@ -1005,14 +983,28 @@ function submit(): void {
                     :hint="selectedStaffIneligible ? MESSAGES.reservation.staffNotEligibleHint : undefined"
                     persistent-hint
                 />
-                <v-checkbox
-                    v-if="selectedStaffId !== null"
-                    v-model="form.is_staff_requested"
-                    label="指名"
-                    density="compact"
-                    hide-details
-                    class="nrp__nomination"
-                />
+                <!-- 指名／男性希望／女性希望。性別希望は担当を決めていなくても付けられる（押し直すと外れる）。 -->
+                <div class="nrp__prefs" role="group" aria-label="担当の希望">
+                    <button
+                        type="button"
+                        class="nrp__pref"
+                        :class="{ 'nrp__pref--active': form.is_staff_requested }"
+                        :disabled="selectedStaffId === null"
+                        :aria-pressed="form.is_staff_requested"
+                        data-testid="nrp-pref-nomination"
+                        @click="form.is_staff_requested = !form.is_staff_requested"
+                    >指名</button>
+                    <button
+                        v-for="g in GENDER_PREFERENCES"
+                        :key="g.value"
+                        type="button"
+                        class="nrp__pref"
+                        :class="{ 'nrp__pref--active': form.staff_gender_preference === g.value }"
+                        :aria-pressed="form.staff_gender_preference === g.value"
+                        :data-testid="`nrp-pref-${g.value}`"
+                        @click="form.staff_gender_preference = form.staff_gender_preference === g.value ? null : g.value"
+                    >{{ g.label }}</button>
+                </div>
             </div>
 
             <!-- ⑥ ブース（自動・変更可） -->
@@ -1114,6 +1106,7 @@ function submit(): void {
                 <strong>{{ timeLabel(form.starts_at) }}〜{{ selectedEndLabel }}</strong>
                 <span>{{ selectedService.name }}</span>
                 <span v-if="selectedStaffName">{{ selectedStaffName }}<template v-if="form.is_staff_requested">（指名）</template></span>
+                <span v-if="form.staff_gender_preference">{{ form.staff_gender_preference === 'male' ? '男性希望' : '女性希望' }}</span>
                 <span>{{ selectedBoothName ?? MESSAGES.bookingResources.boothAuto }}</span>
                 <span v-if="form.buffer_min > 0" class="nrp__summary-muted">{{ MESSAGES.visitCompletion.bufferAfter.replace('{min}', String(form.buffer_min)) }}</span>
             </div>
@@ -1366,8 +1359,38 @@ function submit(): void {
     margin-left: auto;
 }
 
-.nrp__nomination {
-    margin-top: -4px;
+.nrp__prefs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.nrp__pref {
+    height: 30px;
+    padding: 0 4px;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+    border-radius: 8px;
+    background: rgb(var(--v-theme-surface));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.75);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.nrp__pref:hover:not(:disabled) {
+    border-color: rgb(var(--v-theme-primary));
+}
+
+.nrp__pref:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.nrp__pref--active {
+    border-color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-primary), 0.1);
+    color: rgb(var(--v-theme-primary));
 }
 
 /* ラベル＋中身をひとかたまりにするブロック（顧客・バッファ・開始時間で使う）。 */
@@ -1410,19 +1433,6 @@ function submit(): void {
     border: 1px solid rgba(var(--v-theme-primary), 0.25);
     border-radius: 10px;
     background: rgba(var(--v-theme-primary), 0.05);
-}
-
-.nrp__avatar {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: rgb(var(--v-theme-primary));
-    color: #fff;
-    font-size: 0.8125rem;
-    font-weight: 800;
 }
 
 .nrp__customer-body {
@@ -1628,18 +1638,18 @@ function submit(): void {
 .nrp__toggle {
     display: flex;
     gap: 2px;
-    padding: 3px;
-    border-radius: 10px;
+    padding: 2px;
+    border-radius: 8px;
     background: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .nrp__toggle-btn {
     flex: 1 1 0;
-    height: 28px;
+    height: 22px;
     border: 0;
-    border-radius: 8px;
+    border-radius: 6px;
     background: transparent;
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
     font-weight: 700;
     color: rgba(var(--v-theme-on-surface), 0.65);
     cursor: pointer;
@@ -1695,27 +1705,6 @@ function submit(): void {
     display: flex;
     flex-direction: column;
     gap: 12px;
-}
-
-.nrp__gender {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px;
-    border-radius: 10px;
-    background: rgba(var(--v-theme-on-surface), 0.06);
-}
-
-.nrp__gender-label {
-    flex: 0 0 auto;
-    padding: 0 8px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: rgba(var(--v-theme-on-surface), 0.65);
-}
-
-.nrp__gender .nrp__buffer {
-    flex: 1 1 0;
 }
 
 .nrp__history {

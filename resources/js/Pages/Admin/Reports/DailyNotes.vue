@@ -65,7 +65,7 @@ function save(day: DayNote): void {
     <MonthlyReportTabs active="notes" :month="month" />
     <ReportFilterBar>
         <ReportFilterField size="md">
-            <MonthField :model-value="month" :label="labels.dailyNotesMonth" density="compact" data-testid="daily-notes-month" @update:model-value="changeMonth" />
+            <MonthField :model-value="month" :label="labels.dailyNotesMonth" data-testid="daily-notes-month" @update:model-value="changeMonth" />
         </ReportFilterField>
         <template v-if="!editable" #meta>{{ labels.dailyNotesReadOnly }}</template>
     </ReportFilterBar>

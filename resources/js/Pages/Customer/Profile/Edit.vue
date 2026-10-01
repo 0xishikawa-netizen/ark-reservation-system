@@ -52,14 +52,14 @@ const submit = (): void => {
             />
 
             <v-form @submit.prevent="submit">
-                <v-text-field
+                <v-text-field class="ark-field-name"
                     v-model="form.name"
                     label="氏名"
                     maxlength="255"
                     autocomplete="name"
                     :error-messages="form.errors.name"
                 />
-                <v-text-field
+                <v-text-field class="ark-field-name"
                     v-model="form.kana"
                     label="カナ"
                     maxlength="100"
@@ -74,8 +74,10 @@ const submit = (): void => {
                     autocomplete="tel"
                     :error-messages="form.errors.phone"
                 />
+                <!-- 生年月日は何十年も前を選ぶため、カレンダーではなく日付の直接入力のまま（幅だけ他の日付と同じ）。 -->
                 <v-text-field
                     v-model="form.birthday"
+                    class="ark-field-date"
                     label="生年月日"
                     type="date"
                     autocomplete="bday"

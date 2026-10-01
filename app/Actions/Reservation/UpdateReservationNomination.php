@@ -24,11 +24,15 @@ final class UpdateReservationNomination
         bool $isStaffRequested,
         int $expectedVersion,
         ?Authenticatable $actor,
+        bool $updateGenderPreference = false,
+        ?string $genderPreference = null,
     ): Reservation {
         $reservation = DB::transaction(function () use (
             $reservation,
             $isStaffRequested,
             $expectedVersion,
+            $updateGenderPreference,
+            $genderPreference,
         ): Reservation {
             $locked = Reservation::query()
                 ->whereKey($reservation->getKey())
@@ -43,7 +47,11 @@ final class UpdateReservationNomination
                 // 担当スタッフが未割当なら「指名」は成立しない。
                 'is_staff_requested' => $locked->staff_id !== null && $isStaffRequested,
                 'version' => $locked->version + 1,
-            ])->save();
+            ]);
+            if ($updateGenderPreference) {
+                $locked->staff_gender_preference = $genderPreference;
+            }
+            $locked->save();
 
             return $locked;
         });

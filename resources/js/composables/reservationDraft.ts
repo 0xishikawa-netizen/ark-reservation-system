@@ -18,6 +18,8 @@ export interface ReservationDraft {
     service_id: number | null;
     staff_id: number | null;
     is_staff_requested: boolean;
+    /** 担当スタッフの性別希望（male / female）。希望なしは null。 */
+    staff_gender_preference: 'male' | 'female' | null;
     booth_id: number | null;
     booth_manually_set: boolean;
     date: string;
@@ -35,6 +37,7 @@ export function createEmptyReservationDraft(): ReservationDraft {
         service_id: null,
         staff_id: null,
         is_staff_requested: false,
+        staff_gender_preference: null,
         booth_id: null,
         booth_manually_set: false,
         date: '',

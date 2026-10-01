@@ -42,7 +42,7 @@ function reload(month: string, basis: SalesBasis): void {
     <PageHeader :title="hub.title" :subtitle="hub.overviewSubtitle" />
     <MonthlyReportTabs active="overview" :month="report.month_key" :basis="report.sales_basis" />
     <ReportFilterBar>
-        <ReportFilterField size="md"><MonthField :model-value="report.month_key" :label="MESSAGES.calendar.targetMonth" density="compact" data-testid="month-input" @update:model-value="(v: string) => reload(v, report.sales_basis)" /></ReportFilterField>
+        <ReportFilterField size="md"><MonthField :model-value="report.month_key" :label="MESSAGES.calendar.targetMonth" data-testid="month-input" @update:model-value="(v: string) => reload(v, report.sales_basis)" /></ReportFilterField>
         <ReportFilterField size="md"><ReportSelect :model-value="report.sales_basis" :items="basisItems" :label="labels.annualBasis" @update:model-value="(v: SalesBasis) => reload(report.month_key, v)" /></ReportFilterField>
     </ReportFilterBar>
 

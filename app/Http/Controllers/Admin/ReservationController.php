@@ -218,6 +218,7 @@ final class ReservationController extends Controller
             notes: $this->normalizeNotes($data['notes'] ?? null),
             adminContext: true,
             isStaffRequested: (bool) ($data['is_staff_requested'] ?? false),
+            staffGenderPreference: $data['staff_gender_preference'] ?? null,
             bufferMin: (int) ($data['buffer_min'] ?? 0),
         ));
 
@@ -329,6 +330,9 @@ final class ReservationController extends Controller
             ? (bool) $data['is_staff_requested']
             : (bool) $reservation->is_staff_requested;
         $nominationChanged = $nominationProvided && $isStaffRequested !== (bool) $reservation->is_staff_requested;
+        $genderProvided = array_key_exists('staff_gender_preference', $data);
+        $genderPreference = $genderProvided ? ($data['staff_gender_preference'] ?: null) : $reservation->staff_gender_preference;
+        $genderChanged = $genderProvided && $genderPreference !== $reservation->staff_gender_preference;
         $scheduleChanged = ! $startsAt->equalTo(CarbonImmutable::instance($reservation->starts_at))
             || $staffId !== ($reservation->staff_id === null ? null : (int) $reservation->staff_id)
             || $boothId !== ($reservation->booth_id === null ? null : (int) $reservation->booth_id);
@@ -346,6 +350,8 @@ final class ReservationController extends Controller
                 updateNotes: $notesProvided,
                 notes: $notes,
                 isStaffRequested: $nominationProvided ? $isStaffRequested : null,
+                updateStaffGenderPreference: $genderProvided,
+                staffGenderPreference: $genderPreference,
             ));
         } else {
             if ($notesChanged) {
@@ -355,8 +361,8 @@ final class ReservationController extends Controller
                 throw new StaleReservationException;
             }
 
-            if ($nominationChanged) {
-                $reservation = $updateNomination->execute($reservation, $isStaffRequested, $version, $user);
+            if ($nominationChanged || $genderChanged) {
+                $reservation = $updateNomination->execute($reservation, $isStaffRequested, $version, $user, $genderProvided, $genderPreference);
             }
         }
 

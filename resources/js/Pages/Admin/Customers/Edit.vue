@@ -2,8 +2,10 @@
 import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { realEmail } from '@/utils/placeholderEmail';
 import CustomerPicker, { type PickedCustomer } from '@/components/checkout/CustomerPicker.vue';
 import { ref } from 'vue';
+import { PageHeader, SectionCard } from '@/components/ark';
 
 defineOptions({ layout: AdminLayout });
 
@@ -76,94 +78,138 @@ const submit = (): void => {
 <template>
     <Head :title="`${customer.name}を編集`" />
 
-    <v-card max-width="760" title="顧客プロフィール編集">
-        <v-card-text>
-            <v-alert type="info" variant="tonal" class="mb-5">
-                {{ MESSAGES.customer.emailNotEditable }}
-            </v-alert>
+    <PageHeader title="顧客プロフィール編集" :subtitle="customer.name" />
 
-            <v-text-field
-                :model-value="customer.email"
-                label="メールアドレス"
-                readonly
-            />
-
-            <v-form @submit.prevent="submit">
-                <v-text-field
-                    v-model="form.name"
-                    label="氏名"
-                    maxlength="255"
-                    :error-messages="form.errors.name"
-                />
-                <v-text-field
-                    v-model="form.kana"
-                    label="カナ"
-                    maxlength="100"
-                    :error-messages="form.errors.kana"
-                    required
-                />
-                <v-text-field
-                    v-model="form.phone"
-                    label="電話番号"
-                    type="tel"
-                    maxlength="20"
-                    :error-messages="form.errors.phone"
-                />
-                <v-text-field
-                    v-model="form.birthday"
-                    label="生年月日"
-                    type="date"
-                    :error-messages="form.errors.birthday"
-                />
-                <v-select
-                    v-model="form.gender"
-                    label="性別"
-                    :items="genderOptions"
-                    clearable
-                    :error-messages="form.errors.gender"
-                />
-                <v-textarea
-                    v-model="form.note"
-                    label="メモ"
-                    maxlength="1000"
-                    counter
-                    :error-messages="form.errors.note"
-                />
-
-                <div class="d-flex ga-3 flex-wrap">
-                    <v-btn type="submit" color="primary" :loading="form.processing">
-                        保存
-                    </v-btn>
-                    <v-btn
-                        variant="text"
-                        :href="`/admin/customers/${customer.user_id}`"
-                    >
-                        キャンセル
-                    </v-btn>
+    <!-- 顧客詳細の「基本情報」と同じ並びで、値の部分だけ入力欄にする。 -->
+    <SectionCard title="基本情報" class="basic-information-card">
+        <v-form @submit.prevent="submit">
+            <dl class="customer-profile-grid">
+                <div class="customer-profile-item">
+                    <dt>氏名</dt>
+                    <dd><v-text-field v-model="form.name" aria-label="氏名" maxlength="255" hide-details="auto" :error-messages="form.errors.name" /></dd>
                 </div>
-            </v-form>
-        </v-card-text>
-    </v-card>
-
-    <v-card v-if="karte" max-width="760" :title="karteLabels.karteTitle" :subtitle="karteLabels.karteSubtitle" class="mt-4" data-testid="karte-card">
-        <v-card-text>
-            <v-form @submit.prevent="saveKarte">
-                <v-select v-model="karteForm.acquisition_channel_id" :items="acquisitionChannels" item-title="name" item-value="id" :label="karteLabels.acquisitionChannel"
-                    clearable :readonly="!canManageKarte" :error-messages="karteForm.errors.acquisition_channel_id" />
-                <v-text-field v-model="karteForm.acquisition_note" :label="karteLabels.acquisitionNote" maxlength="100" :readonly="!canManageKarte" :error-messages="karteForm.errors.acquisition_note" />
-                <v-select v-model="karteForm.visit_purpose_ids" :items="visitPurposes" item-title="name" item-value="id" :label="karteLabels.visitPurposes"
-                    multiple chips closable-chips :readonly="!canManageKarte" :error-messages="karteForm.errors.visit_purpose_ids" />
-                <v-text-field v-model="karteForm.visit_purpose_note" :label="karteLabels.visitPurposeNote" maxlength="255" :readonly="!canManageKarte" :error-messages="karteForm.errors.visit_purpose_note" />
-                <CustomerPicker v-if="canManageKarte" v-model="referrer" :endpoint="customerSearchEndpoint" :label="karteLabels.referrerCustomer" class="mb-4" />
-                <v-text-field v-model="karteForm.referrer_name" :label="karteLabels.referrerName" maxlength="100" :readonly="!canManageKarte" :error-messages="karteForm.errors.referrer_name" />
-                <div class="d-flex ga-3 flex-wrap">
-                    <v-select v-model="karteForm.prefecture" :items="prefectures" :label="karteLabels.prefecture" clearable :readonly="!canManageKarte"
-                        style="max-width: 220px" :error-messages="karteForm.errors.prefecture" />
-                    <v-text-field v-model="karteForm.city" :label="karteLabels.city" :hint="karteLabels.cityHint" persistent-hint maxlength="50"
-                        :readonly="!canManageKarte" :error-messages="karteForm.errors.city" />
+                <div class="customer-profile-item">
+                    <dt>カナ</dt>
+                    <dd><v-text-field v-model="form.kana" aria-label="カナ" maxlength="100" hide-details="auto" required :error-messages="form.errors.kana" /></dd>
                 </div>
-                <v-btn v-if="canManageKarte" type="submit" color="primary" class="mt-4" :loading="karteForm.processing" data-testid="save-karte">{{ karteLabels.karteSave }}</v-btn>
-            </v-form>
-        </v-card-text>
-    </v-card>
+                <div class="customer-profile-item">
+                    <dt>電話番号</dt>
+                    <dd><v-text-field v-model="form.phone" aria-label="電話番号" type="tel" maxlength="20" hide-details="auto" :error-messages="form.errors.phone" /></dd>
+                </div>
+                <div class="customer-profile-item">
+                    <dt>生年月日</dt>
+                    <dd><v-text-field v-model="form.birthday" class="ark-field-date" aria-label="生年月日" type="date" hide-details="auto" :error-messages="form.errors.birthday" /></dd>
+                </div>
+                <div class="customer-profile-item">
+                    <dt>性別</dt>
+                    <dd><v-select v-model="form.gender" aria-label="性別" :items="genderOptions" clearable hide-details="auto" :error-messages="form.errors.gender" /></dd>
+                </div>
+                <div class="customer-profile-item customer-profile-item--wide">
+                    <dt>メールアドレス</dt>
+                    <dd>
+                        <v-text-field :model-value="realEmail(customer.email) ?? '-'" aria-label="メールアドレス" readonly hide-details="auto" :hint="MESSAGES.customer.emailNotEditable" persistent-hint />
+                    </dd>
+                </div>
+                <div class="customer-profile-item customer-profile-item--wide">
+                    <dt>メモ</dt>
+                    <dd><v-textarea v-model="form.note" aria-label="メモ" maxlength="1000" counter rows="3" auto-grow hide-details="auto" :error-messages="form.errors.note" /></dd>
+                </div>
+            </dl>
+
+            <div class="d-flex ga-3 flex-wrap mt-4">
+                <v-btn type="submit" color="primary" :loading="form.processing">保存</v-btn>
+                <v-btn variant="text" :href="`/admin/customers/${customer.user_id}`">キャンセル</v-btn>
+            </div>
+        </v-form>
+    </SectionCard>
+
+    <!-- カルテ（分析項目）も基本情報と同じ並び（ラベルの下に入力欄）にする。 -->
+    <SectionCard v-if="karte" :title="karteLabels.karteTitle" :subtitle="karteLabels.karteSubtitle" class="basic-information-card" data-testid="karte-card">
+        <v-form @submit.prevent="saveKarte">
+            <dl class="customer-profile-grid">
+                <div class="customer-profile-item">
+                    <dt>{{ karteLabels.acquisitionChannel }}</dt>
+                    <dd><v-select v-model="karteForm.acquisition_channel_id" :aria-label="karteLabels.acquisitionChannel" :items="acquisitionChannels" item-title="name" item-value="id"
+                        clearable hide-details="auto" :readonly="!canManageKarte" :error-messages="karteForm.errors.acquisition_channel_id" /></dd>
+                </div>
+                <div class="customer-profile-item">
+                    <dt>{{ karteLabels.acquisitionNote }}</dt>
+                    <dd><v-text-field v-model="karteForm.acquisition_note" :aria-label="karteLabels.acquisitionNote" maxlength="100" hide-details="auto" :readonly="!canManageKarte" :error-messages="karteForm.errors.acquisition_note" /></dd>
+                </div>
+                <div class="customer-profile-item customer-profile-item--wide">
+                    <dt>{{ karteLabels.visitPurposes }}</dt>
+                    <dd><v-select v-model="karteForm.visit_purpose_ids" :aria-label="karteLabels.visitPurposes" :items="visitPurposes" item-title="name" item-value="id"
+                        multiple chips closable-chips hide-details="auto" :readonly="!canManageKarte" :error-messages="karteForm.errors.visit_purpose_ids" /></dd>
+                </div>
+                <div class="customer-profile-item customer-profile-item--wide">
+                    <dt>{{ karteLabels.visitPurposeNote }}</dt>
+                    <dd><v-text-field v-model="karteForm.visit_purpose_note" :aria-label="karteLabels.visitPurposeNote" maxlength="255" hide-details="auto" :readonly="!canManageKarte" :error-messages="karteForm.errors.visit_purpose_note" /></dd>
+                </div>
+                <div v-if="canManageKarte" class="customer-profile-item customer-profile-item--wide">
+                    <dt>{{ karteLabels.referrerCustomer }}</dt>
+                    <dd><CustomerPicker v-model="referrer" :endpoint="customerSearchEndpoint" :label="karteLabels.referrerCustomer" /></dd>
+                </div>
+                <div class="customer-profile-item customer-profile-item--wide">
+                    <dt>{{ karteLabels.referrerName }}</dt>
+                    <dd><v-text-field v-model="karteForm.referrer_name" :aria-label="karteLabels.referrerName" maxlength="100" hide-details="auto" :readonly="!canManageKarte" :error-messages="karteForm.errors.referrer_name" /></dd>
+                </div>
+                <div class="customer-profile-item">
+                    <dt>{{ karteLabels.prefecture }}</dt>
+                    <dd><v-select v-model="karteForm.prefecture" :aria-label="karteLabels.prefecture" :items="prefectures" clearable hide-details="auto" :readonly="!canManageKarte" :error-messages="karteForm.errors.prefecture" /></dd>
+                </div>
+                <div class="customer-profile-item">
+                    <dt>{{ karteLabels.city }}</dt>
+                    <dd><v-text-field v-model="karteForm.city" :aria-label="karteLabels.city" :hint="karteLabels.cityHint" persistent-hint maxlength="50" :readonly="!canManageKarte" :error-messages="karteForm.errors.city" /></dd>
+                </div>
+            </dl>
+            <div v-if="canManageKarte" class="d-flex ga-3 flex-wrap mt-4">
+                <v-btn type="submit" color="primary" :loading="karteForm.processing" data-testid="save-karte">{{ karteLabels.karteSave }}</v-btn>
+            </div>
+        </v-form>
+    </SectionCard>
 </template>
+
+<style scoped>
+.basic-information-card {
+    margin-bottom: var(--ark-space-5);
+}
+
+.customer-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    gap: 0 var(--ark-space-5);
+}
+
+.customer-profile-item--wide {
+    grid-column: 1 / -1;
+}
+
+.customer-profile-item {
+    min-width: 0;
+    padding: var(--ark-space-3) 0;
+    border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.customer-profile-item dt {
+    color: rgba(var(--v-theme-on-surface), 0.72);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    line-height: 1.4;
+}
+
+.customer-profile-item dd {
+    margin: var(--ark-space-1) 0 0;
+}
+
+@media (min-width: 960px) {
+    .customer-profile-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .customer-profile-item--wide {
+        grid-column: span 2;
+    }
+}
+</style>

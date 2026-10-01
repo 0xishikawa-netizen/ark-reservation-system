@@ -138,8 +138,6 @@ function save(): void {
                             :model-value="soundType"
                             :items="soundItems"
                             :disabled="!enabled"
-                            variant="outlined"
-                            density="comfortable"
                             hide-details="auto"
                             prepend-inner-icon="mdi-bell-ring-outline"
                             :error-messages="errors.type"

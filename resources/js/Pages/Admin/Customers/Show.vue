@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
-import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
+import { realEmail } from '@/utils/placeholderEmail';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
 
@@ -101,7 +102,6 @@ const nextReservation = computed<RecentReservation | null>(() => {
     );
 });
 
-const display = (value: string | null): string => value || MESSAGES.common.notEntered;
 
 const genderLabel = (value: string | null): string => {
     const labels: Record<string, string> = {
@@ -110,7 +110,7 @@ const genderLabel = (value: string | null): string => {
         other: 'その他',
     };
 
-    return value ? (labels[value] ?? value) : MESSAGES.common.notEntered;
+    return value ? (labels[value] ?? value) : '';
 };
 
 const createdViaLabel = (value: string): string => {
@@ -165,23 +165,23 @@ function formatShortDateTime(value: string): string {
             </div>
             <div class="customer-profile-item">
                 <dt>カナ</dt>
-                <dd>{{ customer.kana }}</dd>
+                <dd><template v-if="customer.kana">{{ customer.kana }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item">
                 <dt>電話番号</dt>
-                <dd>{{ display(customer.phone) }}</dd>
+                <dd><template v-if="customer.phone">{{ customer.phone }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item">
                 <dt>生年月日</dt>
-                <dd>{{ display(customer.birthday) }}</dd>
+                <dd><template v-if="customer.birthday">{{ customer.birthday }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item">
                 <dt>性別</dt>
-                <dd>{{ genderLabel(customer.gender) }}</dd>
+                <dd><template v-if="genderLabel(customer.gender)">{{ genderLabel(customer.gender) }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item customer-profile-item--wide">
                 <dt>メールアドレス</dt>
-                <dd>{{ customer.email }}</dd>
+                <dd><template v-if="realEmail(customer.email)">{{ realEmail(customer.email) }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item">
                 <dt>メール認証</dt>
@@ -193,11 +193,11 @@ function formatShortDateTime(value: string): string {
             </div>
             <div class="customer-profile-item">
                 <dt>登録日</dt>
-                <dd>{{ display(customer.created_at) }}</dd>
+                <dd><template v-if="customer.created_at">{{ customer.created_at }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item customer-profile-item--wide">
                 <dt>メモ</dt>
-                <dd class="customer-note">{{ display(customer.note) }}</dd>
+                <dd class="customer-note"><template v-if="customer.note">{{ customer.note }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
         </dl>
     </SectionCard>
@@ -215,7 +215,7 @@ function formatShortDateTime(value: string): string {
                     </div>
                     <div class="text-body-2 mt-1">{{ nextReservation.service_name }}</div>
                     <div class="text-caption text-medium-emphasis">
-                        担当: {{ nextReservation.staff_name ?? '未割当' }}
+                        担当: <template v-if="nextReservation.staff_name">{{ nextReservation.staff_name }}</template><EmptyValue v-else :label="MESSAGES.common.notSet" />
                     </div>
                     <StatusChip
                         :status="nextReservation.status"
@@ -266,7 +266,7 @@ function formatShortDateTime(value: string): string {
                         <div>
                             <span class="summary-metrics__label">当期終了</span>
                             <strong>
-                                {{ display(overview.membership.current_period_end) }}
+                                <template v-if="overview.membership.current_period_end">{{ overview.membership.current_period_end }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" />
                             </strong>
                         </div>
                     </div>
@@ -337,7 +337,7 @@ function formatShortDateTime(value: string): string {
                         {{ reservation.starts_at }} ・ {{ reservation.service_name }}
                     </template>
                     <template #subtitle>
-                        担当: {{ reservation.staff_name ?? '未割当' }}
+                        担当: <template v-if="reservation.staff_name">{{ reservation.staff_name }}</template><EmptyValue v-else :label="MESSAGES.common.notSet" />
                     </template>
                     <template #append>
                         <StatusChip

@@ -3,6 +3,7 @@ import { useForm, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import PanelShell from '@/components/admin/PanelShell.vue';
 import { DateField, TimeField } from '@/components/ark';
+import { LEGACY_BLOCK_TYPES, BLOCK_TYPES } from '@/constants/scheduleBlockTypes';
 import { MESSAGES } from '@/constants/messages';
 
 interface StaffOption {
@@ -29,17 +30,8 @@ interface ScheduleBlock {
     note: string | null;
 }
 
-const MAIN_BLOCK_TYPES = [
-    { value: 'BREAK', title: '休憩' },
-    { value: 'MEETING', title: 'ミーティング' },
-    { value: 'ADMIN', title: '事務' },
-    { value: 'CLEANING', title: '清掃' },
-];
-const SUB_BLOCK_TYPES = [
-    { value: 'TRAINING', title: '研修' },
-    { value: 'OUT', title: '外出' },
-    { value: 'OTHER', title: 'その他' },
-];
+/** 選べる種類。以前の種類（事務・清掃）の予定を開いた時は、その種類も並べる。 */
+const blockTypeOptions = computed(() => (BLOCK_TYPES.some((t) => t.value === form.type) ? BLOCK_TYPES : [...BLOCK_TYPES, ...LEGACY_BLOCK_TYPES.filter((t) => t.value === form.type)]));
 
 interface BusinessHours {
     open: string;
@@ -65,6 +57,7 @@ const BLOCK_ICON: Record<string, string> = {
     MEETING: 'mdi-account-group-outline',
     ADMIN: 'mdi-file-document-outline',
     CLEANING: 'mdi-broom',
+    WORK: 'mdi-briefcase-outline',
     TRAINING: 'mdi-school-outline',
     OUT: 'mdi-walk',
     OTHER: 'mdi-dots-horizontal',
@@ -75,6 +68,7 @@ const BLOCK_COLOR: Record<string, string> = {
     MEETING: 'info',
     ADMIN: 'secondary',
     CLEANING: 'success',
+    WORK: 'primary',
     TRAINING: 'accent',
     OUT: 'secondary',
     OTHER: 'secondary',
@@ -135,7 +129,7 @@ const targetName = computed<string>(() => {
         return props.booths.find((b) => b.id === props.block.booth_id)?.name ?? 'ブース';
     }
 
-    return '---';
+    return MESSAGES.common.emptyValue;
 });
 
 function buildForm() {
@@ -233,7 +227,7 @@ function confirmDelete(): void {
                 <div>
                     <dt>メモ</dt>
                     <dd :class="{ 'sbd__facts-empty': !block.note }">
-                        {{ block.note || '---' }}
+                        {{ block.note || MESSAGES.common.emptyValue }}
                     </dd>
                 </div>
             </dl>
@@ -258,33 +252,19 @@ function confirmDelete(): void {
 
             <div class="sbd__typefield">
                 <span class="sbd__typelabel">種類</span>
-                <div class="sbd__typechips" role="radiogroup" aria-label="予定の種類">
-                    <v-chip
-                        v-for="t in MAIN_BLOCK_TYPES"
+                <div class="sbd__typegrid" role="radiogroup" aria-label="予定の種類">
+                    <button
+                        v-for="t in blockTypeOptions"
                         :key="t.value"
-                        :color="form.type === t.value ? 'primary' : undefined"
-                        :variant="form.type === t.value ? 'flat' : 'outlined'"
-                        size="small"
+                        type="button"
+                        class="sbd__type"
+                        :class="{ 'sbd__type--active': form.type === t.value }"
                         role="radio"
                         :aria-checked="form.type === t.value"
                         @click="form.type = t.value"
                     >
                         {{ t.title }}
-                    </v-chip>
-                </div>
-                <div class="sbd__typechips sbd__typechips--sub">
-                    <v-chip
-                        v-for="t in SUB_BLOCK_TYPES"
-                        :key="t.value"
-                        size="small"
-                        variant="text"
-                        :class="{ 'sbd__typechip--active': form.type === t.value }"
-                        role="radio"
-                        :aria-checked="form.type === t.value"
-                        @click="form.type = t.value"
-                    >
-                        {{ t.title }}
-                    </v-chip>
+                    </button>
                 </div>
                 <p v-if="form.errors.type" class="sbd__error">{{ form.errors.type }}</p>
             </div>
@@ -299,10 +279,10 @@ function confirmDelete(): void {
                 :error-messages="form.errors.title"
             />
 
-            <DateField v-model="form.work_date" label="日付" density="compact" :clearable="false" />
+            <DateField block v-model="form.work_date" label="日付" density="compact" :clearable="false" />
 
             <div class="sbd__time-row">
-                <TimeField
+                <TimeField block
                     v-model="form.start_at"
                     label="開始"
                     density="compact"
@@ -311,7 +291,7 @@ function confirmDelete(): void {
                     :step-minutes="stepMinutes"
                     :error-messages="form.errors.start_at"
                 />
-                <TimeField
+                <TimeField block
                     v-model="form.end_at"
                     label="終了"
                     density="compact"
@@ -563,19 +543,33 @@ function confirmDelete(): void {
     color: rgba(var(--v-theme-on-surface), 0.74);
 }
 
-.sbd__typechips {
-    display: flex;
-    flex-wrap: wrap;
+.sbd__typegrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
 }
 
-.sbd__typechips--sub :deep(.v-chip) {
-    color: rgba(var(--v-theme-on-surface), 0.72);
+.sbd__type {
+    height: 32px;
+    padding: 0 2px;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+    border-radius: 8px;
+    background: rgb(var(--v-theme-surface));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.75);
+    white-space: nowrap;
+    cursor: pointer;
 }
 
-.sbd__typechip--active {
-    font-weight: 800;
-    color: rgb(var(--v-theme-primary)) !important;
+.sbd__type:hover {
+    border-color: rgb(var(--v-theme-primary));
+}
+
+.sbd__type--active {
+    border-color: rgb(var(--v-theme-primary));
+    background: rgb(var(--v-theme-primary));
+    color: #fff;
 }
 
 .sbd__error {

@@ -27,6 +27,7 @@ final class UpdateAdminReservationRequest extends FormRequest
             'starts_at' => ['required', 'date'],
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
             'is_staff_requested' => ['nullable', 'boolean'],
+            'staff_gender_preference' => ['nullable', 'string', 'in:male,female'],
             'booth_id' => ['nullable', 'integer', 'exists:booths,id'],
             'version' => ['required', 'integer', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],

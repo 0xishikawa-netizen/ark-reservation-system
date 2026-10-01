@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
-import { EmptyState, PageHeader, SectionCard, StatusChip, MoneyField } from '@/components/ark';
+import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip, MoneyField } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
 
@@ -150,14 +150,14 @@ const syncFromStripe = (): void => {
                 <SectionCard title="予約情報" variant="outlined" height="100%" class="ark-table-section">
                     <v-table density="compact">
                         <tbody>
-                            <tr><td>顧客</td><td class="text-right">{{ payment.customer_name ?? MESSAGES.common.notEntered }}</td></tr>
+                            <tr><td>顧客</td><td class="text-right"><template v-if="payment.customer_name">{{ payment.customer_name }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></td></tr>
                             <tr>
                                 <td>予約</td>
                                 <td class="text-right">
                                     <span v-if="payment.reservation_id">
                                         #{{ payment.reservation_id }} / {{ payment.reservation_starts_at }}
                                     </span>
-                                    <span v-else class="text-medium-emphasis">{{ MESSAGES.common.notLinked }}</span>
+                                    <EmptyValue v-else :label="MESSAGES.common.notLinked" />
                                 </td>
                             </tr>
                             <tr><td>予約状況</td><td class="text-right">{{ reservationStatusLabels[payment.reservation_status ?? ''] ?? payment.reservation_status ?? MESSAGES.common.notLinked }}</td></tr>
@@ -228,14 +228,12 @@ const syncFromStripe = (): void => {
                         label="返金額"
                         :max="payment.refundable_amount"
                         :error-messages="form.errors.amount"
-                        density="comfortable"
                     />
                     <v-textarea
                         v-model="form.reason"
                         label="返金理由（必須・監査に記録されます）"
                         rows="3"
                         :error-messages="form.errors.reason"
-                        density="comfortable"
                     />
                 </v-card-text>
                 <v-card-actions>

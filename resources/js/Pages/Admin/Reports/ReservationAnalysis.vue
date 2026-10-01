@@ -37,7 +37,7 @@ function reload(month: string): void {
     <PageHeader :title="hub.title" :subtitle="hub.reservationSubtitle" />
     <MonthlyReportTabs active="reservations" :month="report.month_key" />
     <ReportFilterBar>
-        <ReportFilterField size="md"><MonthField :model-value="report.month_key" :label="MESSAGES.calendar.targetMonth" density="compact" data-testid="month-input" @update:model-value="reload" /></ReportFilterField>
+        <ReportFilterField size="md"><MonthField :model-value="report.month_key" :label="MESSAGES.calendar.targetMonth" data-testid="month-input" @update:model-value="reload" /></ReportFilterField>
     </ReportFilterBar>
 
     <div class="report-kpi-grid">

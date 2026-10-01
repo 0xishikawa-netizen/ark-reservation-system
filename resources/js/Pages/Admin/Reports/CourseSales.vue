@@ -68,7 +68,7 @@ function saveTarget(row: Row, clear = false): void {
     <PageHeader :title="labels.courseSalesTitle" :subtitle="labels.courseSalesSubtitle" />
     <MonthlyReportTabs active="courses" :month="month" :basis="basis" />
     <ReportFilterBar :loading="loading" :loading-text="MESSAGES.common.loading" :error="error">
-        <ReportFilterField size="md"><MonthField :model-value="month" :label="MESSAGES.calendar.targetMonth" density="compact" data-testid="month-input" @update:model-value="changeMonth" /></ReportFilterField>
+        <ReportFilterField size="md"><MonthField :model-value="month" :label="MESSAGES.calendar.targetMonth" data-testid="month-input" @update:model-value="changeMonth" /></ReportFilterField>
         <ReportFilterField size="md"><ReportSelect :model-value="basis" :items="basisItems" :label="labels.annualBasis" data-testid="basis-select" @update:model-value="changeBasis" /></ReportFilterField>
     </ReportFilterBar>
 
@@ -104,7 +104,7 @@ function saveTarget(row: Row, clear = false): void {
                     <td class="num group-start"><ReportValue :value="row.usage_count" /></td>
                     <td class="num"><ReportValue :value="row.user_count" /></td>
                     <td class="num group-start">
-                        <v-text-field v-if="editing === rowKey(row)" v-model.number="draftAmount" type="number" min="0" density="compact" variant="outlined" hide-details
+                        <v-text-field v-if="editing === rowKey(row)" v-model.number="draftAmount" type="number" min="0" hide-details
                             :aria-label="labels.courseTarget" style="min-width: 130px" />
                         <ReportValue v-else :value="row.target_amount" format="money" :empty-label="MESSAGES.common.notSet" />
                     </td>

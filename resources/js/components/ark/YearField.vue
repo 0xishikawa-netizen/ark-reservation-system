@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, useAttrs } from 'vue';
 import { MESSAGES } from '@/constants/messages';
 
 /**
@@ -11,6 +11,8 @@ defineOptions({ inheritAttrs: false });
 type FieldDensity = 'default' | 'comfortable' | 'compact';
 
 const props = withDefaults(defineProps<{
+    /** 幅いっぱいに広げる（ブッキングボードの左パネルなど、例外の画面だけで使う）。 */
+    block?: boolean;
     modelValue: number;
     label: string;
     minYear?: number;
@@ -20,6 +22,16 @@ const props = withDefaults(defineProps<{
     minYear: 2000,
     maxYear: 2100,
     density: 'comfortable',
+});
+
+// 親から渡された class/style は外側の要素に当てる（親の scoped スタイルの幅指定が効くように）。
+// それ以外の属性は実際の入力欄へ渡す。
+const attrs = useAttrs();
+const rootAttrs = computed(() => ({ class: attrs.class, style: attrs.style }));
+const fieldAttrs = computed(() => {
+    const { class: _class, style: _style, ...rest } = attrs;
+
+    return rest;
 });
 
 const emit = defineEmits<{ 'update:modelValue': [value: number] }>();
@@ -47,55 +59,69 @@ function select(year: number): void {
 </script>
 
 <template>
-    <v-menu v-model="menuOpen" :close-on-content-click="false" location="bottom start" min-width="auto" offset="6">
-        <template #activator="{ props: activatorProps }">
-            <div class="ark-year-field">
-                <v-text-field
-                    v-bind="{ ...activatorProps, ...$attrs }"
-                    :model-value="displayValue"
-                    :label="label"
-                    :density="density"
-                    variant="outlined"
-                    prepend-inner-icon="mdi-calendar-blank-outline"
-                    hide-details
-                    readonly
-                />
-            </div>
-        </template>
-        <div class="ark-year-cal" role="group" :aria-label="labels.selectYear">
-            <header class="ark-year-cal__head">
-                <span class="ark-year-cal__range">{{ years[0] }}〜{{ years[years.length - 1] }}年</span>
-                <div class="ark-year-cal__nav">
-                    <button type="button" :aria-label="labels.previousYears" :disabled="pageStart <= minYear" @click="shiftPage(-1)">
-                        <v-icon icon="mdi-chevron-left" size="20" />
-                    </button>
-                    <button type="button" :aria-label="labels.nextYears" :disabled="pageStart + 12 > maxYear" @click="shiftPage(1)">
-                        <v-icon icon="mdi-chevron-right" size="20" />
-                    </button>
+    <div class="ark-field-root ark-year-field-root" :class="{ 'ark-field-root--block': block }" v-bind="rootAttrs">
+        <v-menu v-model="menuOpen" :close-on-content-click="false" location="bottom start" min-width="auto" offset="6">
+            <template #activator="{ props: activatorProps }">
+                <div class="ark-year-field">
+                    <v-text-field
+                        v-bind="{ ...activatorProps, ...fieldAttrs }"
+                        :model-value="displayValue"
+                        :label="label"
+                        :density="density"
+                        variant="outlined"
+                        prepend-inner-icon="mdi-calendar-blank-outline"
+                        hide-details
+                        readonly
+                    />
                 </div>
-            </header>
-            <div class="ark-year-cal__grid">
-                <button
-                    v-for="year in years"
-                    :key="year"
-                    type="button"
-                    class="ark-year-cal__year"
-                    :class="{ 'is-selected': year === modelValue, 'is-current': year === currentYear && year !== modelValue }"
-                    :aria-pressed="year === modelValue"
-                    :data-testid="`calendar-year-${year}`"
-                    @click="select(year)"
-                >{{ year }}</button>
+            </template>
+            <div class="ark-year-cal" role="group" :aria-label="labels.selectYear">
+                <header class="ark-year-cal__head">
+                    <span class="ark-year-cal__range">{{ years[0] }}〜{{ years[years.length - 1] }}年</span>
+                    <div class="ark-year-cal__nav">
+                        <button type="button" :aria-label="labels.previousYears" :disabled="pageStart <= minYear" @click="shiftPage(-1)">
+                            <v-icon icon="mdi-chevron-left" size="20" />
+                        </button>
+                        <button type="button" :aria-label="labels.nextYears" :disabled="pageStart + 12 > maxYear" @click="shiftPage(1)">
+                            <v-icon icon="mdi-chevron-right" size="20" />
+                        </button>
+                    </div>
+                </header>
+                <div class="ark-year-cal__grid">
+                    <button
+                        v-for="year in years"
+                        :key="year"
+                        type="button"
+                        class="ark-year-cal__year"
+                        :class="{ 'is-selected': year === modelValue, 'is-current': year === currentYear && year !== modelValue }"
+                        :aria-pressed="year === modelValue"
+                        :data-testid="`calendar-year-${year}`"
+                        @click="select(year)"
+                    >{{ year }}</button>
+                </div>
+                <footer class="ark-year-cal__foot">
+                    <button type="button" class="ark-year-cal__current" :disabled="currentYear < minYear || currentYear > maxYear" @click="select(currentYear)">
+                        {{ labels.currentYear }}
+                    </button>
+                </footer>
             </div>
-            <footer class="ark-year-cal__foot">
-                <button type="button" class="ark-year-cal__current" :disabled="currentYear < minYear || currentYear > maxYear" @click="select(currentYear)">
-                    {{ labels.currentYear }}
-                </button>
-            </footer>
-        </div>
-    </v-menu>
+        </v-menu>
+    </div>
 </template>
 
 <style scoped>
+/* 日付・月・年の入力欄は全画面で同じ幅にそろえる（例外は block で幅いっぱい）。 */
+.ark-year-field-root {
+    width: var(--ark-field-year);
+    max-width: 100%;
+    flex: 0 0 auto;
+}
+
+.ark-field-root--block {
+    width: 100%;
+    flex: 1 1 auto;
+}
+
 .ark-year-field { width: 200px; max-width: 100%; }
 .ark-year-cal {
     width: 296px;

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
-import { PageHeader, SectionCard } from '@/components/ark';
+import { EmptyValue, PageHeader, SectionCard } from '@/components/ark';
+import { realEmail } from '@/utils/placeholderEmail';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
 
@@ -111,6 +112,14 @@ const createdViaLabel = (value: string): string => {
                 >
                     {{ item.name }}
                 </v-btn>
+            </template>
+            <template #item.email="{ item }">
+                <template v-if="realEmail(item.email)">{{ realEmail(item.email) }}</template>
+                <EmptyValue v-else :label="MESSAGES.common.notEntered" />
+            </template>
+            <template #item.kana="{ item }">
+                <template v-if="item.kana">{{ item.kana }}</template>
+                <EmptyValue v-else :label="MESSAGES.common.notEntered" />
             </template>
             <template #item.email_verified_at="{ item }">
                 <v-chip

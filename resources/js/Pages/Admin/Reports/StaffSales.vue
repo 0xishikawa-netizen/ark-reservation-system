@@ -54,7 +54,7 @@ function changeBasis(value: SalesBasis): void { if (value !== basis.value) { bas
     <PageHeader :title="labels.staffSalesTitle" :subtitle="labels.staffSalesSubtitle" />
     <MonthlyReportTabs active="staffSales" :month="month" :basis="basis" />
     <ReportFilterBar :loading="loading" :loading-text="MESSAGES.common.loading" :error="error">
-        <ReportFilterField size="md"><MonthField :model-value="month" :label="MESSAGES.calendar.targetMonth" density="compact" data-testid="month-input" @update:model-value="changeMonth" /></ReportFilterField>
+        <ReportFilterField size="md"><MonthField :model-value="month" :label="MESSAGES.calendar.targetMonth" data-testid="month-input" @update:model-value="changeMonth" /></ReportFilterField>
         <ReportFilterField size="md"><ReportSelect :model-value="basis" :items="basisItems" :label="labels.annualBasis" data-testid="basis-select" @update:model-value="changeBasis" /></ReportFilterField>
     </ReportFilterBar>
 

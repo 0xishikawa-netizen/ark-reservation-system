@@ -106,10 +106,10 @@ function changeAsOf(value: string): void {
 
     <ReportFilterBar :loading="loading" :loading-text="labels.customerLoading" :error="error">
         <ReportFilterField size="md">
-            <MonthField :model-value="selectedMonth" :label="labels.customerMonth" density="compact" data-testid="month-input" @update:model-value="changeMonth" />
+            <MonthField :model-value="selectedMonth" :label="labels.customerMonth" data-testid="month-input" @update:model-value="changeMonth" />
         </ReportFilterField>
         <ReportFilterField size="md">
-            <DateField :model-value="selectedAsOf" :label="labels.customerAsOf" :clearable="false" density="compact" data-testid="as-of-input" @update:model-value="changeAsOf" />
+            <DateField :model-value="selectedAsOf" :label="labels.customerAsOf" :clearable="false" data-testid="as-of-input" @update:model-value="changeAsOf" />
         </ReportFilterField>
         <template #meta>{{ labels.customerCohortMeta }} {{ report.cohort_month }} / {{ labels.customerAsOf }} {{ report.as_of_date }}</template>
     </ReportFilterBar>

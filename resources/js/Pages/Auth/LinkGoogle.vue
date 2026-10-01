@@ -29,7 +29,6 @@ const submit = (): void => {
                 label="メールアドレス"
                 type="email"
                 readonly
-                variant="filled"
                 :error-messages="form.errors.email"
             />
             <v-text-field

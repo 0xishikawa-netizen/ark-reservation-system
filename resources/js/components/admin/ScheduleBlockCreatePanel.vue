@@ -5,6 +5,7 @@ import PanelShell from '@/components/admin/PanelShell.vue';
 import { DateField, TimeField } from '@/components/ark';
 import { applyBlockPrefill, blockEndTimeFrom, type BlockDraft } from '@/composables/reservationDraft';
 import { isPastDateTime } from '@/utils/pastDateTime';
+import { BLOCK_TYPES } from '@/constants/scheduleBlockTypes';
 import { MESSAGES } from '@/constants/messages';
 
 interface StaffOption {
@@ -27,17 +28,8 @@ export interface BlockCreatePrefill {
 }
 
 // よく使う4種はチップで大きく、残りは小さめの補助チップにする（§32・312px内に収まるよう短い表記）。
-const MAIN_BLOCK_TYPES = [
-    { value: 'BREAK', title: '休憩' },
-    { value: 'MEETING', title: 'ミーティング' },
-    { value: 'ADMIN', title: '事務' },
-    { value: 'CLEANING', title: '清掃' },
-];
-const SUB_BLOCK_TYPES = [
-    { value: 'TRAINING', title: '研修' },
-    { value: 'OUT', title: '外出' },
-    { value: 'OTHER', title: 'その他' },
-];
+
+const ALL_BLOCK_TYPES = BLOCK_TYPES;
 
 const props = withDefaults(defineProps<{
     staff: StaffOption[];
@@ -224,33 +216,19 @@ function submit(): void {
 
         <div class="sbc__typefield">
             <span class="sbc__typelabel">種類</span>
-            <div class="sbc__typechips" role="radiogroup" aria-label="予定の種類">
-                <v-chip
-                    v-for="t in MAIN_BLOCK_TYPES"
+            <div class="sbc__typegrid" role="radiogroup" aria-label="予定の種類">
+                <button
+                    v-for="t in ALL_BLOCK_TYPES"
                     :key="t.value"
-                    :color="form.type === t.value ? 'primary' : undefined"
-                    :variant="form.type === t.value ? 'flat' : 'outlined'"
-                    size="small"
+                    type="button"
+                    class="sbc__type"
+                    :class="{ 'sbc__type--active': form.type === t.value }"
                     role="radio"
                     :aria-checked="form.type === t.value"
                     @click="form.type = t.value"
                 >
                     {{ t.title }}
-                </v-chip>
-            </div>
-            <div class="sbc__typechips sbc__typechips--sub">
-                <v-chip
-                    v-for="t in SUB_BLOCK_TYPES"
-                    :key="t.value"
-                    size="small"
-                    variant="text"
-                    :class="{ 'sbc__typechip--active': form.type === t.value }"
-                    role="radio"
-                    :aria-checked="form.type === t.value"
-                    @click="form.type = t.value"
-                >
-                    {{ t.title }}
-                </v-chip>
+                </button>
             </div>
             <p v-if="form.errors.type" class="sbc__error">{{ form.errors.type }}</p>
         </div>
@@ -266,10 +244,10 @@ function submit(): void {
             :error-messages="form.errors.title"
         />
 
-        <DateField v-model="form.work_date" label="日付" density="compact" :clearable="false" />
+        <DateField block v-model="form.work_date" label="日付" density="compact" :clearable="false" />
 
         <div class="sbc__time-row">
-            <TimeField
+            <TimeField block
                 v-model="form.start_at"
                 label="開始"
                 density="compact"
@@ -278,7 +256,7 @@ function submit(): void {
                 :step-minutes="stepMinutes"
                 :error-messages="form.errors.start_at"
             />
-            <TimeField
+            <TimeField block
                 v-model="form.end_at"
                 label="終了"
                 density="compact"
@@ -343,6 +321,7 @@ function submit(): void {
 }
 
 .sbc__when {
+    margin-bottom: var(--ark-space-3);
     display: grid;
     grid-template-columns: 1fr 1.5fr;
     gap: var(--ark-space-3);
@@ -397,19 +376,35 @@ function submit(): void {
     color: rgba(var(--v-theme-on-surface), 0.74);
 }
 
-.sbc__typechips {
-    display: flex;
-    flex-wrap: wrap;
+/* 種類：7つを同じ大きさのボタンで4列に並べる（選択中は濃い色）。 */
+.sbc__typegrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
 }
 
-.sbc__typechips--sub :deep(.v-chip) {
-    color: rgba(var(--v-theme-on-surface), 0.72);
+.sbc__type {
+    height: 32px;
+    padding: 0 2px;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+    border-radius: 8px;
+    background: rgb(var(--v-theme-surface));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.75);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
 }
 
-.sbc__typechip--active {
-    font-weight: 800;
-    color: rgb(var(--v-theme-primary)) !important;
+.sbc__type:hover {
+    border-color: rgb(var(--v-theme-primary));
+}
+
+.sbc__type--active {
+    border-color: rgb(var(--v-theme-primary));
+    background: rgb(var(--v-theme-primary));
+    color: #fff;
 }
 
 .sbc__error {

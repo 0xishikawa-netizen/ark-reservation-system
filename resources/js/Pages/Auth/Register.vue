@@ -20,14 +20,14 @@ const submit = (): void => {
 <template>
     <AuthCard title="新規登録" subtitle="ARK の予約・回数券・会員をご利用いただけます。">
         <v-form @submit.prevent="submit">
-            <v-text-field
+            <v-text-field class="ark-field-name"
                 v-model="form.name"
                 label="お名前"
                 autocomplete="name"
                 :error-messages="form.errors.name"
                 required
             />
-            <v-text-field
+            <v-text-field class="ark-field-name"
                 v-model="form.kana"
                 label="フリガナ"
                 autocomplete="off"

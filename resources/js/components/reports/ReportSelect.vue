@@ -21,8 +21,6 @@ const emit = defineEmits<{ 'update:modelValue': [value: T] }>();
         :label="label"
         item-title="title"
         item-value="value"
-        density="compact"
-        variant="outlined"
         hide-details
         menu-icon="mdi-chevron-down"
         @update:model-value="(value: T) => emit('update:modelValue', value)"

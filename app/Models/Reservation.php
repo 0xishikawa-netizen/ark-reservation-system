@@ -27,6 +27,7 @@ class Reservation extends Model
         'service_id',
         'staff_id',
         'is_staff_requested',
+        'staff_gender_preference',
         'booth_id',
         'starts_at',
         'ends_at',

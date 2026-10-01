@@ -136,6 +136,7 @@ final class ReservationPanelQuery
             'staff_id' => $reservation->staff_id,
             'staff_name' => $reservation->staff?->display_name,
             'is_staff_requested' => (bool) $reservation->is_staff_requested,
+            'staff_gender_preference' => $reservation->staff_gender_preference,
             'booth_name' => $reservation->booth?->name,
             'status' => $status->value,
             'status_label' => self::statusLabel($status),
