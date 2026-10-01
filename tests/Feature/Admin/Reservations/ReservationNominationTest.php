@@ -126,6 +126,17 @@ final class ReservationNominationTest extends TestCase
         ]);
     }
 
+    public function test_edit_screen_receives_the_nomination_flag_so_it_can_be_changed(): void
+    {
+        [$customer, $service, $staff, $booth] = $this->masters('nom-screen');
+        $admin = $this->admin();
+        $reservation = $this->createReservation($customer, $service, $staff, $booth, $admin);
+
+        $this->actingAs($admin)->get("/admin/reservations/{$reservation->id}/edit")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('reservation.is_staff_requested', false));
+    }
+
     public function test_dragging_a_reservation_to_a_new_time_preserves_the_nomination_flag(): void
     {
         [$customer, $service, $staff, $booth] = $this->masters('nom-drag');

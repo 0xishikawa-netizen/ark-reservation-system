@@ -28,6 +28,7 @@ interface ReservationDetail {
     source: string;
     version: number;
     notes: string | null;
+    is_staff_requested: boolean;
 }
 
 interface ServiceOption {
@@ -159,6 +160,7 @@ const form = useForm({
     booth_id: props.reservation.booth_id,
     version: props.reservation.version,
     notes: props.reservation.notes ?? '',
+    is_staff_requested: props.reservation.is_staff_requested,
     reservation: null as string | null,
 });
 
@@ -192,6 +194,10 @@ watch([selectedStaffId, selectedBoothId, date], () => {
 
     form.staff_id = selectedStaffId.value;
     form.booth_id = selectedBoothId.value;
+    // 担当を外したら指名も外す（指名は担当スタッフに対するもの）。
+    if (selectedStaffId.value === null) {
+        form.is_staff_requested = false;
+    }
     // ユーザーが担当・ブース・日付を実際に変えたときだけ、選択中の時間を白紙に戻す
     // （初回表示時は今の予約時刻をそのまま残す。§loadAvailability 内では消さない）。
     form.starts_at = null;
@@ -443,6 +449,14 @@ function submitAdjustment(): void {
                     :error-messages="form.errors.staff_id"
                     :hint="selectedStaffIneligible ? MESSAGES.reservation.staffNotEligibleHint : undefined"
                     persistent-hint
+                />
+                <v-checkbox
+                    v-model="form.is_staff_requested"
+                    label="指名"
+                    density="comfortable"
+                    hide-details
+                    :disabled="!isConfirmed || selectedStaffId === null"
+                    data-testid="edit-nomination"
                 />
                 <v-select
                     v-model="selectedBoothId"

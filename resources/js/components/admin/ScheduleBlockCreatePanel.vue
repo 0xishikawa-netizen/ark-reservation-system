@@ -194,10 +194,20 @@ function submit(): void {
         @close="emit('close')"
         @back="emit('back')"
     >
-        <div class="sbc__slotbox">
-            <span class="sbc__slotbox-date">{{ fmtDay(form.work_date) }}</span>
-            <span class="sbc__slotbox-time">{{ form.start_at }}〜{{ form.end_at }}</span>
-            <span v-if="selectedStaffName" class="sbc__slotbox-staff">{{ selectedStaffName }}</span>
+        <!-- 予約パネルと同じ「日付／時間／担当」のカード。 -->
+        <div class="sbc__when">
+            <div class="sbc__when-cell">
+                <span class="sbc__when-label">日付</span>
+                <span class="sbc__when-value">{{ fmtDay(form.work_date) }}</span>
+            </div>
+            <div class="sbc__when-cell">
+                <span class="sbc__when-label">時間</span>
+                <span class="sbc__when-value sbc__when-value--time">{{ form.start_at }}〜{{ form.end_at }}</span>
+            </div>
+            <div v-if="selectedStaffName" class="sbc__when-cell sbc__when-cell--staff">
+                <span class="sbc__when-label">担当</span>
+                <span class="sbc__when-value">{{ selectedStaffName }}</span>
+            </div>
         </div>
 
         <v-select
@@ -332,34 +342,48 @@ function submit(): void {
     margin-top: -4px;
 }
 
-.sbc__slotbox {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 4px var(--ark-space-2);
-    padding: var(--ark-space-2) var(--ark-space-3);
-    background: rgba(var(--v-theme-primary), 0.06);
+.sbc__when {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: var(--ark-space-3);
+    padding: var(--ark-space-3);
+    background: rgba(var(--v-theme-primary), 0.05);
     border: 1px solid rgba(var(--v-theme-primary), 0.14);
-    border-radius: var(--ark-radius);
+    border-radius: 10px;
 }
 
-.sbc__slotbox-date {
-    font-size: 0.75rem;
-    font-weight: 800;
+.sbc__when-cell {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.sbc__slotbox-time {
+.sbc__when-cell--staff {
+    grid-column: 1 / -1;
+    padding-top: var(--ark-space-2);
+    border-top: 1px dashed rgba(var(--v-theme-primary), 0.2);
+}
+
+.sbc__when-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(var(--v-theme-on-surface), 0.62);
+}
+
+.sbc__when-value {
     font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.sbc__when-value--time {
+    font-size: 1rem;
     font-weight: 800;
     color: rgb(var(--v-theme-primary));
     font-variant-numeric: tabular-nums;
-}
-
-.sbc__slotbox-staff {
-    margin-left: auto;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    color: rgba(var(--v-theme-on-surface), 0.74);
 }
 
 .sbc__typefield {

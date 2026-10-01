@@ -667,23 +667,30 @@ function submit(): void {
         @close="emit('close')"
         @back="emit('back')"
     >
-            <div class="nrp__slotbox">
-                <span v-if="awaitingBoardSlotSelection" class="nrp__slotbox-empty">
+            <!-- 日付・時間・担当を1枚のカードに3つ並べて、いつ・誰かをひと目で分かるようにする。 -->
+            <div class="nrp__when" data-testid="nrp-when">
+                <p v-if="awaitingBoardSlotSelection" class="nrp__when-empty">
                     {{ MESSAGES.reservation.pickSlotOnBoard }}
-                </span>
+                </p>
                 <template v-else>
-                    <span v-if="dateTimeLocked" class="nrp__slotbox-label">日付</span>
-                    <span class="nrp__slotbox-date">{{ fmtDay(date) }}</span>
-                    <span v-if="dateTimeLocked" class="nrp__slotbox-label">開始時間</span>
-                    <span v-if="form.starts_at" class="nrp__slotbox-time">
-                        {{ timeLabel(form.starts_at) }}<template v-if="selectedEndLabel">〜{{ selectedEndLabel }}</template><small v-if="selectedEndLabel && form.buffer_min > 0" class="nrp__buffer-note" data-testid="nrp-buffer-note">{{ MESSAGES.visitCompletion.bufferAfter.replace('{min}', String(form.buffer_min)) }}</small>
-                    </span>
-                    <span v-else-if="loadingSlots" class="nrp__slotbox-empty">{{ MESSAGES.common.loading }}</span>
-                    <span v-else class="nrp__slotbox-empty">--:-- 〜 --:--</span>
+                    <div class="nrp__when-cell">
+                        <span class="nrp__when-label">日付</span>
+                        <span class="nrp__when-value">{{ fmtDay(date) }}</span>
+                    </div>
+                    <div class="nrp__when-cell nrp__when-cell--time">
+                        <span class="nrp__when-label">開始時間</span>
+                        <span v-if="form.starts_at" class="nrp__when-value nrp__when-value--time">
+                            {{ timeLabel(form.starts_at) }}<template v-if="selectedEndLabel"><span class="nrp__when-sep">〜</span>{{ selectedEndLabel }}</template>
+                        </span>
+                        <span v-else-if="loadingSlots" class="nrp__when-value nrp__when-value--muted">{{ MESSAGES.common.loading }}</span>
+                        <span v-else class="nrp__when-value nrp__when-value--muted">--:-- 〜 --:--</span>
+                        <small v-if="form.starts_at && selectedEndLabel && form.buffer_min > 0" class="nrp__buffer-note" data-testid="nrp-buffer-note">{{ MESSAGES.visitCompletion.bufferAfter.replace('{min}', String(form.buffer_min)) }}</small>
+                    </div>
                 </template>
-                <span v-if="selectedStaffName" class="nrp__slotbox-staff">
-                    <span class="nrp__slotbox-label">担当</span>{{ selectedStaffName }}
-                </span>
+                <div v-if="selectedStaffName" class="nrp__when-cell nrp__when-cell--staff">
+                    <span class="nrp__when-label">担当</span>
+                    <span class="nrp__when-value">{{ selectedStaffName }}</span>
+                </div>
             </div>
             <div v-if="unavailableDesiredTime !== null" class="nrp__error" data-testid="nrp-unavailable">
                 <p class="nrp__error-title">{{ unavailableDesiredTimeMessage(unavailableDesiredTime) }}</p>
@@ -699,6 +706,8 @@ function submit(): void {
             </p>
 
             <!-- 全項目「上にラベル・下に値」で統一する（キャプションの出方を揃える）。 -->
+
+            <h3 class="nrp__section">お客様・メニュー</h3>
 
             <!-- ① 顧客：上の常時表示の検索欄で選ぶ。未選択のときはハイフン。 -->
             <div class="nrp__block">
@@ -829,6 +838,8 @@ function submit(): void {
                 @select="(id) => { selectedServiceId = id; }"
             />
 
+            <h3 v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__section">日時</h3>
+
             <!-- ③ 日付（予約の操作順：顧客→メニュー→日時→担当→ブース→インターバル→備考。Task 11-30） -->
             <div v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__block">
                 <span class="nrp__block-label">日付</span>
@@ -861,6 +872,8 @@ function submit(): void {
                 <p v-if="form.errors.starts_at" class="nrp__error">{{ form.errors.starts_at }}</p>
             </div>
 
+            <h3 class="nrp__section">担当・ブース</h3>
+
             <!-- ⑤ 担当スタッフ・指名 -->
             <div class="nrp__block">
                 <span class="nrp__block-label">担当スタッフ</span>
@@ -879,7 +892,7 @@ function submit(): void {
                 <v-checkbox
                     v-if="selectedStaffId !== null"
                     v-model="form.is_staff_requested"
-                    label="指名（顧客がこのスタッフを希望）"
+                    label="指名"
                     density="compact"
                     hide-details
                     class="nrp__nomination"
@@ -905,6 +918,8 @@ function submit(): void {
                 />
                 <p v-if="form.errors.booth_id" class="nrp__error">{{ form.errors.booth_id }}</p>
             </div>
+
+            <h3 class="nrp__section">オプション</h3>
 
             <!-- ⑦ インターバル（予約の後ろに確保） -->
             <div class="nrp__block">
@@ -1006,37 +1021,85 @@ function submit(): void {
     padding-left: 1.2em;
 }
 
-.nrp__slotbox {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 4px var(--ark-space-2);
-    padding: var(--ark-space-2) var(--ark-space-3);
-    background: rgba(var(--v-theme-primary), 0.06);
+/* いつ・誰か（日付／開始時間／担当）の3セルカード。 */
+.nrp__when {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: var(--ark-space-3) var(--ark-space-3);
+    padding: var(--ark-space-3);
+    background: rgba(var(--v-theme-primary), 0.05);
     border: 1px solid rgba(var(--v-theme-primary), 0.14);
-    border-radius: var(--ark-radius);
+    border-radius: 10px;
 }
 
-.nrp__slotbox-date {
-    font-size: 0.75rem;
-    font-weight: 800;
+.nrp__when-cell {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.nrp__slotbox-time {
+.nrp__when-cell--staff {
+    grid-column: 1 / -1;
+    padding-top: var(--ark-space-2);
+    border-top: 1px dashed rgba(var(--v-theme-primary), 0.2);
+}
+
+.nrp__when-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(var(--v-theme-on-surface), 0.62);
+}
+
+.nrp__when-value {
     font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.nrp__when-value--time {
+    font-size: 1rem;
     font-weight: 800;
     color: rgb(var(--v-theme-primary));
     font-variant-numeric: tabular-nums;
 }
 
-.nrp__slotbox-staff {
-    margin-left: auto;
-    font-size: 0.6875rem;
+.nrp__when-value--muted {
+    font-weight: 600;
+    color: rgba(var(--v-theme-on-surface), 0.5);
 }
 
-.nrp__slotbox-label {
-    margin-right: 3px;
-    color: rgba(var(--v-theme-on-surface), 0.72);
+.nrp__when-sep {
+    margin: 0 2px;
+    font-weight: 600;
+}
+
+.nrp__when-empty {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 0.75rem;
+    color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+/* セクション見出し：項目をまとまりごとに区切り、上から順に追いやすくする。 */
+.nrp__section {
+    display: flex;
+    align-items: center;
+    gap: var(--ark-space-2);
+    margin: var(--ark-space-2) 0 0;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: rgb(var(--v-theme-primary));
+}
+
+.nrp__section::after {
+    content: '';
+    flex: 1 1 auto;
+    height: 1px;
+    background: rgba(var(--v-theme-primary), 0.18);
 }
 
 .nrp__field-btn {
@@ -1130,10 +1193,10 @@ function submit(): void {
     display: flex;
     align-items: baseline;
     gap: var(--ark-space-2);
-    font-size: 0.625rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: rgba(var(--v-theme-on-surface), 0.74);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 .nrp__block-note {
@@ -1288,7 +1351,7 @@ function submit(): void {
 
 /* 施術後にあける時間（バッファ）の選択チップ。 */
 .nrp__buffer-note {
-    margin-left: 6px;
+    margin-left: 0;
     font-weight: 500;
     font-size: 0.72rem;
     color: rgba(var(--v-theme-on-surface), 0.6);
@@ -1367,11 +1430,6 @@ function submit(): void {
     border-color: rgb(var(--v-theme-primary));
     background: rgb(var(--v-theme-primary));
     color: #ffffff;
-}
-
-.nrp__slotbox-empty {
-    font-size: 0.6875rem;
-    color: rgba(var(--v-theme-on-surface), 0.68);
 }
 
 .nrp__muted {

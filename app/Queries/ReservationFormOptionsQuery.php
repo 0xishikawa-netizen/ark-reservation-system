@@ -122,7 +122,7 @@ final class ReservationFormOptionsQuery
             ->all();
     }
 
-    /** @return array<string, int|string|null> */
+    /** @return array<string, int|string|bool|null> */
     public function reservation(int $reservationId): array
     {
         $row = DB::table('reservations')
@@ -144,6 +144,7 @@ final class ReservationFormOptionsQuery
                 'reservations.source',
                 'reservations.version',
                 'reservations.notes',
+                'reservations.is_staff_requested',
                 'customer_users.name as customer_name',
                 'services.name as service_name',
                 'staff.display_name as staff_name',
@@ -166,6 +167,7 @@ final class ReservationFormOptionsQuery
             'source' => (string) $row->source,
             'version' => (int) $row->version,
             'notes' => $row->notes === null ? null : (string) $row->notes,
+            'is_staff_requested' => (bool) $row->is_staff_requested,
         ];
     }
 }
