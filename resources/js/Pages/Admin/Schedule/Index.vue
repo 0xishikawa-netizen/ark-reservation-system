@@ -3427,7 +3427,6 @@ function menuSegments(lane: ScheduleLane): {
                 ref="searchBarEl"
                 :can-search="canSearchCustomers"
                 :highlight="needsCustomerSelection"
-                :selects-for-reservation="panelKind === 'create'"
                 @select="onCustomerSearchSelect"
             />
 
@@ -3472,7 +3471,6 @@ function menuSegments(lane: ScheduleLane): {
                 @back="goBackPanel"
                 :after-create="onReservationCreated"
                 @switch-to-block="onSwitchToBlock"
-                @open-customer="openCustomerPanel"
             />
             <ScheduleBlockCreatePanel
                 v-else-if="panelKind === 'block-create'"

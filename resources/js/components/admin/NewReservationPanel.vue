@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useForm } from '@inertiajs/vue3';
+import { router, useForm } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import PanelShell from '@/components/admin/PanelShell.vue';
 import MenuPicker from '@/components/admin/MenuPicker.vue';
-import { DateField } from '@/components/ark';
+import { DateField, StatusChip } from '@/components/ark';
 import { applyReservationPrefill, type ReservationDraft } from '@/composables/reservationDraft';
 import { isPastDateTime } from '@/utils/pastDateTime';
 import { MESSAGES, unavailableDesiredTimeMessage } from '@/constants/messages';
@@ -83,8 +83,6 @@ const emit = defineEmits<{
     close: [];
     back: [];
     switchToBlock: [];
-    /** 選んだ顧客の詳細を開く（入力中の内容は下書きとして残る）。 */
-    openCustomer: [customerId: number];
 }>();
 
 const dateTimeLocked = computed(
@@ -130,6 +128,12 @@ const availabilityLoaded = ref(false);
  * たびに一度クリアされるため、それとは別に保持しないと希望時刻が消えてしまう。
  */
 const desiredStartsAt = ref<string | null>(props.draft.starts_at);
+
+const GENDER_OPTIONS = [
+    { value: 'female', label: '女性' },
+    { value: 'male', label: '男性' },
+    { value: 'other', label: 'その他' },
+];
 
 const BUFFER_OPTIONS = [
     { value: 0, label: 'なし' },
@@ -372,16 +376,95 @@ async function autoAssignBooth(startsAt: string): Promise<void> {
 }
 
 /* ───── 電話予約などで未登録のお客様を、その場で仮登録する（§新規のお客様） ───── */
-const provisionalOpen = ref(false);
 const provisionalSaving = ref(false);
 const provisionalError = ref<string | null>(null);
-const provisional = ref({ name: '', kana: '', phone: '' });
+const provisional = ref({ name: '', kana: '', phone: '', gender: '' });
 
-function openProvisional(): void {
-    provisional.value = { name: '', kana: '', phone: '' };
-    provisionalError.value = null;
-    provisionalOpen.value = true;
+/** お客様欄の切り替え：既存のお客様（上の検索で選ぶ）／新規のお客様（名前だけダイアログで仮登録）。 */
+const customerMode = ref<'existing' | 'new'>('existing');
+const provisionalOpen = ref(false);
+
+function setCustomerMode(mode: 'existing' | 'new'): void {
+    if (mode === customerMode.value && mode === 'existing') {
+        return;
+    }
+    customerMode.value = mode;
+    if (mode === 'new') {
+        if (form.customer_id !== null) {
+            clearCustomer();
+        }
+        provisional.value = { name: '', kana: '', phone: '', gender: '' };
+        provisionalError.value = null;
+        provisionalOpen.value = true;
+    }
 }
+
+// ダイアログを閉じて顧客が未登録なら「既存」に戻す。
+watch(provisionalOpen, (open) => {
+    if (!open && form.customer_id === null) {
+        customerMode.value = 'existing';
+    }
+});
+
+/** 顧客詳細ページへ移る（入力中の予約は破棄される）。 */
+function openCustomerPage(customerId: number): void {
+    router.visit(`/admin/customers/${customerId}`);
+}
+
+// 検索で顧客が選ばれたら「既存」に戻す。
+watch(() => form.customer_id, (id) => {
+    if (id !== null) {
+        customerMode.value = 'existing';
+    }
+});
+
+/** 選んだお客様の「履歴」「今後の予約」をパネルの下に出す（顧客詳細へは「顧客」ボタンで移る）。 */
+interface CustomerRow {
+    id: number;
+    date: string;
+    starts_at: string;
+    status: string;
+    status_label: string;
+    service_name: string;
+    staff_name: string | null;
+}
+const customerSection = ref<'history' | 'upcoming' | null>(null);
+const customerRows = ref<{ upcoming: CustomerRow[]; history: CustomerRow[]; total: number; loadedFor: number | null }>({
+    upcoming: [], history: [], total: 0, loadedFor: null,
+});
+const customerRowsLoading = ref(false);
+
+async function toggleCustomerSection(target: 'history' | 'upcoming'): Promise<void> {
+    if (customerSection.value === target) {
+        customerSection.value = null;
+
+        return;
+    }
+    customerSection.value = target;
+    const id = form.customer_id;
+    if (id === null || customerRows.value.loadedFor === id) {
+        return;
+    }
+    customerRowsLoading.value = true;
+    try {
+        const response = await fetch(`/admin/customers/${id}/board-panel?date=${date.value}`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (response.ok) {
+            const json = await response.json() as { upcoming: CustomerRow[]; history: { items: CustomerRow[]; total: number } };
+            customerRows.value = { upcoming: json.upcoming, history: json.history.items, total: json.history.total, loadedFor: id };
+        }
+    } finally {
+        customerRowsLoading.value = false;
+    }
+}
+
+// お客様が変わったら、開いていた履歴は閉じる。
+watch(() => form.customer_id, () => {
+    customerSection.value = null;
+    customerRows.value = { upcoming: [], history: [], total: 0, loadedFor: null };
+});
 
 async function submitProvisional(): Promise<void> {
     const body = provisional.value;
@@ -727,102 +810,98 @@ function submit(): void {
                 <span class="nrp__step-title">お客様</span>
             </div>
 
-            <!-- ① 顧客：上の常時表示の検索欄で選ぶ。未選択のときはハイフン。 -->
+            <!-- ① お客様：既存（上の検索で選ぶ）／新規（その場で仮登録）をトグルで切り替える。 -->
             <div class="nrp__block">
-
-                <div v-if="selectedCustomer" class="nrp__customer">
-                    <span class="nrp__avatar" aria-hidden="true">{{ selectedCustomer.name.trim().charAt(0) || '–' }}</span>
-                    <span class="nrp__customer-body">
-                        <span class="nrp__customer-name">{{ selectedCustomer.name }}</span>
-                        <span v-if="selectedCustomer.kana" class="nrp__customer-kana">
-                            {{ selectedCustomer.kana }}
-                        </span>
-                    </span>
-                    <span class="nrp__customer-actions">
-                        <button
-                            type="button"
-                            class="nrp__mini"
-                            data-testid="nrp-open-customer"
-                            @click="emit('openCustomer', selectedCustomer.user_id)"
-                        >
-                            {{ MESSAGES.customer.openDetail }}
-                        </button>
-                        <button type="button" class="nrp__mini" @click="clearCustomer">
-                            変更
-                        </button>
-                    </span>
+                <div class="nrp__toggle" role="radiogroup" aria-label="お客様の種類">
+                    <button type="button" class="nrp__toggle-btn" :class="{ 'nrp__toggle-btn--active': customerMode === 'existing' }" role="radio" :aria-checked="customerMode === 'existing'" data-testid="nrp-mode-existing" @click="setCustomerMode('existing')">既存のお客様</button>
+                    <button type="button" class="nrp__toggle-btn" :class="{ 'nrp__toggle-btn--active': customerMode === 'new' }" role="radio" :aria-checked="customerMode === 'new'" data-testid="nrp-mode-new" @click="setCustomerMode('new')">新規のお客様</button>
                 </div>
-                <template v-else>
-                    <div class="nrp__customer-empty">
-                        <v-icon icon="mdi-magnify" size="16" />
-                        <span>{{ MESSAGES.reservation.pickCustomerFromSearch }}</span>
+
+                <template v-if="selectedCustomer">
+                    <div class="nrp__customer">
+                        <span class="nrp__avatar" aria-hidden="true">{{ selectedCustomer.name.trim().charAt(0) || '–' }}</span>
+                        <span class="nrp__customer-body">
+                            <span class="nrp__customer-name">{{ selectedCustomer.name }}</span>
+                            <span v-if="selectedCustomer.kana" class="nrp__customer-kana">{{ selectedCustomer.kana }}</span>
+                        </span>
                     </div>
-                    <button type="button" class="nrp__newcust" @click="openProvisional">
-                        <v-icon icon="mdi-account-plus-outline" size="14" />
-                        <span>新規のお客様（電話予約など）</span>
-                        <v-icon icon="mdi-chevron-right" size="14" class="nrp__newcust-arrow" />
-                    </button>
+                    <!-- 顧客（詳細へ）／履歴／今後の予約。予約の入力内容は残したまま、履歴は下に開く。 -->
+                    <div class="nrp__tabs" role="tablist" aria-label="お客様の情報">
+                        <button type="button" class="nrp__tab" data-testid="nrp-open-customer" @click="openCustomerPage(selectedCustomer.user_id)">
+                            <v-icon icon="mdi-account-outline" size="16" /><span>顧客</span>
+                        </button>
+                        <button type="button" class="nrp__tab" :class="{ 'nrp__tab--active': customerSection === 'history' }" role="tab" :aria-selected="customerSection === 'history'" data-testid="nrp-tab-history" @click="toggleCustomerSection('history')">
+                            <v-icon icon="mdi-history" size="16" /><span>履歴</span>
+                        </button>
+                        <button type="button" class="nrp__tab" :class="{ 'nrp__tab--active': customerSection === 'upcoming' }" role="tab" :aria-selected="customerSection === 'upcoming'" data-testid="nrp-tab-upcoming" @click="toggleCustomerSection('upcoming')">
+                            <v-icon icon="mdi-calendar-clock-outline" size="16" /><span>今後の予約</span>
+                        </button>
+                    </div>
                 </template>
+                <div v-else class="nrp__customer-empty">
+                    <v-icon icon="mdi-magnify" size="16" />
+                    <span>{{ MESSAGES.reservation.pickCustomerFromSearch }}</span>
+                </div>
+
                 <p v-if="form.errors.customer_id" class="nrp__error">{{ form.errors.customer_id }}</p>
+
             </div>
 
-            <!-- 仮登録：電話口で聞けた情報だけで顧客を作る。後から顧客詳細で上書きする前提。 -->
+            <!-- 新規のお客様：名前だけ入力して仮登録し、お客様欄に反映する（詳細は後から顧客詳細で）。 -->
             <v-dialog v-model="provisionalOpen" max-width="360">
                 <v-card>
-                    <v-card-title class="text-subtitle-2 font-weight-bold">
-                        新規のお客様を登録
-                    </v-card-title>
+                    <v-card-title class="text-subtitle-2 font-weight-bold">新規のお客様</v-card-title>
                     <v-card-text>
-                        <p class="nrp__hint mb-3">
-                            {{ MESSAGES.reservation.provisionalCustomerHint }}
-                        </p>
-                        <v-text-field
-                            v-model="provisional.name"
-                            label="氏名（分かれば）"
-                            placeholder="例：山田 太郎"
-                            density="compact"
-                            variant="outlined"
-                            hide-details
-                            class="mb-2"
-                        />
-                        <v-text-field
-                            v-model="provisional.kana"
-                            label="カナ（分かれば）"
-                            placeholder="例：ヤマダ タロウ"
-                            density="compact"
-                            variant="outlined"
-                            hide-details
-                            class="mb-2"
-                        />
-                        <v-text-field
-                            v-model="provisional.phone"
-                            label="電話番号（分かれば）"
-                            placeholder="例：09012345678"
-                            density="compact"
-                            variant="outlined"
-                            hide-details
-                        />
+                        <div class="nrp__dialog-fields">
+                            <v-text-field
+                                v-model="provisional.name"
+                                label="お名前"
+                                placeholder="例：山田 太郎"
+                                density="compact"
+                                variant="outlined"
+                                hide-details
+                                autofocus
+                                @keydown.enter.prevent="submitProvisional"
+                            />
+                            <v-text-field
+                                v-model="provisional.kana"
+                                label="カナ"
+                                placeholder="例：ヤマダ タロウ"
+                                density="compact"
+                                variant="outlined"
+                                hide-details
+                                @keydown.enter.prevent="submitProvisional"
+                            />
+                            <v-text-field
+                                v-model="provisional.phone"
+                                label="電話番号"
+                                placeholder="例：09012345678"
+                                inputmode="tel"
+                                density="compact"
+                                variant="outlined"
+                                hide-details
+                                @keydown.enter.prevent="submitProvisional"
+                            />
+                            <div class="nrp__gender" role="radiogroup" aria-label="性別">
+                                <span class="nrp__gender-label">性別</span>
+                                <button
+                                    v-for="g in GENDER_OPTIONS"
+                                    :key="g.value"
+                                    type="button"
+                                    class="nrp__buffer"
+                                    :class="{ 'nrp__buffer--active': provisional.gender === g.value }"
+                                    role="radio"
+                                    :aria-checked="provisional.gender === g.value"
+                                    @click="provisional.gender = provisional.gender === g.value ? '' : g.value"
+                                >{{ g.label }}</button>
+                            </div>
+                        </div>
                         <p v-if="provisionalError" class="nrp__error mt-2">{{ provisionalError }}</p>
                     </v-card-text>
                     <v-card-actions>
                         <v-spacer />
-                        <v-btn
-                            variant="text"
-                            size="small"
-                            :disabled="provisionalSaving"
-                            @click="provisionalOpen = false"
-                        >
-                            やめる
-                        </v-btn>
-                        <v-btn
-                            color="primary"
-                            variant="flat"
-                            size="small"
-                            :loading="provisionalSaving"
-                            @click="submitProvisional"
-                        >
-                            登録して選択
-                        </v-btn>
+                        <v-btn variant="text" size="small" :disabled="provisionalSaving" @click="provisionalOpen = false">やめる</v-btn>
+                        <v-btn color="primary" variant="flat" size="small" :loading="provisionalSaving" @click="submitProvisional">登録して選択</v-btn>
                     </v-card-actions>
                 </v-card>
             </v-dialog>
@@ -1001,6 +1080,30 @@ function submit(): void {
                 <v-btn variant="text" size="x-small" prepend-icon="mdi-calendar-clock-outline" data-testid="switch-to-block" @click="emit('switchToBlock')">
                     {{ MESSAGES.schedule.addStaffBlock }}
                 </v-btn>
+            </div>
+
+            <!-- 履歴・今後の予約（選んだお客様のもの）は、スタッフ予定の追加より下の別セクションに出す。 -->
+            <div v-if="customerSection !== null && selectedCustomer" class="nrp__history" data-testid="nrp-rows">
+                <h3 class="nrp__history-title">
+                    <v-icon :icon="customerSection === 'history' ? 'mdi-history' : 'mdi-calendar-clock-outline'" size="16" />
+                    {{ customerSection === 'history' ? '来店履歴' : '今後の予約' }}
+                    <button type="button" class="nrp__history-close" aria-label="閉じる" @click="customerSection = null"><v-icon icon="mdi-close" size="14" /></button>
+                </h3>
+                <p v-if="customerRowsLoading" class="nrp__muted">{{ MESSAGES.common.loading }}</p>
+                <template v-else>
+                    <p v-if="(customerSection === 'history' ? customerRows.history : customerRows.upcoming).length === 0" class="nrp__muted">
+                        {{ customerSection === 'history' ? MESSAGES.reservation.noVisitHistory : MESSAGES.reservation.noUpcoming }}
+                    </p>
+                    <div v-for="row in (customerSection === 'history' ? customerRows.history : customerRows.upcoming)" :key="row.id" class="nrp__row">
+                        <span class="nrp__row-top">
+                            <span class="nrp__row-when">{{ row.date }} {{ row.starts_at.slice(11, 16) }}</span>
+                            <StatusChip :status="row.status" :label="row.status_label" size="x-small" />
+                        </span>
+                        <span class="nrp__row-service">{{ row.service_name }}</span>
+                        <span class="nrp__row-staff">{{ row.staff_name ?? '担当なし' }}</span>
+                    </div>
+                    <p v-if="customerSection === 'history' && customerRows.total > customerRows.history.length" class="nrp__muted">全 {{ customerRows.total }} 件のうち新しい順に表示</p>
+                </template>
             </div>
 
             <p v-if="reservationConflictError" class="nrp__error">{{ reservationConflictError }}</p>
@@ -1341,28 +1444,6 @@ function submit(): void {
     color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
-.nrp__customer-actions {
-    display: flex;
-    flex: 0 0 auto;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.nrp__mini {
-    padding: 2px 10px;
-    border: 1px solid rgba(var(--v-theme-primary), 0.3);
-    border-radius: 999px;
-    background: rgb(var(--v-theme-surface));
-    font-size: 0.6875rem;
-    font-weight: 700;
-    color: rgb(var(--v-theme-primary));
-    cursor: pointer;
-}
-
-.nrp__mini:hover {
-    background: rgba(var(--v-theme-primary), 0.08);
-}
-
 .nrp__customer-empty {
     display: flex;
     align-items: center;
@@ -1374,31 +1455,6 @@ function submit(): void {
     font-size: 0.75rem;
     font-weight: 700;
     color: rgb(var(--v-theme-error));
-}
-
-.nrp__newcust {
-    display: flex;
-    box-sizing: border-box;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    height: 34px;
-    padding: 0 var(--ark-space-3);
-    border: 1px dashed rgba(var(--v-theme-accent), 0.5);
-    border-radius: var(--ark-radius);
-    background: rgba(var(--v-theme-accent), 0.05);
-    font-size: 0.6875rem;
-    font-weight: 700;
-    color: rgb(var(--v-theme-accent));
-    cursor: pointer;
-}
-
-.nrp__newcust:hover {
-    background: rgba(var(--v-theme-accent), 0.12);
-}
-
-.nrp__newcust-arrow {
-    margin-left: auto;
 }
 
 /* ラベルの下に出す「値」。未確定はハイフンで揃える。 */
@@ -1566,5 +1622,168 @@ function submit(): void {
     margin: 0;
     font-size: 0.6875rem;
     color: rgb(var(--v-theme-error));
+}
+
+/* お客様の既存／新規トグル */
+.nrp__toggle {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.nrp__toggle-btn {
+    flex: 1 1 0;
+    height: 28px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.65);
+    cursor: pointer;
+}
+
+.nrp__toggle-btn--active {
+    background: rgb(var(--v-theme-surface));
+    color: rgb(var(--v-theme-primary));
+    box-shadow: 0 1px 3px rgb(18 25 60 / 18%);
+}
+
+.nrp__newform {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 顧客／履歴／今後の予約（予約詳細パネルと同じ並び） */
+.nrp__tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.nrp__tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    height: 32px;
+    padding: 0 4px;
+    border: 1px solid rgba(var(--v-theme-primary), 0.3);
+    border-radius: 8px;
+    background: rgb(var(--v-theme-surface));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(var(--v-theme-primary));
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.nrp__tab:hover {
+    background: rgba(var(--v-theme-primary), 0.06);
+}
+
+.nrp__tab--active {
+    background: rgb(var(--v-theme-primary));
+    color: #fff;
+}
+
+.nrp__dialog-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.nrp__gender {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.nrp__gender-label {
+    flex: 0 0 auto;
+    padding: 0 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.65);
+}
+
+.nrp__gender .nrp__buffer {
+    flex: 1 1 0;
+}
+
+.nrp__history {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: var(--ark-space-3);
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.nrp__history-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 800;
+}
+
+.nrp__history-close {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    margin-left: auto;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    cursor: pointer;
+}
+
+.nrp__rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.nrp__row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+    border-radius: 8px;
+}
+
+.nrp__row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.nrp__row-when {
+    font-size: 0.75rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.nrp__row-service {
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.nrp__row-staff {
+    font-size: 0.6875rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
 }
 </style>

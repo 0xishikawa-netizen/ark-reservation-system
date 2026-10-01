@@ -29,7 +29,7 @@ final readonly class CreateProvisionalCustomer
     public function __construct(private AuditLogger $auditLogger) {}
 
     /**
-     * @param  array{name?: string|null, kana?: string|null, phone?: string|null}  $input
+     * @param  array{name?: string|null, kana?: string|null, phone?: string|null, gender?: string|null}  $input
      */
     public function execute(array $input, ?Authenticatable $actor = null): Customer
     {
@@ -45,13 +45,14 @@ final readonly class CreateProvisionalCustomer
     }
 
     /**
-     * @param  array{name?: string|null, kana?: string|null, phone?: string|null, email?: string|null}  $input
+     * @param  array{name?: string|null, kana?: string|null, phone?: string|null, email?: string|null, gender?: string|null}  $input
      */
     private function create(array $input, string $createdVia, ?Authenticatable $actor): Customer
     {
         $name = $this->normalize($input['name'] ?? null);
         $kana = $this->normalize($input['kana'] ?? null);
         $phone = $this->normalize($input['phone'] ?? null);
+        $gender = $this->normalize($input['gender'] ?? null);
         $email = $this->normalize($input['email'] ?? null);
         $email = $email === null ? null : Str::lower($email);
 
@@ -60,7 +61,7 @@ final readonly class CreateProvisionalCustomer
         }
 
         try {
-            return DB::transaction(function () use ($name, $kana, $phone, $email, $createdVia, $actor): Customer {
+            return DB::transaction(function () use ($name, $kana, $phone, $gender, $email, $createdVia, $actor): Customer {
                 $user = User::query()->create([
                     'name' => $name ?? $this->fallbackName($kana, $phone),
                     'email' => $email ?? $this->placeholderEmail(),
@@ -74,6 +75,7 @@ final readonly class CreateProvisionalCustomer
                     // customers.kana は NOT NULL。聞けていない場合は空文字で作り、後から埋める。
                     'kana' => $kana ?? '',
                     'phone' => $phone,
+                    'gender' => $gender,
                     'created_via' => $createdVia,
                 ]);
 

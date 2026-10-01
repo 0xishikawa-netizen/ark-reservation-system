@@ -92,6 +92,7 @@ final class ReservationController extends Controller
             'name' => ['nullable', 'string', 'max:100'],
             'kana' => ['nullable', 'string', 'max:100'],
             'phone' => ['nullable', 'string', 'max:20'],
+            'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'other'])],
         ]);
 
         // 全部空だと後から誰の予約か辿れないため、最低1つは必須にする。

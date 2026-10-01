@@ -13,6 +13,7 @@ use App\Actions\StaffShift\SaveShiftException;
 use App\Actions\StaffShift\SaveShiftTemplates;
 use App\Actions\StaffShift\UpdateShift;
 use App\Domain\Business\StoreCalendarService;
+use App\Domain\Reporting\StaffTimesheetService;
 use App\Domain\Reservation\BookingWindow;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SaveShiftExceptionRequest;
@@ -21,7 +22,6 @@ use App\Http\Requests\Admin\StoreStaffShiftRequest;
 use App\Http\Requests\Admin\UpdateBookingSettingsRequest;
 use App\Http\Requests\Admin\UpdateStaffShiftRequest;
 use App\Models\Staff;
-use App\Models\StaffAttendance;
 use App\Models\StaffShift;
 use App\Models\StaffShiftException;
 use App\Models\StaffShiftTemplate;
@@ -40,6 +40,7 @@ class StaffShiftController extends Controller
         StaffShiftListQuery $shiftQuery,
         StaffListQuery $staffQuery,
         BookingWindow $bookingWindow,
+        StaffTimesheetService $timesheet,
     ): Response {
         $validated = $request->validate([
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
@@ -100,23 +101,8 @@ class StaffShiftController extends Controller
                     'end_at' => substr((string) $shift->end_at, 0, 5),
                     'origin' => $shift->origin,
                 ])->values(),
-            'attendances' => $selectedStaffId === null ? [] : StaffAttendance::query()->with('breaks')
-                ->where('staff_id', $selectedStaffId)
-                ->whereBetween('business_date', [$from->toDateString(), $to->toDateString()])
-                ->orderByDesc('business_date')->orderByDesc('clock_in_at')->get()
-                ->map(static fn (StaffAttendance $a): array => [
-                    'id' => (int) $a->id,
-                    'business_date' => $a->business_date->toDateString(),
-                    'clock_in_at' => $a->clock_in_at?->setTimezone('Asia/Tokyo')->format('Y-m-d\TH:i'),
-                    'clock_out_at' => $a->clock_out_at?->setTimezone('Asia/Tokyo')->format('Y-m-d\TH:i'),
-                    'status' => $a->status,
-                    'note' => $a->note,
-                    'breaks' => $a->breaks->map(static fn ($b): array => [
-                        'start_at' => $b->start_at->setTimezone('Asia/Tokyo')->format('Y-m-d\TH:i'),
-                        'end_at' => $b->end_at->setTimezone('Asia/Tokyo')->format('Y-m-d\TH:i'),
-                        'type' => $b->type, 'note' => $b->note,
-                    ])->values(),
-                ])->values(),
+            // 勤怠一覧：ブッキングボードの勤務枠・休憩・予約から日ごとの行を自動で作る（実績があれば並べる）。
+            'timesheet' => $selectedStaffId === null ? [] : $timesheet->forStaff($selectedStaffId, $from, $to),
             'booking' => $this->bookingPayload($bookingWindow),
             'filters' => [
                 'staff_id' => $selectedStaffId,

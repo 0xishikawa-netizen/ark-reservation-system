@@ -187,4 +187,48 @@ onBeforeUnmount(() => {
     flex-direction: column;
     gap: var(--ark-space-2);
 }
+
+/*
+ * 左パネルの入力欄・選択欄・チェックボックス・テキストエリアの文字サイズをそろえる。
+ * Vuetify の既定（16px）のままだと、パネル内の他の項目（11〜13px）より大きく浮いて見えるため、
+ * 本文と同じ 13px 基準にする（ラベル・ヒント・エラーも比例して小さく）。
+ */
+.panel-shell__sheet :deep(.v-field),
+.panel-shell__sheet :deep(.v-field__input),
+.panel-shell__sheet :deep(.v-select__selection),
+.panel-shell__sheet :deep(.v-field input),
+.panel-shell__sheet :deep(.v-field textarea),
+.panel-shell__sheet :deep(.v-label.v-field-label) {
+    font-size: 0.8125rem;
+}
+
+.panel-shell__sheet :deep(.v-field-label--floating) {
+    font-size: 0.6875rem;
+}
+
+.panel-shell__sheet :deep(.v-field__input) {
+    min-height: 38px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+.panel-shell__sheet :deep(.v-label),
+.panel-shell__sheet :deep(.v-selection-control .v-label) {
+    font-size: 0.8125rem;
+    opacity: 1;
+}
+
+.panel-shell__sheet :deep(.v-messages),
+.panel-shell__sheet :deep(.v-messages__message) {
+    font-size: 0.6875rem;
+    line-height: 1.4;
+}
+
+.panel-shell__sheet :deep(.v-chip) {
+    font-size: 0.75rem;
+}
+
+.panel-shell__sheet :deep(.v-selection-control) {
+    --v-selection-control-size: 32px;
+}
 </style>

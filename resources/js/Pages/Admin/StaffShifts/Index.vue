@@ -39,9 +39,20 @@ interface ShiftEntry {
 }
 
 interface AttendanceBreak { start_at: string; end_at: string; type: string; note: string | null }
-interface AttendanceEntry {
-    id: number; business_date: string; clock_in_at: string | null; clock_out_at: string | null;
-    status: 'draft' | 'confirmed'; note: string | null; breaks: AttendanceBreak[];
+interface TimesheetFlag { type: 'late_start' | 'early_start' | 'overtime' | 'early_leave'; minutes: number }
+interface TimesheetRow {
+    date: string;
+    planned: { start: string; end: string; work_min: number; break_min: number; breaks: { start: string; end: string }[] } | null;
+    attendance: {
+        id: number; status: 'draft' | 'confirmed'; note: string | null; clock_in: string | null; clock_out: string | null;
+        work_min: number | null; break_min: number; breaks: { start: string; end: string; type: string }[];
+    } | null;
+    flags: TimesheetFlag[];
+    overtime_min: number;
+    booked_count: number;
+    booked_min: number;
+    available_min: number;
+    utilization: number | null;
 }
 
 interface BookingSettings {
@@ -61,7 +72,7 @@ const props = defineProps<{
     templates: TemplateEntry[];
     exceptions: ExceptionEntry[];
     shifts: ShiftEntry[];
-    attendances: AttendanceEntry[];
+    timesheet: TimesheetRow[];
     booking: BookingSettings;
     filters: { staff_id: number | null; from: string; to: string };
 }>();
@@ -112,27 +123,79 @@ const toDateTime = (date: string, time: string, after: string): string => {
 
     return `${after !== '' && time < after ? nextDate(date) : date}T${time}`;
 };
-const editAttendance = (entry: AttendanceEntry): void => {
-    attendanceId.value = entry.id;
+const editorOpen = ref(false);
+const editorRow = ref<TimesheetRow | null>(null);
+
+/** 行の「記録・編集」。記録がある日はその内容、無い日は予定（勤務枠・休憩）を初期値にして開く。 */
+const openEditor = (row: TimesheetRow): void => {
+    editorRow.value = row;
+    attendanceForm.clearErrors();
     attendanceForm.staff_id = staffId.value;
-    attendanceForm.business_date = entry.business_date;
-    attendanceTimes.clockIn = timeOf(entry.clock_in_at);
-    attendanceTimes.clockOut = timeOf(entry.clock_out_at);
-    attendanceForm.status = entry.status;
-    attendanceForm.note = entry.note ?? '';
-    attendanceBreaks.value = entry.breaks.map((value) => ({ start: timeOf(value.start_at), end: timeOf(value.end_at), type: value.type, note: value.note ?? '' }));
+    attendanceForm.business_date = row.date;
+    if (row.attendance !== null) {
+        attendanceId.value = row.attendance.id;
+        attendanceTimes.clockIn = row.attendance.clock_in ?? '';
+        attendanceTimes.clockOut = (row.attendance.clock_out ?? '').slice(-5);
+        attendanceForm.status = row.attendance.status;
+        attendanceForm.note = row.attendance.note ?? '';
+        attendanceBreaks.value = row.attendance.breaks.map((b) => ({ start: b.start, end: b.end, type: b.type, note: '' }));
+    } else {
+        attendanceId.value = null;
+        attendanceTimes.clockIn = row.planned?.start ?? '';
+        attendanceTimes.clockOut = row.planned?.end ?? '';
+        attendanceForm.status = 'confirmed';
+        attendanceForm.note = '';
+        attendanceBreaks.value = (row.planned?.breaks ?? []).map((b) => ({ start: b.start, end: b.end, type: 'break', note: '' }));
+    }
+    editorOpen.value = true;
 };
-const newAttendance = (): void => {
-    attendanceId.value = null;
-    attendanceForm.reset();
-    attendanceForm.staff_id = staffId.value;
-    attendanceTimes.clockIn = '';
-    attendanceTimes.clockOut = '';
-    attendanceBreaks.value = [];
+const hhmmToMin = (value: string): number => {
+    const [h, m] = value.split(':').map(Number);
+
+    return h * 60 + m;
+};
+const minToHhmm = (total: number): string => {
+    const clamped = Math.min(Math.max(total, 0), 24 * 60 - 1);
+
+    return `${String(Math.floor(clamped / 60)).padStart(2, '0')}:${String(clamped % 60).padStart(2, '0')}`;
+};
+/** 出勤・退勤を ±分ずらす（遅出・早出・残業・早退を数字で素早く入れる）。 */
+const nudge = (field: 'clockIn' | 'clockOut', delta: number): void => {
+    const current = attendanceTimes[field];
+    if (current === '') {
+        return;
+    }
+    attendanceTimes[field] = minToHhmm(hhmmToMin(current) + delta);
 };
 const addAttendanceBreak = (): void => {
     attendanceBreaks.value.push({ start: '', end: '', type: 'break', note: '' });
 };
+/** 予定どおりに出勤・退勤した日は、ワンタップで記録する。 */
+const recordAsPlanned = (row: TimesheetRow): void => {
+    if (row.planned === null || staffId.value === null) {
+        return;
+    }
+    const day = row.date;
+    router.post('/admin/staff-shifts/attendances', {
+        staff_id: staffId.value,
+        business_date: day,
+        clock_in_at: `${day}T${row.planned.start}`,
+        clock_out_at: `${day}T${row.planned.end}`,
+        status: 'confirmed',
+        note: '',
+        breaks: row.planned.breaks.map((b) => ({ start_at: `${day}T${b.start}`, end_at: `${day}T${b.end}`, type: 'break', note: '' })),
+    }, { preserveScroll: true });
+};
+const flagLabel = (flag: TimesheetFlag): string => `${MESSAGES.attendance.flags[flag.type]} ${flag.minutes}分`;
+const minutesLabel = (value: number): string => `${Math.floor(value / 60)}時間${String(value % 60).padStart(2, '0')}分`;
+const weekdayLabel = (iso: string): string => ['日', '月', '火', '水', '木', '金', '土'][new Date(`${iso}T00:00:00`).getDay()];
+const timesheetTotals = computed(() => props.timesheet.reduce((sum, row) => ({
+    planned: sum.planned + Math.max((row.planned?.work_min ?? 0) - (row.planned?.break_min ?? 0), 0),
+    actual: sum.actual + (row.attendance?.work_min ?? 0),
+    overtime: sum.overtime + row.overtime_min,
+    booked: sum.booked + row.booked_min,
+    available: sum.available + row.available_min,
+}), { planned: 0, actual: 0, overtime: 0, booked: 0, available: 0 }));
 const saveAttendance = (): void => {
     const date = attendanceForm.business_date;
     const clockIn = attendanceTimes.clockIn;
@@ -146,9 +209,9 @@ const saveAttendance = (): void => {
     }));
     attendanceForm.staff_id = staffId.value;
     if (attendanceId.value === null) {
-        attendanceForm.post('/admin/staff-shifts/attendances', { preserveScroll: true, onSuccess: newAttendance });
+        attendanceForm.post('/admin/staff-shifts/attendances', { preserveScroll: true, onSuccess: () => { editorOpen.value = false; } });
     } else {
-        attendanceForm.put(`/admin/staff-shifts/attendances/${attendanceId.value}`, { preserveScroll: true });
+        attendanceForm.put(`/admin/staff-shifts/attendances/${attendanceId.value}`, { preserveScroll: true, onSuccess: () => { editorOpen.value = false; } });
     }
 };
 
@@ -518,48 +581,106 @@ const horizonSummary = computed(() => {
                 <v-alert type="info" variant="tonal" density="compact" class="mb-4">{{ MESSAGES.attendance.help }}</v-alert>
                 <p v-if="staffId === null">{{ MESSAGES.attendance.selectStaff }}</p>
                 <template v-else>
-                    <p class="ark-att__title">{{ attendanceId === null ? MESSAGES.attendance.newTitle : MESSAGES.attendance.editTitle }}</p>
-                    <div class="ark-att__row">
-                        <DateField v-model="attendanceForm.business_date" :label="MESSAGES.attendance.date" :clearable="false" density="comfortable" class="ark-att__date" />
-                        <TimeField v-model="attendanceTimes.clockIn" :label="MESSAGES.attendance.clockIn" :step-minutes="5" density="comfortable" class="ark-att__time" />
-                        <span class="ark-weekgrid__sep">〜</span>
-                        <TimeField v-model="attendanceTimes.clockOut" :label="MESSAGES.attendance.clockOut" :step-minutes="5" clearable density="comfortable" class="ark-att__time" />
+                    <!-- 期間の合計：予定の実働／実績の実働／残業／稼働率 -->
+                    <div class="ts-totals" data-testid="timesheet-totals">
+                        <div class="ts-total"><small>{{ MESSAGES.attendance.totalPlanned }}</small><strong>{{ minutesLabel(timesheetTotals.planned) }}</strong></div>
+                        <div class="ts-total"><small>{{ MESSAGES.attendance.totalActual }}</small><strong>{{ minutesLabel(timesheetTotals.actual) }}</strong></div>
+                        <div class="ts-total"><small>{{ MESSAGES.attendance.totalOvertime }}</small><strong>{{ minutesLabel(timesheetTotals.overtime) }}</strong></div>
+                        <div class="ts-total"><small>{{ MESSAGES.attendance.totalUtilization }}</small><strong>{{ timesheetTotals.available > 0 ? Math.round(timesheetTotals.booked / timesheetTotals.available * 100) : '-' }}<template v-if="timesheetTotals.available > 0">%</template></strong></div>
                     </div>
-                    <div v-for="(entry, index) in attendanceBreaks" :key="index" class="ark-att__row">
-                        <span class="ark-att__breaklabel">{{ MESSAGES.attendance.breakLabel }}{{ index + 1 }}</span>
-                        <TimeField v-model="entry.start" :label="MESSAGES.attendance.breakStart" :step-minutes="5" density="comfortable" class="ark-att__time" />
-                        <span class="ark-weekgrid__sep">〜</span>
-                        <TimeField v-model="entry.end" :label="MESSAGES.attendance.breakEnd" :step-minutes="5" density="comfortable" class="ark-att__time" />
-                        <v-btn variant="text" color="error" size="small" prepend-icon="mdi-close" @click="attendanceBreaks.splice(index, 1)">{{ MESSAGES.attendance.removeBreak }}</v-btn>
-                    </div>
-                    <v-btn variant="text" size="small" prepend-icon="mdi-plus" class="mb-3" @click="addAttendanceBreak">{{ MESSAGES.attendance.addBreak }}</v-btn>
-                    <div class="ark-att__row">
-                        <v-select v-model="attendanceForm.status" :label="MESSAGES.attendance.statusLabel" :items="[{ title: MESSAGES.attendance.draft, value: 'draft' }, { title: MESSAGES.attendance.confirmed, value: 'confirmed' }]" density="comfortable" hide-details class="ark-att__status" />
-                        <v-text-field v-model="attendanceForm.note" :label="MESSAGES.attendance.note" density="comfortable" hide-details class="ark-att__note" />
-                    </div>
-                    <p v-if="Object.keys(attendanceForm.errors).length" role="alert" class="text-error text-body-2">{{ MESSAGES.attendance.formError }} {{ Object.values(attendanceForm.errors).join(' / ') }}</p>
-                    <div class="d-flex ga-3 mt-3">
-                        <v-btn color="primary" prepend-icon="mdi-content-save-outline" :loading="attendanceForm.processing" @click="saveAttendance">{{ MESSAGES.attendance.save }}</v-btn>
-                        <v-btn variant="outlined" @click="newAttendance">{{ MESSAGES.attendance.new }}</v-btn>
-                    </div>
+                    <p v-if="timesheet.length === 0" class="text-medium-emphasis">{{ MESSAGES.attendance.none }}</p>
+                    <v-table v-else density="comfortable" class="ts-table">
+                        <thead>
+                            <tr>
+                                <th>{{ MESSAGES.attendance.date }}</th>
+                                <th>{{ MESSAGES.attendance.planned }}</th>
+                                <th>{{ MESSAGES.attendance.actual }}</th>
+                                <th>{{ MESSAGES.attendance.diff }}</th>
+                                <th class="text-right">{{ MESSAGES.attendance.utilization }}</th>
+                                <th class="text-right">{{ MESSAGES.attendance.operation }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in timesheet" :key="row.date" :data-testid="`ts-row-${row.date}`">
+                                <td class="ts-date">{{ row.date.slice(5).replace('-', '/') }}<small>（{{ weekdayLabel(row.date) }}）</small></td>
+                                <td>
+                                    <template v-if="row.planned">
+                                        <strong>{{ row.planned.start }}〜{{ row.planned.end }}</strong>
+                                        <small class="ts-sub">{{ MESSAGES.attendance.breakLabel }} {{ row.planned.break_min }}分 ・ 実働 {{ minutesLabel(Math.max(row.planned.work_min - row.planned.break_min, 0)) }}</small>
+                                    </template>
+                                    <span v-else class="text-medium-emphasis">{{ MESSAGES.attendance.noShift }}</span>
+                                </td>
+                                <td>
+                                    <template v-if="row.attendance">
+                                        <strong>{{ row.attendance.clock_in ?? MESSAGES.common.notRecorded }}〜{{ row.attendance.clock_out ? row.attendance.clock_out.slice(-5) : MESSAGES.common.notRecorded }}</strong>
+                                        <small class="ts-sub">{{ MESSAGES.attendance.breakLabel }} {{ row.attendance.break_min }}分<template v-if="row.attendance.work_min !== null"> ・ 実働 {{ minutesLabel(row.attendance.work_min) }}</template>
+                                            <span v-if="row.attendance.status === 'draft'" class="ts-draft">{{ MESSAGES.attendance.draft }}</span></small>
+                                    </template>
+                                    <span v-else class="text-medium-emphasis">{{ MESSAGES.attendance.notRecorded }}</span>
+                                </td>
+                                <td>
+                                    <span v-for="flag in row.flags" :key="flag.type" class="ts-flag" :class="`ts-flag--${flag.type}`">{{ flagLabel(flag) }}</span>
+                                    <span v-if="row.attendance && row.flags.length === 0" class="ts-flag ts-flag--ok">{{ MESSAGES.attendance.asPlanned }}</span>
+                                </td>
+                                <td class="text-right">
+                                    <template v-if="row.utilization !== null">
+                                        <strong>{{ row.utilization }}%</strong>
+                                        <small class="ts-sub">{{ MESSAGES.attendance.booked }} {{ row.booked_count }}件 {{ row.booked_min }}分</small>
+                                    </template>
+                                    <span v-else class="text-medium-emphasis">-</span>
+                                </td>
+                                <td class="text-right ts-actions">
+                                    <v-btn v-if="!row.attendance && row.planned" size="small" variant="text" color="primary" prepend-icon="mdi-check" @click="recordAsPlanned(row)">{{ MESSAGES.attendance.recordAsPlanned }}</v-btn>
+                                    <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-pencil-outline" @click="openEditor(row)">{{ row.attendance ? MESSAGES.attendance.edit : MESSAGES.attendance.record }}</v-btn>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </v-table>
                 </template>
             </SectionCard>
-            <SectionCard :title="MESSAGES.attendance.listTitle" class="mt-5">
-                <p v-if="attendances.length === 0" class="text-medium-emphasis">{{ MESSAGES.attendance.none }}</p>
-                <v-table v-else density="comfortable">
-                    <thead><tr><th>{{ MESSAGES.attendance.date }}</th><th>{{ MESSAGES.attendance.clockIn }}〜{{ MESSAGES.attendance.clockOut }}</th><th>{{ MESSAGES.attendance.breakLabel }}</th><th>{{ MESSAGES.attendance.statusLabel }}</th><th>{{ MESSAGES.attendance.note }}</th><th class="text-right">操作</th></tr></thead>
-                    <tbody>
-                        <tr v-for="entry in attendances" :key="entry.id">
-                            <td>{{ entry.business_date }}</td>
-                            <td>{{ timeOf(entry.clock_in_at) || MESSAGES.common.notRecorded }} 〜 {{ timeOf(entry.clock_out_at) || MESSAGES.common.notRecorded }}</td>
-                            <td>{{ entry.breaks.map((b) => `${timeOf(b.start_at)}〜${timeOf(b.end_at)}`).join('、') }}</td>
-                            <td>{{ entry.status === 'confirmed' ? MESSAGES.attendance.confirmed : MESSAGES.attendance.draft }}</td>
-                            <td class="text-medium-emphasis">{{ entry.note ?? '' }}</td>
-                            <td class="text-right"><v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-pencil-outline" @click="editAttendance(entry)">{{ MESSAGES.attendance.edit }}</v-btn></td>
-                        </tr>
-                    </tbody>
-                </v-table>
-            </SectionCard>
+
+            <v-dialog v-model="editorOpen" max-width="560">
+                <v-card v-if="editorRow">
+                    <v-card-title>{{ editorRow.date }}（{{ weekdayLabel(editorRow.date) }}） {{ MESSAGES.attendance.editorTitle }}</v-card-title>
+                    <v-card-text>
+                        <p v-if="editorRow.planned" class="ts-plan">{{ MESSAGES.attendance.planned }}：{{ editorRow.planned.start }}〜{{ editorRow.planned.end }}（{{ MESSAGES.attendance.breakLabel }} {{ editorRow.planned.break_min }}分）</p>
+                        <div class="ark-att__row">
+                            <TimeField v-model="attendanceTimes.clockIn" :label="MESSAGES.attendance.clockIn" :step-minutes="5" density="comfortable" class="ark-att__time" />
+                            <span class="ark-weekgrid__sep">〜</span>
+                            <TimeField v-model="attendanceTimes.clockOut" :label="MESSAGES.attendance.clockOut" :step-minutes="5" clearable density="comfortable" class="ark-att__time" />
+                        </div>
+                        <!-- 遅出・早出・残業・早退を数字で素早く調整 -->
+                        <div class="ts-nudge">
+                            <span class="ts-nudge__label">{{ MESSAGES.attendance.clockIn }}</span>
+                            <v-btn v-for="d in [-30, -15, 15, 30]" :key="`in${d}`" size="x-small" variant="outlined" @click="nudge('clockIn', d)">{{ d > 0 ? '+' : '' }}{{ d }}</v-btn>
+                            <span class="ts-nudge__hint">{{ MESSAGES.attendance.nudgeInHint }}</span>
+                        </div>
+                        <div class="ts-nudge">
+                            <span class="ts-nudge__label">{{ MESSAGES.attendance.clockOut }}</span>
+                            <v-btn v-for="d in [-30, -15, 15, 30, 60]" :key="`out${d}`" size="x-small" variant="outlined" @click="nudge('clockOut', d)">{{ d > 0 ? '+' : '' }}{{ d }}</v-btn>
+                            <span class="ts-nudge__hint">{{ MESSAGES.attendance.nudgeOutHint }}</span>
+                        </div>
+                        <div v-for="(entry, index) in attendanceBreaks" :key="index" class="ark-att__row">
+                            <span class="ark-att__breaklabel">{{ MESSAGES.attendance.breakLabel }}{{ index + 1 }}</span>
+                            <TimeField v-model="entry.start" :label="MESSAGES.attendance.breakStart" :step-minutes="5" density="comfortable" class="ark-att__time" />
+                            <span class="ark-weekgrid__sep">〜</span>
+                            <TimeField v-model="entry.end" :label="MESSAGES.attendance.breakEnd" :step-minutes="5" density="comfortable" class="ark-att__time" />
+                            <v-btn variant="text" color="error" size="small" prepend-icon="mdi-close" @click="attendanceBreaks.splice(index, 1)">{{ MESSAGES.attendance.removeBreak }}</v-btn>
+                        </div>
+                        <v-btn variant="text" size="small" prepend-icon="mdi-plus" class="mb-3" @click="addAttendanceBreak">{{ MESSAGES.attendance.addBreak }}</v-btn>
+                        <div class="ark-att__row">
+                            <v-select v-model="attendanceForm.status" :label="MESSAGES.attendance.statusLabel" :items="[{ title: MESSAGES.attendance.draft, value: 'draft' }, { title: MESSAGES.attendance.confirmed, value: 'confirmed' }]" density="comfortable" hide-details class="ark-att__status" />
+                            <v-text-field v-model="attendanceForm.note" :label="MESSAGES.attendance.note" density="comfortable" hide-details class="ark-att__note" />
+                        </div>
+                        <p v-if="Object.keys(attendanceForm.errors).length" role="alert" class="text-error text-body-2">{{ MESSAGES.attendance.formError }} {{ Object.values(attendanceForm.errors).join(' / ') }}</p>
+                    </v-card-text>
+                    <v-card-actions>
+                        <v-spacer />
+                        <v-btn variant="text" @click="editorOpen = false">{{ MESSAGES.checkout.close }}</v-btn>
+                        <v-btn color="primary" variant="flat" prepend-icon="mdi-content-save-outline" :loading="attendanceForm.processing" @click="saveAttendance">{{ MESSAGES.attendance.save }}</v-btn>
+                    </v-card-actions>
+                </v-card>
+            </v-dialog>
         </v-window-item>
         <!-- ───────── タブ1：基本シフト ───────── -->
         <v-window-item value="basic">
@@ -1105,4 +1226,24 @@ const horizonSummary = computed(() => {
 .ark-booking__inset {
     padding: var(--ark-space-2) 0 var(--ark-space-3) 34px;
 }
+
+/* 勤怠一覧 */
+.ts-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.ts-total { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 10px; background: rgba(var(--v-theme-primary), 0.05); }
+.ts-total small { font-size: 0.6875rem; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.6); }
+.ts-total strong { font-size: 1.125rem; font-variant-numeric: tabular-nums; }
+.ts-table td { vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
+.ts-date { white-space: nowrap; font-weight: 700; }
+.ts-date small { margin-left: 2px; font-weight: 500; color: rgba(var(--v-theme-on-surface), 0.6); }
+.ts-sub { display: block; margin-top: 2px; font-size: 0.6875rem; color: rgba(var(--v-theme-on-surface), 0.6); }
+.ts-draft { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #fff4e0; color: #8a5300; }
+.ts-flag { display: inline-block; margin: 0 4px 4px 0; padding: 1px 8px; border-radius: 999px; font-size: 0.6875rem; font-weight: 700; }
+.ts-flag--late_start, .ts-flag--early_leave { background: #fff4e0; color: #8a5300; }
+.ts-flag--early_start, .ts-flag--overtime { background: #e8f0fe; color: #1a4bb8; }
+.ts-flag--ok { background: #e6f4ea; color: #1e6b34; }
+.ts-actions { white-space: nowrap; }
+.ts-plan { margin: 0 0 12px; font-size: 0.8125rem; color: rgba(var(--v-theme-on-surface), 0.7); }
+.ts-nudge { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.ts-nudge__label { min-width: 36px; font-size: 0.75rem; font-weight: 700; }
+.ts-nudge__hint { font-size: 0.6875rem; color: rgba(var(--v-theme-on-surface), 0.55); }
 </style>

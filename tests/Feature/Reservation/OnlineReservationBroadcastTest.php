@@ -32,6 +32,19 @@ final class OnlineReservationBroadcastTest extends TestCase
 {
     use RefreshDatabase;
 
+    // 予約日時を固定日付（2026-10-01）で書いているため、「現在」を固定して過去日扱いにならないようにする。
+    protected function setUp(): void
+    {
+        parent::setUp();
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-15 09:00:00'));
+    }
+
+    protected function tearDown(): void
+    {
+        CarbonImmutable::setTestNow();
+        parent::tearDown();
+    }
+
     public function test_online_reservation_dispatches_broadcast_event_with_payload(): void
     {
         Event::fake([OnlineReservationCreated::class]);

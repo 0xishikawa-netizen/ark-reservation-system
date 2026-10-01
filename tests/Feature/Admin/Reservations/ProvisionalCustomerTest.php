@@ -60,6 +60,22 @@ final class ProvisionalCustomerTest extends TestCase
             ->assertJsonPath('kana', 'ヤマダ タロウ');
     }
 
+    public function test_name_kana_phone_and_gender_are_saved_and_invalid_gender_is_rejected(): void
+    {
+        $response = $this->actingAs($this->manager())
+            ->postJson('/admin/reservations/provisional-customer', [
+                'name' => '山田 花子', 'kana' => 'ヤマダ ハナコ', 'phone' => '09011112222', 'gender' => 'female',
+            ])->assertOk();
+
+        $customer = Customer::query()->findOrFail((int) $response->json('user_id'));
+        $this->assertSame('female', $customer->gender);
+        $this->assertSame('ヤマダ ハナコ', $customer->kana);
+
+        $this->actingAs($this->manager())
+            ->postJson('/admin/reservations/provisional-customer', ['name' => '山田', 'gender' => 'robot'])
+            ->assertUnprocessable()->assertJsonValidationErrors('gender');
+    }
+
     public function test_all_blank_input_is_rejected(): void
     {
         $this->actingAs($this->manager())
