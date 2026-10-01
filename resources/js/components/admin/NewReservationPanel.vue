@@ -220,6 +220,21 @@ const selectedService = computed<ServiceOption | null>(
 
 const menuPickerOpen = ref(false);
 
+/** 手順の番号（日時が盤面で決まっている時は「日時」の手順を出さないので、番号を詰める）。 */
+type StepKey = 'customer' | 'menu' | 'time' | 'staff' | 'options';
+function stepNo(key: StepKey): number {
+    const order: StepKey[] = ['customer', 'menu'];
+    if (!dateTimeLocked.value && !awaitingBoardSlotSelection.value) {
+        order.push('time');
+    }
+    order.push('staff', 'options');
+
+    return order.indexOf(key) + 1;
+}
+const customerDone = computed(() => form.customer_id !== null);
+/** 担当を選んだか、指名なしでも日時とメニューが決まって自動割当できる状態。 */
+const staffDone = computed(() => (selectedStaffId.value !== null && !selectedStaffIneligible.value) || (selectedStaffId.value === null && selectedServiceId.value !== null && form.starts_at !== null));
+
 const selectedStaffName = computed<string | null>(
     () => props.staff.find((s) => s.user_id === selectedStaffId.value)?.display_name ?? null,
 );
@@ -707,33 +722,41 @@ function submit(): void {
 
             <!-- 全項目「上にラベル・下に値」で統一する（キャプションの出方を揃える）。 -->
 
-            <h3 class="nrp__section">お客様・メニュー</h3>
+            <div class="nrp__step" :class="{ 'nrp__step--done': customerDone }">
+                <span class="nrp__step-no"><v-icon v-if="customerDone" icon="mdi-check" size="13" /><template v-else>{{ stepNo('customer') }}</template></span>
+                <span class="nrp__step-title">お客様</span>
+            </div>
 
             <!-- ① 顧客：上の常時表示の検索欄で選ぶ。未選択のときはハイフン。 -->
             <div class="nrp__block">
-                <span class="nrp__block-label">顧客</span>
 
                 <div v-if="selectedCustomer" class="nrp__customer">
+                    <span class="nrp__avatar" aria-hidden="true">{{ selectedCustomer.name.trim().charAt(0) || '–' }}</span>
                     <span class="nrp__customer-body">
                         <span class="nrp__customer-name">{{ selectedCustomer.name }}</span>
                         <span v-if="selectedCustomer.kana" class="nrp__customer-kana">
                             {{ selectedCustomer.kana }}
                         </span>
                     </span>
-                    <button
-                        type="button"
-                        class="nrp__customer-clear"
-                        data-testid="nrp-open-customer"
-                        @click="emit('openCustomer', selectedCustomer.user_id)"
-                    >
-                        {{ MESSAGES.customer.openDetail }}
-                    </button>
-                    <button type="button" class="nrp__customer-clear" @click="clearCustomer">
-                        変更
-                    </button>
+                    <span class="nrp__customer-actions">
+                        <button
+                            type="button"
+                            class="nrp__mini"
+                            data-testid="nrp-open-customer"
+                            @click="emit('openCustomer', selectedCustomer.user_id)"
+                        >
+                            {{ MESSAGES.customer.openDetail }}
+                        </button>
+                        <button type="button" class="nrp__mini" @click="clearCustomer">
+                            変更
+                        </button>
+                    </span>
                 </div>
                 <template v-else>
-                    <p class="nrp__value nrp__value--empty">---</p>
+                    <div class="nrp__customer-empty">
+                        <v-icon icon="mdi-magnify" size="16" />
+                        <span>{{ MESSAGES.reservation.pickCustomerFromSearch }}</span>
+                    </div>
                     <button type="button" class="nrp__newcust" @click="openProvisional">
                         <v-icon icon="mdi-account-plus-outline" size="14" />
                         <span>新規のお客様（電話予約など）</span>
@@ -805,8 +828,11 @@ function submit(): void {
             </v-dialog>
 
             <!-- ② メニュー -->
+            <div class="nrp__step" :class="{ 'nrp__step--done': selectedServiceId !== null }">
+                <span class="nrp__step-no"><v-icon v-if="selectedServiceId !== null" icon="mdi-check" size="13" /><template v-else>{{ stepNo('menu') }}</template></span>
+                <span class="nrp__step-title">メニュー</span>
+            </div>
             <div class="nrp__block">
-                <span class="nrp__block-label">メニュー</span>
                 <button
                     type="button"
                     class="nrp__field-btn"
@@ -821,8 +847,13 @@ function submit(): void {
                             :style="{ background: selectedService.color }"
                             aria-hidden="true"
                         />
-                        <span :class="{ 'nrp__field-placeholder': !selectedService }">
-                            {{ selectedService ? selectedService.name : '選択してください' }}
+                        <span class="nrp__field-text">
+                            <span :class="{ 'nrp__field-placeholder': !selectedService }">
+                                {{ selectedService ? selectedService.name : '選択してください' }}
+                            </span>
+                            <span v-if="selectedService" class="nrp__field-meta">
+                                {{ selectedService.duration_min }}分 ・ {{ selectedService.price.toLocaleString() }}円
+                            </span>
                         </span>
                     </span>
                     <v-icon icon="mdi-chevron-right" size="16" class="nrp__field-arrow" />
@@ -838,7 +869,10 @@ function submit(): void {
                 @select="(id) => { selectedServiceId = id; }"
             />
 
-            <h3 v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__section">日時</h3>
+            <div v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__step" :class="{ 'nrp__step--done': form.starts_at !== null }">
+                <span class="nrp__step-no"><v-icon v-if="form.starts_at !== null" icon="mdi-check" size="13" /><template v-else>{{ stepNo('time') }}</template></span>
+                <span class="nrp__step-title">日時</span>
+            </div>
 
             <!-- ③ 日付（予約の操作順：顧客→メニュー→日時→担当→ブース→インターバル→備考。Task 11-30） -->
             <div v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__block">
@@ -872,7 +906,10 @@ function submit(): void {
                 <p v-if="form.errors.starts_at" class="nrp__error">{{ form.errors.starts_at }}</p>
             </div>
 
-            <h3 class="nrp__section">担当・ブース</h3>
+            <div class="nrp__step" :class="{ 'nrp__step--done': staffDone }">
+                <span class="nrp__step-no"><v-icon v-if="staffDone" icon="mdi-check" size="13" /><template v-else>{{ stepNo('staff') }}</template></span>
+                <span class="nrp__step-title">担当・ブース</span>
+            </div>
 
             <!-- ⑤ 担当スタッフ・指名 -->
             <div class="nrp__block">
@@ -919,7 +956,11 @@ function submit(): void {
                 <p v-if="form.errors.booth_id" class="nrp__error">{{ form.errors.booth_id }}</p>
             </div>
 
-            <h3 class="nrp__section">オプション</h3>
+            <div class="nrp__step" >
+                <span class="nrp__step-no">{{ stepNo('options') }}</span>
+                <span class="nrp__step-title">オプション</span>
+                <span class="nrp__step-opt">任意</span>
+            </div>
 
             <!-- ⑦ インターバル（予約の後ろに確保） -->
             <div class="nrp__block">
@@ -1083,23 +1124,54 @@ function submit(): void {
     color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
-/* セクション見出し：項目をまとまりごとに区切り、上から順に追いやすくする。 */
-.nrp__section {
+/* 手順の見出し：番号（済んだらチェック）＋名前。上から順に埋めていけば予約できることが分かる。 */
+.nrp__step {
     display: flex;
     align-items: center;
-    gap: var(--ark-space-2);
-    margin: var(--ark-space-2) 0 0;
-    font-size: 0.6875rem;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    color: rgb(var(--v-theme-primary));
+    gap: 8px;
+    margin-top: var(--ark-space-2);
 }
 
-.nrp__section::after {
+.nrp__step-no {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(var(--v-theme-primary), 0.35);
+    color: rgb(var(--v-theme-primary));
+    font-size: 0.6875rem;
+    font-weight: 800;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.nrp__step--done .nrp__step-no {
+    border-color: rgb(var(--v-theme-primary));
+    background: rgb(var(--v-theme-primary));
+    color: #fff;
+}
+
+.nrp__step-title {
+    font-size: 0.8125rem;
+    font-weight: 800;
+    color: rgb(var(--v-theme-on-surface));
+}
+
+.nrp__step-opt {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.nrp__step::after {
     content: '';
     flex: 1 1 auto;
     height: 1px;
-    background: rgba(var(--v-theme-primary), 0.18);
+    background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .nrp__field-btn {
@@ -1108,11 +1180,11 @@ function submit(): void {
     align-items: center;
     gap: var(--ark-space-2);
     width: 100%;
-    height: 40px;
-    padding: 0 var(--ark-space-3);
+    min-height: 44px;
+    padding: 6px var(--ark-space-3);
     text-align: left;
     border: 1px solid rgba(var(--v-theme-on-surface), 0.3);
-    border-radius: var(--ark-radius);
+    border-radius: 10px;
     background: rgb(var(--v-theme-surface));
     cursor: pointer;
     text-align: left;
@@ -1133,6 +1205,19 @@ function submit(): void {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.nrp__field-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    line-height: 1.3;
+}
+
+.nrp__field-meta {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 .nrp__field-placeholder {
@@ -1216,13 +1301,25 @@ function submit(): void {
     display: flex;
     box-sizing: border-box;
     align-items: center;
-    gap: var(--ark-space-2);
+    gap: 10px;
     width: 100%;
-    min-height: 40px;
-    padding: var(--ark-space-2) var(--ark-space-3);
-    border: 1px solid rgba(var(--v-theme-primary), 0.35);
-    border-radius: var(--ark-radius);
-    background: rgba(var(--v-theme-primary), 0.06);
+    padding: 10px 10px 10px 12px;
+    border: 1px solid rgba(var(--v-theme-primary), 0.25);
+    border-radius: 10px;
+    background: rgba(var(--v-theme-primary), 0.05);
+}
+
+.nrp__avatar {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgb(var(--v-theme-primary));
+    color: #fff;
+    font-size: 0.8125rem;
+    font-weight: 800;
 }
 
 .nrp__customer-body {
@@ -1234,26 +1331,49 @@ function submit(): void {
 }
 
 .nrp__customer-name {
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     font-weight: 800;
     word-break: break-word;
 }
 
 .nrp__customer-kana {
-    font-size: 0.625rem;
-    color: rgba(var(--v-theme-on-surface), 0.7);
+    font-size: 0.6875rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
-.nrp__customer-clear {
+.nrp__customer-actions {
+    display: flex;
     flex: 0 0 auto;
-    padding: 2px 8px;
-    border: 1px solid rgba(var(--v-theme-accent), 0.5);
+    flex-direction: column;
+    gap: 4px;
+}
+
+.nrp__mini {
+    padding: 2px 10px;
+    border: 1px solid rgba(var(--v-theme-primary), 0.3);
     border-radius: 999px;
-    background: none;
-    font-size: 0.625rem;
+    background: rgb(var(--v-theme-surface));
+    font-size: 0.6875rem;
     font-weight: 700;
-    color: rgb(var(--v-theme-accent));
+    color: rgb(var(--v-theme-primary));
     cursor: pointer;
+}
+
+.nrp__mini:hover {
+    background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.nrp__customer-empty {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1.5px dashed rgba(var(--v-theme-error), 0.45);
+    border-radius: 10px;
+    background: rgba(var(--v-theme-error), 0.04);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(var(--v-theme-error));
 }
 
 .nrp__newcust {
@@ -1380,32 +1500,36 @@ function submit(): void {
 
 .nrp__buffers {
     display: flex;
-    gap: 6px;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .nrp__buffer {
     flex: 1 1 0;
     min-width: 0;
-    height: 30px;
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
-    border-radius: var(--ark-radius);
-    background: rgb(var(--v-theme-surface));
+    height: 28px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
     font-size: 0.6875rem;
     font-weight: 700;
-    color: rgba(var(--v-theme-on-surface), 0.74);
+    color: rgba(var(--v-theme-on-surface), 0.65);
     cursor: pointer;
+    transition: background 0.15s;
 }
 
 .nrp__buffer--active {
-    border-color: rgb(var(--v-theme-primary));
-    background: rgba(var(--v-theme-primary), 0.1);
+    background: rgb(var(--v-theme-surface));
     color: rgb(var(--v-theme-primary));
+    box-shadow: 0 1px 3px rgb(18 25 60 / 18%);
 }
 
 /* 空き時間は自動で読み込むので、確認ボタンは置かない（§空き時間の自動取得）。 */
 .nrp__slots {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
 }
 

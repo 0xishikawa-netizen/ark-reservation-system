@@ -56,6 +56,7 @@ export const MESSAGES = {
     },
     /** 予約 */
     reservation: {
+        pickCustomerFromSearch: '上の検索欄からお客様を選んでください',
         staffNotEligibleSuffix: '（このメニューを担当できません）',
         staffNotEligibleHint: 'このスタッフは今のメニューを担当できません（スタッフ設定の「実施できる施術」・「保有資格」を確認するか、担当を変更してください）。',
         boothNotAllowedSuffix: '（このメニューでは使えません）',
@@ -610,6 +611,14 @@ export const MESSAGES = {
         minutesUnit: '分',
         staffMinutes: '担当時間',
         treatmentStaff: '担当スタッフ（実際に施術した人）',
+        treatmentsSub: '実際に行った施術と担当を記録します（予約内容と違っていても構いません）。',
+        noTreatmentStaff: '担当スタッフが未設定です。',
+        nominationShort: '指名',
+        reservationPayment: '支払区分',
+        interval: 'インターバル',
+        linesSub: 'お客様に請求する内容を1行ずつ入れます。',
+        linesHelpToggle: '会計明細とは？',
+        balanced: '支払合計が会計合計と一致しています',
         staff: '担当',
         addStaff: '担当を追加',
         primaryStaff: '主担当',
