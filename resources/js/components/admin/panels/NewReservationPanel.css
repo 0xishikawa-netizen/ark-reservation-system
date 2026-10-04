@@ -1,0 +1,645 @@
+.nrp__error-title {
+    margin: 0;
+}
+
+.nrp__reasons,
+.nrp__toast-reasons {
+    margin: 4px 0 0;
+    padding-left: 1.2em;
+}
+
+/* いつ・誰か（日付／開始時間／担当）の3セルカード。 */
+.nrp__when {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: var(--ark-space-3) var(--ark-space-3);
+    padding: var(--ark-space-3);
+    background: rgba(var(--v-theme-primary), 0.05);
+    border: 1px solid rgba(var(--v-theme-primary), 0.14);
+    border-radius: 10px;
+}
+
+.nrp__when-cell {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.nrp__when-cell--staff {
+    grid-column: 1 / -1;
+    padding-top: var(--ark-space-2);
+    border-top: 1px dashed rgba(var(--v-theme-primary), 0.2);
+}
+
+.nrp__when-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(var(--v-theme-on-surface), 0.62);
+}
+
+.nrp__when-value {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.nrp__when-value--time {
+    font-size: 1rem;
+    font-weight: 800;
+    color: rgb(var(--v-theme-primary));
+    font-variant-numeric: tabular-nums;
+}
+
+.nrp__when-value--muted {
+    font-weight: 600;
+    color: rgba(var(--v-theme-on-surface), 0.5);
+}
+
+.nrp__when-sep {
+    margin: 0 2px;
+    font-weight: 600;
+}
+
+.nrp__when-empty {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 0.75rem;
+    color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+/* 手順の見出し：番号（済んだらチェック）＋名前。上から順に埋めていけば予約できることが分かる。 */
+.nrp__step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: var(--ark-space-2);
+}
+
+.nrp__step-no {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(var(--v-theme-primary), 0.35);
+    color: rgb(var(--v-theme-primary));
+    font-size: 0.6875rem;
+    font-weight: 800;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.nrp__step--done .nrp__step-no {
+    border-color: rgb(var(--v-theme-primary));
+    background: rgb(var(--v-theme-primary));
+    color: #fff;
+}
+
+.nrp__step-title {
+    font-size: 0.8125rem;
+    font-weight: 800;
+    color: rgb(var(--v-theme-on-surface));
+}
+
+.nrp__step-opt {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.nrp__step::after {
+    content: '';
+    flex: 1 1 auto;
+    height: 1px;
+    background: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.nrp__field-btn {
+    display: flex;
+    box-sizing: border-box;
+    align-items: center;
+    gap: var(--ark-space-2);
+    width: 100%;
+    min-height: 44px;
+    padding: 6px var(--ark-space-3);
+    text-align: left;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.3);
+    border-radius: 10px;
+    background: rgb(var(--v-theme-surface));
+    cursor: pointer;
+    text-align: left;
+}
+
+.nrp__field-btn:hover {
+    border-color: rgb(var(--v-theme-primary));
+}
+
+.nrp__field-value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.75rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.nrp__field-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    line-height: 1.3;
+}
+
+.nrp__field-meta {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.nrp__field-placeholder {
+    font-weight: 400;
+    color: rgba(var(--v-theme-on-surface), 0.68);
+}
+
+.nrp__field-swatch {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+}
+
+.nrp__field-arrow {
+    flex: 0 0 auto;
+    color: rgba(var(--v-theme-on-surface), 0.68);
+}
+
+/* 「代わりに予定を入れる」は下線リンクではなく、入力欄と同じ幅の控えめなボタンにする。 */
+.nrp__switch {
+    display: flex;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    height: 36px;
+    padding: 0 var(--ark-space-3);
+    border: 1px dashed rgba(var(--v-theme-primary), 0.4);
+    border-radius: var(--ark-radius);
+    background: rgba(var(--v-theme-primary), 0.04);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(var(--v-theme-primary));
+    cursor: pointer;
+}
+
+.nrp__switch:hover {
+    background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.nrp__switch-arrow {
+    margin-left: auto;
+}
+
+.nrp__prefs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.nrp__pref {
+    height: 34px;
+    padding: 0 4px;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+    border-radius: 8px;
+    background: rgb(var(--v-theme-surface));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.75);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.12s, border-color 0.12s, color 0.12s, transform 0.06s;
+}
+
+.nrp__pref:hover:not(:disabled) {
+    background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.nrp__pref:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+.nrp__pref:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* 選択中は色で一目で分かるようにする（指名＝赤、男性希望＝青、女性希望＝ピンク。ボードのバッジと同じ色）。 */
+.nrp__pref--active.nrp__pref--nomination {
+    border-color: rgb(var(--v-theme-error));
+    background: rgb(var(--v-theme-error));
+    color: #fff;
+}
+
+.nrp__pref--active.nrp__pref--male {
+    border-color: rgb(var(--v-theme-info));
+    background: rgb(var(--v-theme-info));
+    color: #fff;
+}
+
+.nrp__pref--active.nrp__pref--female {
+    border-color: #c2185b;
+    background: #c2185b;
+    color: #fff;
+}
+
+/* ラベル＋中身をひとかたまりにするブロック（顧客・バッファ・開始時間で使う）。 */
+.nrp__block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.nrp__block-label {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ark-space-2);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.nrp__block-note {
+    font-weight: 400;
+    color: rgba(var(--v-theme-on-surface), 0.68);
+}
+
+.nrp__hint {
+    margin: 0;
+    font-size: 0.625rem;
+    line-height: 1.5;
+    color: rgba(var(--v-theme-on-surface), 0.68);
+}
+
+/* 確定済みの顧客ラベル。 */
+.nrp__customer {
+    display: flex;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 10px 10px 12px;
+    border: 1px solid rgba(var(--v-theme-primary), 0.25);
+    border-radius: 10px;
+    background: rgba(var(--v-theme-primary), 0.05);
+}
+
+.nrp__customer-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.nrp__customer-name {
+    font-size: 0.875rem;
+    font-weight: 800;
+    word-break: break-word;
+}
+
+.nrp__customer-kana {
+    font-size: 0.6875rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.nrp__customer-empty {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1.5px dashed rgba(var(--v-theme-error), 0.45);
+    border-radius: 10px;
+    background: rgba(var(--v-theme-error), 0.04);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(var(--v-theme-error));
+}
+
+/* ラベルの下に出す「値」。未確定はハイフンで揃える。 */
+.nrp__value {
+    display: flex;
+    box-sizing: border-box;
+    align-items: center;
+    min-height: 40px;
+    margin: 0;
+    padding: 0 var(--ark-space-3);
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+    border-radius: var(--ark-radius);
+    background: rgba(var(--v-theme-on-surface), 0.02);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.nrp__value--empty {
+    font-weight: 400;
+    color: rgba(var(--v-theme-on-surface), 0.5);
+}
+
+.nrp__customer-empty-icon {
+    color: rgb(var(--v-theme-primary));
+}
+
+.nrp__cust-results {
+    display: flex;
+    flex-direction: column;
+    max-height: 168px;
+    overflow-y: auto;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+    border-radius: var(--ark-radius);
+}
+
+.nrp__cust-row {
+    display: flex;
+    align-items: center;
+    gap: var(--ark-space-2);
+    padding: var(--ark-space-2) var(--ark-space-3);
+    border: 0;
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    background: none;
+    text-align: left;
+    cursor: pointer;
+}
+
+.nrp__cust-row:first-child {
+    border-top: 0;
+}
+
+.nrp__cust-row:hover {
+    background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.nrp__cust-row-name {
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.nrp__cust-row-kana {
+    font-size: 0.625rem;
+    color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.nrp__cust-row-arrow {
+    margin-left: auto;
+    color: rgba(var(--v-theme-on-surface), 0.4);
+}
+
+/* 施術後にあける時間（バッファ）の選択チップ。 */
+.nrp__buffer-note {
+    margin-left: 0;
+    font-weight: 500;
+    font-size: 0.72rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+
+.nrp__secondary {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -4px;
+}
+
+.nrp__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    margin-bottom: 8px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: rgb(var(--v-theme-on-surface));
+}
+
+.nrp__summary-muted {
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.nrp__buffers {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.nrp__buffer {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 28px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.65);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.nrp__buffer--active {
+    background: rgb(var(--v-theme-surface));
+    color: rgb(var(--v-theme-primary));
+    box-shadow: 0 1px 3px rgb(18 25 60 / 18%);
+}
+
+/* 空き時間は自動で読み込むので、確認ボタンは置かない（§空き時間の自動取得）。 */
+.nrp__slots {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.nrp__slot {
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+    border-radius: var(--ark-radius);
+    background: rgb(var(--v-theme-surface));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: rgb(var(--v-theme-on-surface));
+    cursor: pointer;
+}
+
+.nrp__slot:hover {
+    border-color: rgb(var(--v-theme-primary));
+}
+
+.nrp__slot--active {
+    border-color: rgb(var(--v-theme-primary));
+    background: rgb(var(--v-theme-primary));
+    color: #ffffff;
+}
+
+.nrp__muted {
+    margin: 0;
+    font-size: 0.75rem;
+    color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.nrp__error {
+    margin: 0;
+    font-size: 0.6875rem;
+    color: rgb(var(--v-theme-error));
+}
+
+/* お客様の既存／新規トグル */
+.nrp__toggle {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.nrp__toggle-btn {
+    flex: 1 1 0;
+    height: 22px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.65);
+    cursor: pointer;
+}
+
+.nrp__toggle-btn--active {
+    background: rgb(var(--v-theme-surface));
+    color: rgb(var(--v-theme-primary));
+    box-shadow: 0 1px 3px rgb(18 25 60 / 18%);
+}
+
+.nrp__newform {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 顧客／履歴／今後の予約（予約詳細パネルと同じ並び） */
+.nrp__tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.nrp__tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    height: 32px;
+    padding: 0 4px;
+    border: 1px solid rgba(var(--v-theme-primary), 0.3);
+    border-radius: 8px;
+    background: rgb(var(--v-theme-surface));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(var(--v-theme-primary));
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.nrp__tab:hover {
+    background: rgba(var(--v-theme-primary), 0.06);
+}
+
+.nrp__tab--active {
+    background: rgb(var(--v-theme-primary));
+    color: #fff;
+}
+
+.nrp__dialog-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.nrp__history {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: var(--ark-space-3);
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.nrp__history-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 800;
+}
+
+.nrp__history-close {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    margin-left: auto;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    cursor: pointer;
+}
+
+.nrp__rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.nrp__row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+    border-radius: 8px;
+}
+
+.nrp__row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.nrp__row-when {
+    font-size: 0.75rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.nrp__row-service {
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.nrp__row-staff {
+    font-size: 0.6875rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}

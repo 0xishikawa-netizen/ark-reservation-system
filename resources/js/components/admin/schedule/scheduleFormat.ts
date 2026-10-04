@@ -93,3 +93,34 @@ export function dayLabel(value: string): string {
 export function laneKey(lane: ScheduleLane): string {
     return `${lane.kind}-${lane.id ?? "unassigned"}`;
 }
+
+/** 予定ブロック種別ごとのアイコン・色。 */
+const BLOCK_ICON: Record<string, string> = {
+    BREAK: "mdi-coffee-outline",
+    MEETING: "mdi-account-group-outline",
+    ADMIN: "mdi-file-document-outline",
+    CLEANING: "mdi-broom",
+    WORK: "mdi-briefcase-outline",
+    TRAINING: "mdi-school-outline",
+    OUT: "mdi-walk",
+    OTHER: "mdi-dots-horizontal",
+};
+
+const BLOCK_COLOR: Record<string, string> = {
+    BREAK: "warning",
+    MEETING: "info",
+    ADMIN: "secondary",
+    CLEANING: "success",
+    WORK: "primary",
+    TRAINING: "accent",
+    OUT: "secondary",
+    OTHER: "secondary",
+};
+
+export function blockIcon(type: string): string {
+    return BLOCK_ICON[type] ?? "mdi-calendar-blank-outline";
+}
+
+export function blockColor(type: string): string {
+    return BLOCK_COLOR[type] ?? "secondary";
+}

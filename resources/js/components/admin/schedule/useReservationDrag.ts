@@ -41,6 +41,7 @@ export interface ReservationDragContext {
     timelineTrackHeight: ComputedRef<number>;
     viewMode: Ref<ScheduleView>;
     blockDrag: Ref<BlockDragState | null>;
+    drag: Ref<DragState | null>;
     dragClickGuard: DragClickGuard;
 }
 
@@ -62,6 +63,7 @@ export function useReservationDrag(ctx: ReservationDragContext) {
         timelineTrackHeight,
         viewMode,
         blockDrag,
+        drag,
         dragClickGuard,
     } = ctx;
 
@@ -90,7 +92,6 @@ export function useReservationDrag(ctx: ReservationDragContext) {
         );
     }
 
-    const drag = ref<DragState | null>(null);
 
     const crossDateMove = ref<CrossDateMoveState | null>(null);
     const crossDatePointer = reactive({ x: 0, y: 0 });
@@ -624,7 +625,6 @@ export function useReservationDrag(ctx: ReservationDragContext) {
         crossDatePointer,
         dateDropHoverOffset,
         dndErrorToast,
-        drag,
         dragOffsetXPx,
         dragOffsetYPx,
         draggedReservation,

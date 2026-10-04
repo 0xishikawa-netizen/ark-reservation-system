@@ -28,6 +28,8 @@ import ScheduleMoveConfirmDialog from "@/components/admin/schedule/ScheduleMoveC
 import ScheduleReservationCardBody from "@/components/admin/schedule/ScheduleReservationCardBody.vue";
 import { useReservationDrag } from "@/components/admin/schedule/useReservationDrag";
 import { useBlockDrag } from "@/components/admin/schedule/useBlockDrag";
+import { useScheduleShading } from "@/components/admin/schedule/useScheduleShading";
+import { useTimelineGuides } from "@/components/admin/schedule/useTimelineGuides";
 import { useMenuPreview } from "@/components/admin/schedule/useMenuPreview";
 import ScheduleDragGhost from "@/components/admin/schedule/ScheduleDragGhost.vue";
 import {
@@ -42,8 +44,6 @@ import {
     pushPanelHistoryStack,
 } from "@/composables/panelHistory";
 import {
-    applyBlockPrefill,
-    applyReservationPrefill,
     createEmptyBlockDraft,
     createEmptyReservationDraft,
     resetBlockDraft,
@@ -57,6 +57,8 @@ import {
     todayIso,
     dayLabel,
     laneKey,
+    blockIcon,
+    blockColor,
 } from "@/components/admin/schedule/scheduleFormat";
 import type {
     ScheduleView,
@@ -72,12 +74,12 @@ import type {
     Booth,
     DateRange,
     Filters,
-    ShadeSegment,
     MenuOption,
     BoothOption,
     DailySummary,
     DisplayRow,
     BlockDragState,
+    DragState,
     DragClickGuard,
 } from "@/components/admin/schedule/types";
 
@@ -118,7 +120,6 @@ const props = defineProps<{
 }>();
 const page = usePage();
 const canManage = computed(() => page.props.auth.can.reservationsManage);
-const canManageShifts = computed(() => page.props.auth.can.shiftsManage);
 // 顧客検索は閲覧操作なので reservations.view で使える（§19）。reservations.manage 専用の
 // 新規予約・編集・D&D等とは別の権限で判定する。
 const canSearchCustomers = computed(() => page.props.auth.can.reservationsView);
@@ -268,12 +269,6 @@ const { previewServiceId, previewLoading, previewService, menuSegments } =
 const timelineWidth = computed(() =>
     Math.max(durationMinutes.value * pixelsPerMinute.value, 1),
 );
-const tickMinutes = computed(() =>
-    props.business_hours.slot_minutes > 30
-        ? props.business_hours.slot_minutes
-        : 30,
-);
-
 const offStaff = computed<OffStaff[]>(() => props.off_staff ?? []);
 
 function staffLanes(): ScheduleLane[] {
@@ -380,24 +375,6 @@ const timelineTrackHeight = computed(() => {
     );
 });
 
-const timeTicks = computed(() => {
-    const ticks: number[] = [];
-
-    for (
-        let minute = openMinute.value;
-        minute <= closeMinute.value;
-        minute += tickMinutes.value
-    ) {
-        ticks.push(minute);
-    }
-
-    if (ticks[ticks.length - 1] !== closeMinute.value) {
-        ticks.push(closeMinute.value);
-    }
-
-    return ticks;
-});
-
 function reservationStyle(
     reservation: ScheduleReservation,
 ): Record<string, string> {
@@ -484,87 +461,22 @@ function blockStyle(block: ScheduleBlock): Record<string, string> {
     };
 }
 
-/* ───────────── 週表示（§2-3）─────────────
- * 日表示のタイムラインをそのまま7日ぶん並べると横に広くなりすぎるため、
- * スタッフ（または ブース）を行、日付を列とした「1日ぶんの営業時間を100%とする
- * コンパクトな帯グラフ」で1週間を俯瞰できるようにする。クリック時に開くパネル・
- * 予約詳細・空き枠からの新規予約/予定追加は日表示と同じ関数をそのまま再利用する
- * （業務ロジックの重複実装はしない）。 */
-interface WeekRect {
-    leftPct: number;
-    widthPct: number;
-}
+const {
+    nonWorkingSegments,
+    weekBarRect,
+    weekBlockTooltip,
+    weekNonWorkingRects,
+    weekRectStyle,
+    weekReservationTooltip,
+} = useScheduleShading({
+    closeMinute,
+    date,
+    openMinute,
+    pixelsPerMinute,
+    props,
+    serviceEndLabel,
+});
 
-function weekBarRect(startMin: number, endMin: number): WeekRect {
-    const total = Math.max(closeMinute.value - openMinute.value, 1);
-    const visibleStart = Math.min(
-        Math.max(startMin, openMinute.value),
-        closeMinute.value,
-    );
-    const visibleEnd = Math.max(
-        Math.min(endMin, closeMinute.value),
-        openMinute.value,
-    );
-
-    return {
-        leftPct: ((visibleStart - openMinute.value) / total) * 100,
-        widthPct: Math.max(((visibleEnd - visibleStart) / total) * 100, 1.5),
-    };
-}
-
-function weekRectStyle(rect: WeekRect): Record<string, string> {
-    return { left: `${rect.leftPct}%`, width: `${rect.widthPct}%` };
-}
-
-/** 勤務外（§2必須項目）。日表示の nonWorkingSegments と同じアルゴリズムを、日付ごとに適用する。 */
-function weekNonWorkingRects(lane: ScheduleLane, day: string): WeekRect[] {
-    if (lane.kind !== "staff" || lane.id === null) {
-        return [];
-    }
-
-    const staffShifts = props.shifts.filter(
-        (shift) => shift.staff_id === lane.id && shift.work_date === day,
-    );
-    const unit = Math.max(props.business_hours.slot_minutes, 5);
-    const rects: WeekRect[] = [];
-    let segmentStart: number | null = null;
-
-    for (
-        let minute = openMinute.value;
-        minute < closeMinute.value;
-        minute += unit
-    ) {
-        const segmentEnd = Math.min(minute + unit, closeMinute.value);
-        const working = staffShifts.some(
-            (shift) =>
-                minute >= timeToMinute(shift.start_at) &&
-                segmentEnd <= timeToMinute(shift.end_at),
-        );
-
-        if (!working && segmentStart === null) {
-            segmentStart = minute;
-        }
-
-        if (working && segmentStart !== null) {
-            rects.push(weekBarRect(segmentStart, minute));
-            segmentStart = null;
-        }
-    }
-
-    if (segmentStart !== null) {
-        rects.push(weekBarRect(segmentStart, closeMinute.value));
-    }
-
-    return rects;
-}
-
-function weekReservationTooltip(reservation: ScheduleReservation): string {
-    return `${reservation.starts_at.slice(11, 16)}〜${serviceEndLabel(reservation)} ${reservation.customer_name} ／ ${reservation.service_name}`;
-}
-
-function weekBlockTooltip(block: ScheduleBlock): string {
-    return `${block.start_at}〜${block.end_at} ${block.title ?? block.type_label}`;
-}
 
 /** 空きセルクリック → 待機中の予約がなければ「予約／予定」の選択パネルを開く。 */
 function onWeekCellClick(
@@ -608,84 +520,6 @@ function onWeekCellClick(
     }
 
     openSlotChoicePanel(slotPrefill);
-}
-
-const BLOCK_ICON: Record<string, string> = {
-    BREAK: "mdi-coffee-outline",
-    MEETING: "mdi-account-group-outline",
-    ADMIN: "mdi-file-document-outline",
-    CLEANING: "mdi-broom",
-    WORK: "mdi-briefcase-outline",
-    TRAINING: "mdi-school-outline",
-    OUT: "mdi-walk",
-    OTHER: "mdi-dots-horizontal",
-};
-
-const BLOCK_COLOR: Record<string, string> = {
-    BREAK: "warning",
-    MEETING: "info",
-    ADMIN: "secondary",
-    CLEANING: "success",
-    WORK: "primary",
-    TRAINING: "accent",
-    OUT: "secondary",
-    OTHER: "secondary",
-};
-
-function blockIcon(type: string): string {
-    return BLOCK_ICON[type] ?? "mdi-calendar-blank-outline";
-}
-
-function blockColor(type: string): string {
-    return BLOCK_COLOR[type] ?? "secondary";
-}
-
-function nonWorkingSegments(staffIdValue: number | null): ShadeSegment[] {
-    if (staffIdValue === null) {
-        return [];
-    }
-
-    const staffShifts = props.shifts.filter(
-        (shift) =>
-            shift.staff_id === staffIdValue && shift.work_date === date.value,
-    );
-    const unit = Math.max(props.business_hours.slot_minutes, 5);
-    const segments: ShadeSegment[] = [];
-    let segmentStart: number | null = null;
-
-    for (
-        let minute = openMinute.value;
-        minute < closeMinute.value;
-        minute += unit
-    ) {
-        const segmentEnd = Math.min(minute + unit, closeMinute.value);
-        const working = staffShifts.some(
-            (shift) =>
-                minute >= timeToMinute(shift.start_at) &&
-                segmentEnd <= timeToMinute(shift.end_at),
-        );
-
-        if (!working && segmentStart === null) {
-            segmentStart = minute;
-        }
-
-        if (working && segmentStart !== null) {
-            segments.push({
-                left: (segmentStart - openMinute.value) * pixelsPerMinute.value,
-                width: (minute - segmentStart) * pixelsPerMinute.value,
-            });
-            segmentStart = null;
-        }
-    }
-
-    if (segmentStart !== null) {
-        segments.push({
-            left: (segmentStart - openMinute.value) * pixelsPerMinute.value,
-            width: (closeMinute.value - segmentStart) * pixelsPerMinute.value,
-        });
-    }
-
-    return segments;
 }
 
 /* ───────────── 予約台帳サイドパネル（顧客詳細／顧客検索／新規予約を共用）＋ 来店履歴ナビ ───────────── */
@@ -1630,272 +1464,39 @@ watch(timelineScrollEl, (el) => {
     }
 });
 
-/** 時間軸を「1 時間ごとの見出し（中央寄せ）」として組み立てる。 */
-interface HourBlock {
-    minute: number;
-    label: string;
-    left: number;
-    width: number;
-}
+/* ドラッグ中の状態は、時間軸ガイドとドラッグ処理の両方が参照するためここで作る。 */
+const blockDrag = ref<BlockDragState | null>(null);
+const drag = ref<DragState | null>(null);
+const dragClickGuard: DragClickGuard = { suppress: false };
 
-const hourBlocks = computed<HourBlock[]>(() => {
-    const blocks: HourBlock[] = [];
-    const firstHour = Math.ceil(openMinute.value / 60) * 60;
-
-    for (let minute = firstHour; minute < closeMinute.value; minute += 60) {
-        const blockEnd = Math.min(minute + 60, closeMinute.value);
-        blocks.push({
-            minute,
-            label: minuteToLabel(minute),
-            left: (minute - openMinute.value) * pixelsPerMinute.value,
-            width: (blockEnd - minute) * pixelsPerMinute.value,
-        });
-    }
-
-    return blocks;
-});
-
-/** 30 分の細い目盛り（軸ヘッダー用）。 */
-const minorTicks = computed<number[]>(() => {
-    const ticks: number[] = [];
-
-    for (
-        let minute = openMinute.value;
-        minute <= closeMinute.value;
-        minute += 30
-    ) {
-        ticks.push(minute);
-    }
-
-    return ticks;
-});
-
-/** 10 分のごく薄い目盛り（軸ヘッダー用）。30 分位置と重なるものは除く。 */
-const tenTicks = computed<number[]>(() => {
-    const ticks: number[] = [];
-
-    for (
-        let minute = openMinute.value;
-        minute <= closeMinute.value;
-        minute += FINE_TICK_MINUTES
-    ) {
-        if ((minute - openMinute.value) % 30 !== 0) {
-            ticks.push(minute);
-        }
-    }
-
-    return ticks;
-});
-
-/**
- * 台帳トラックの 3 段階グリッド（1時間＝濃い / 30分＝中 / 10分＝ごく薄い）を
- * repeating-linear-gradient 1 枚で描く。DOM を増やさず 10 分刻みを可視化する（#9 / §19）。
- */
-const gridStyle = computed<Record<string, string>>(() => {
-    const ten = FINE_TICK_MINUTES * pixelsPerMinute.value;
-    const half = 30 * pixelsPerMinute.value;
-    const hour = 60 * pixelsPerMinute.value;
-    // 線は各区間の「先頭」に置く。ヘッダーの時間ブロックが border-left（＝ブロック左端）
-    // で線を描いているため、末尾に置くと 1px ずれて見える（§ヘッダーと縦線のずれ）。
-    const line = (size: number, color: string): string =>
-        `repeating-linear-gradient(to right, ${color} 0, ${color} 1px, transparent 1px, transparent ${size}px)`;
-
-    return {
-        backgroundImage: [
-            line(ten, "rgb(18 25 60 / 4%)"),
-            line(half, "rgb(18 25 60 / 9%)"),
-            line(hour, "rgb(18 25 60 / 17%)"),
-        ].join(", "),
-    };
-});
-
-/** 予約枠1つぶんの分数（設定値。既定5分）。グリッド・目盛り・ガイドはすべてこれに揃える。 */
-const slotUnitMinutes = computed(() =>
-    Math.max(props.business_hours.slot_minutes, 1),
-);
-
-/**
- * 縦の罫線・細かい目盛りの単位は 10 分で固定する。予約枠は5分だが、5分ごとに
- * 線を引くと密すぎて逆に読めなくなるため。5分の精度はカーソルガイド側で示す。
- */
-const FINE_TICK_MINUTES = 10;
-
-/* ───────────── カーソル位置ガイド（今どの時間の上にいるか） ─────────────
- * 5分単位など細かい粒度だと、マウスがどの時刻を指しているのか見た目では分からない。
- * 予約枠と同じ単位にスナップした縦線＋時刻ラベルを出して、クリック前に確認できるようにする。 */
-const hoverMinute = ref<number | null>(null);
-/** ガイドを出すレーン（スタッフ／ブース行）。全行に出すと、どの行を指しているか逆に分かりにくい。 */
-const hoverLaneKey = ref<string | null>(null);
-
-function onTimelineHover(lane: ScheduleLane, event: MouseEvent): void {
-    // ドラッグ中は移動先のゴーストが出るので、ガイドは邪魔になるため出さない。
-    if (drag.value !== null || blockDrag.value !== null) {
-        hoverMinute.value = null;
-        hoverLaneKey.value = null;
-
-        return;
-    }
-
-    hoverLaneKey.value = laneKey(lane);
-
-    const canvas = event.currentTarget as HTMLElement;
-    const rect = canvas.getBoundingClientRect();
-    const raw =
-        openMinute.value + (event.clientX - rect.left) / pixelsPerMinute.value;
-    const unit = slotUnitMinutes.value;
-    // 枠を帯で塗るので、四捨五入ではなく切り捨てて「今いる枠の開始」に合わせる。
-    // 営業開始からの相対で刻むことで、グリッド線と必ず同じ位置に乗る。
-    const slotStart =
-        openMinute.value + Math.floor((raw - openMinute.value) / unit) * unit;
-
-    hoverMinute.value = Math.min(
-        Math.max(slotStart, openMinute.value),
-        closeMinute.value - unit,
-    );
-}
-
-function clearTimelineHover(): void {
-    hoverMinute.value = null;
-    hoverLaneKey.value = null;
-}
-
-const hoverLeft = computed<number | null>(() =>
-    hoverMinute.value === null
-        ? null
-        : (hoverMinute.value - openMinute.value) * pixelsPerMinute.value,
-);
-
-/** カーソルがいる枠の幅＝予約枠1つぶん（5分）ちょうど。罫線は10分なので、はみ出すことはない。 */
-const hoverWidth = computed<number>(
-    () => slotUnitMinutes.value * pixelsPerMinute.value,
-);
-
-/**
- * 帯の濃さ。「全体表示」では5分が3px程度しかなく、薄いと見落とすため、
- * 細い時はほぼ塗りつぶしにする。拡大時は幅があるので薄くしてカードを隠さない。
- */
-const hoverFill = computed<string>(() =>
-    hoverWidth.value < 8
-        ? "rgba(var(--v-theme-accent), 0.9)"
-        : "rgba(var(--v-theme-accent), 0.22)",
-);
-
-const hoverLabel = computed<string>(() =>
-    hoverMinute.value === null ? "" : minuteToLabel(hoverMinute.value),
-);
-
-/** その時間に「働いているスタッフ」の user_id 一覧（bookable レーンのみ）。 */
-function workingLaneIdsAt(rangeStart: number, rangeEnd: number): Set<number> {
-    const ids = new Set<number>();
-
-    for (const lane of lanes.value) {
-        if (lane.id === null) {
-            continue;
-        }
-
-        if (axisMode.value === "booth") {
-            ids.add(lane.id); // ブースは営業時間中つねに利用可
-            continue;
-        }
-
-        const working = props.shifts.some(
-            (shift) =>
-                shift.staff_id === lane.id &&
-                rangeStart >= timeToMinute(shift.start_at) &&
-                rangeEnd <= timeToMinute(shift.end_at),
-        );
-
-        if (working) {
-            ids.add(lane.id);
-        }
-    }
-
-    return ids;
-}
-
-function laneBusyAt(
-    laneId: number,
-    rangeStart: number,
-    rangeEnd: number,
-): boolean {
-    // 呼び出し元（unbookableSegments）は axis が 'staff'|'booth' のときだけ使う。
-    const kind = axisMode.value === "booth" ? "booth" : "staff";
-
-    return reservationsFor({ id: laneId, kind }, date.value).some(
-        (reservation) => {
-            const rs = timeToMinute(reservation.starts_at.slice(11, 16));
-            const re = timeToMinute(reservation.ends_at.slice(11, 16));
-
-            return rs < rangeEnd && re > rangeStart;
-        },
-    );
-}
-
-interface UnbookableSegment {
-    left: number;
-    width: number;
-    kind: "closed" | "full";
-}
-
-/** 新規予約が入れられない時間帯（稼働外 / 満席）を帯で示す。 */
-const unbookableSegments = computed<UnbookableSegment[]>(() => {
-    // 「両方」表示はスタッフ・ブースという別種のリソースが混在するため、
-    // 全体「満席」の帯は意味が一意に決まらない。誤解を避けて表示しない。
-    if (viewMode.value !== "day" || axisMode.value === "both") {
-        return [];
-    }
-
-    const unit = Math.max(props.business_hours.slot_minutes, 5);
-    const raw: Array<"closed" | "full" | null> = [];
-
-    for (
-        let minute = openMinute.value;
-        minute < closeMinute.value;
-        minute += unit
-    ) {
-        const segEnd = Math.min(minute + unit, closeMinute.value);
-        const workingIds = workingLaneIdsAt(minute, segEnd);
-
-        if (workingIds.size === 0) {
-            raw.push("closed");
-            continue;
-        }
-
-        const allBusy = [...workingIds].every((laneId) =>
-            laneBusyAt(laneId, minute, segEnd),
-        );
-        raw.push(allBusy ? "full" : null);
-    }
-
-    const segments: UnbookableSegment[] = [];
-    let runKind: "closed" | "full" | null = null;
-    let runStartIndex = 0;
-
-    const flush = (endIndex: number): void => {
-        if (runKind === null) {
-            return;
-        }
-
-        const left = runStartIndex * unit * pixelsPerMinute.value;
-        const width = (endIndex - runStartIndex) * unit * pixelsPerMinute.value;
-        segments.push({ left, width, kind: runKind });
-    };
-
-    raw.forEach((kind, index) => {
-        if (kind !== runKind) {
-            flush(index);
-            runKind = kind;
-            runStartIndex = index;
-        }
-    });
-    flush(raw.length);
-
-    return segments;
+const {
+    clearTimelineHover,
+    gridStyle,
+    hourBlocks,
+    hoverFill,
+    hoverLabel,
+    hoverLaneKey,
+    hoverLeft,
+    hoverWidth,
+    minorTicks,
+    onTimelineHover,
+    tenTicks,
+    unbookableSegments,
+} = useTimelineGuides({
+    drag,
+    axisMode,
+    blockDrag,
+    closeMinute,
+    date,
+    lanes,
+    openMinute,
+    pixelsPerMinute,
+    props,
+    reservationsFor,
+    viewMode,
 });
 
 /* ───────────────── ドラッグ&ドロップ（予約・予定ブロック） ───────────────── */
-const blockDrag = ref<BlockDragState | null>(null);
-const dragClickGuard: DragClickGuard = { suppress: false };
 
 const {
     cancelCrossDateMove,
@@ -1909,7 +1510,6 @@ const {
     crossDatePointer,
     dateDropHoverOffset,
     dndErrorToast,
-    drag,
     dragOffsetXPx,
     dragOffsetYPx,
     draggedReservation,
@@ -1952,6 +1552,7 @@ const {
     viewMode,
     blockDrag,
     dragClickGuard,
+    drag,
 });
 
 const {

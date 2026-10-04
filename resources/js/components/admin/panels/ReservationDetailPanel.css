@@ -1,0 +1,434 @@
+.rdp__state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--ark-space-7) var(--ark-space-4);
+    text-align: center;
+}
+
+/* スクロールは親の .panel-shell__body 一箇所だけで行う（ここで二重に overflow を持つと
+   「上までスクロールが戻らない」ような挙動になるため、ここでは持たせない）。 */
+.rdp__scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.rdp__sec {
+    padding: var(--ark-space-3);
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.rdp__sec:last-child {
+    border-bottom: 0;
+}
+
+.rdp__sec--cust {
+    background: rgba(var(--v-theme-primary), 0.03);
+}
+
+.rdp__h {
+    margin: 0 0 var(--ark-space-2);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: rgb(var(--v-theme-primary));
+}
+
+.rdp__kana {
+    display: block;
+    margin-top: var(--ark-space-2);
+    font-size: 0.625rem;
+    color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.rdp__nameline {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ark-space-2);
+    margin-top: 1px;
+}
+
+.rdp__name {
+    font-size: 1.0625rem;
+    font-weight: 800;
+}
+
+.rdp__gender {
+    padding: 0 6px;
+    border-radius: var(--ark-radius-sm);
+    font-size: 0.625rem;
+    font-weight: 800;
+    line-height: 1.7;
+}
+
+.rdp__gender--male {
+    color: rgb(var(--v-theme-info));
+    background: rgba(var(--v-theme-info), 0.12);
+}
+
+.rdp__gender--female {
+    color: #c2185b;
+    background: rgba(194, 24, 91, 0.12);
+}
+
+.rdp__topline {
+    display: flex;
+    align-items: center;
+    gap: var(--ark-space-2);
+    margin-top: 2px;
+}
+
+.rdp__memberno {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgba(var(--v-theme-on-surface), 0.72);
+    font-variant-numeric: tabular-nums;
+}
+
+.rdp__tel {
+    margin: 4px 0 0;
+    font-size: 0.6875rem;
+    color: rgba(var(--v-theme-on-surface), 0.76);
+}
+
+.rdp__stats {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: var(--ark-space-2);
+}
+
+.rdp__stat {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--ark-space-2);
+}
+
+.rdp__stat-label {
+    font-size: 0.6875rem;
+    color: rgba(var(--v-theme-on-surface), 0.74);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rdp__stat-value {
+    flex: 0 0 auto;
+    font-size: 0.8125rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.rdp__stat-value small {
+    font-size: 0.625rem;
+    font-weight: 600;
+}
+
+.rdp__sec--resv {
+    background: rgba(var(--v-theme-accent), 0.05);
+}
+
+.rdp__resv-when {
+    display: flex;
+    align-items: center;
+    gap: var(--ark-space-2);
+    margin-bottom: var(--ark-space-2);
+}
+
+.rdp__resv-time {
+    font-size: 0.9375rem;
+    font-weight: 800;
+    color: rgb(var(--v-theme-primary));
+    font-variant-numeric: tabular-nums;
+}
+
+.rdp__resv-date {
+    font-size: 0.6875rem;
+    color: rgba(var(--v-theme-on-surface), 0.74);
+}
+
+.rdp__h--flush {
+    margin-bottom: 0;
+}
+
+.rdp__facts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px var(--ark-space-3);
+    margin: var(--ark-space-2) 0 0;
+}
+
+.rdp__facts > div {
+    min-width: 0;
+}
+
+.rdp__facts-wide {
+    grid-column: 1 / -1;
+}
+
+.rdp__facts--detail {
+    margin-top: var(--ark-space-3);
+}
+
+.rdp__facts dt {
+    font-size: 0.625rem;
+    color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.rdp__facts dd {
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.rdp__memo {
+    margin-top: var(--ark-space-2);
+    padding: var(--ark-space-2) var(--ark-space-3);
+    background: rgba(var(--v-theme-warning), 0.1);
+    border-radius: var(--ark-radius);
+}
+
+.rdp__memo-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ark-space-2);
+}
+
+.rdp__memo-text {
+    margin: 2px 0 0;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.rdp__memo-empty {
+    margin: 2px 0 0;
+    font-size: 0.6875rem;
+    color: rgba(var(--v-theme-on-surface), 0.68);
+}
+
+.rdp__memo-editactions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--ark-space-2);
+    margin-top: var(--ark-space-2);
+}
+
+.rdp__memo :deep(.v-textarea) {
+    margin-top: var(--ark-space-2);
+}
+
+.rdp__memo :deep(.v-field__input) {
+    font-size: 0.75rem;
+}
+
+/* 表示切替タブ：顧客／履歴／今後の予約（§タブ）。 */
+.rdp__tabs {
+    display: flex;
+    gap: var(--ark-space-2);
+    margin-top: var(--ark-space-3);
+}
+
+.rdp__tab {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 32px;
+    padding: 0 var(--ark-space-2);
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+    border-radius: var(--ark-radius);
+    background: rgb(var(--v-theme-surface));
+    color: rgba(var(--v-theme-on-surface), 0.78);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.rdp__tab:hover {
+    border-color: rgba(var(--v-theme-primary), 0.5);
+}
+
+.rdp__tab--active {
+    border-color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-primary), 0.1);
+    color: rgb(var(--v-theme-primary));
+}
+
+.rdp__tab-close {
+    margin-left: 2px;
+    color: inherit;
+}
+
+.rdp__memo-text.is-clamped {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+}
+
+.rdp__morebtn,
+.rdp__more {
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(var(--v-theme-primary));
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.rdp__more {
+    display: inline-block;
+    margin-top: var(--ark-space-2);
+}
+
+.rdp__row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.rdp__row:first-of-type {
+    border-top: 0;
+}
+
+.rdp__row-main {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: var(--ark-space-2) var(--ark-space-1);
+    text-align: left;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+
+.rdp__row:hover {
+    background: rgba(var(--v-theme-primary), 0.05);
+}
+
+.rdp__row--current {
+    background: rgba(var(--v-theme-primary), 0.08);
+}
+
+/* 日時とステータスは重ならないよう横並びにするが、幅が足りなければ折り返す（§改行）。 */
+.rdp__row-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px var(--ark-space-2);
+    width: 100%;
+}
+
+.rdp__row-when {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.rdp__row-service {
+    width: 100%;
+    font-size: 0.6875rem;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.rdp__row-staff {
+    width: 100%;
+    font-size: 0.625rem;
+    color: rgba(var(--v-theme-on-surface), 0.72);
+    white-space: normal;
+    word-break: break-word;
+}
+
+.rdp__row-arrow {
+    flex: 0 0 auto;
+    color: rgba(var(--v-theme-on-surface), 0.68);
+}
+
+.rdp__rebookbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: 0 0 auto;
+    height: 24px;
+    padding: 0 8px;
+    margin-right: 2px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(var(--v-theme-primary), 0.08);
+    color: rgb(var(--v-theme-primary));
+    font-size: 0.625rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.rdp__rebookbtn:hover {
+    background: rgba(var(--v-theme-primary), 0.16);
+}
+
+.rdp__nomination {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: var(--ark-radius-sm);
+    font-size: 0.625rem;
+    font-weight: 800;
+    color: #fff;
+    background: rgb(var(--v-theme-error));
+    vertical-align: middle;
+}
+
+.rdp__nomination--male {
+    color: rgb(var(--v-theme-info));
+    background: rgba(var(--v-theme-info), 0.12);
+}
+
+.rdp__nomination--female {
+    color: #c2185b;
+    background: rgba(194, 24, 91, 0.12);
+}
+
+.rdp__muted {
+    margin: 0;
+    font-size: 0.75rem;
+    color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.rdp__footer {
+    display: flex;
+    align-items: center;
+    gap: var(--ark-space-2);
+}
+
+.rdp__footer .v-btn {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.rdp__footer > .v-btn[icon] {
+    flex: 0 0 auto;
+}
+
+.rdp__menu-danger :deep(.v-list-item-title),
+.rdp__menu-danger :deep(.v-icon) {
+    color: rgb(var(--v-theme-error));
+}

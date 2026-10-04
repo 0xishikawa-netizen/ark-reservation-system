@@ -50,6 +50,9 @@ const crossTables = [
 const bucketLabel = (dimension: Dimension, bucket: Bucket): string => {
     if (bucket.value === null) return labels.customerUnknown;
     if (booleanDimensions.includes(dimension)) {
+        const specific = labels.customerBoolean[dimension];
+        if (specific) return bucket.value === 'true' ? specific.true : specific.false;
+
         return bucket.value === 'true' ? labels.customerTrue : labels.customerFalse;
     }
     return bucket.label ?? bucket.value;
@@ -122,6 +125,7 @@ function changeAsOf(value: string): void {
         </ReportFilterField>
         <template #meta>{{ labels.customerCohortMeta }} {{ report.cohort_month }} / {{ labels.customerAsOf }} {{ report.as_of_date }}</template>
     </ReportFilterBar>
+    <p class="filter-help" data-testid="filter-help">{{ labels.customerFilterHelp }}</p>
 
     <!-- ① 今月の顧客：新規・再診・離反と、新規の継続（ファネル） -->
     <div class="summary" :aria-busy="loading">
@@ -219,6 +223,13 @@ function changeAsOf(value: string): void {
 </template>
 
 <style scoped>
+.filter-help {
+    margin: 0 0 var(--ark-space-4);
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
 /* ── 今月の顧客 ── */
 .summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--ark-space-4); margin-bottom: var(--ark-space-6); }
 .summary__kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ark-space-3); align-content: start; }
