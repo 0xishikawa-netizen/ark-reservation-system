@@ -6,7 +6,7 @@ import { MESSAGES } from "@/constants/messages";
 
 /**
  * 予約カード（ボタン）の中身。1行目＝性別・名前・状態、2行目＝新規バッジ・時間、
- * 3行目＝指名／希望バッジ・メニュー。外側のボタン（位置・ドラッグ操作）は台帳ページ側が持つ。
+ * 3行目＝指名／希望バッジ・メニュー（メニューは最大2行で折り返し）。外側のボタン（位置・ドラッグ操作）は台帳ページ側が持つ。
  */
 defineProps<{
     reservation: ScheduleReservation;
@@ -123,59 +123,18 @@ defineProps<{
 
     <!-- 行2：（新規のみ）新規バッジ／時刻 -->
     <span class="reservation-timeline">
-        <span
-            v-if="
-                reservation.is_new_customer
-            "
-            class="reservation-badge reservation-badge--new"
-            >新</span
-        >
-        <span class="reservation-time">
-            {{
-                reservation.starts_at.slice(
-                    11,
-                    16,
-                )
-            }}–{{
-                endLabel
-            }}
-        </span>
+        <span v-if="reservation.is_new_customer" class="reservation-badge reservation-badge--new">新</span>
+        <span class="reservation-time">{{ reservation.starts_at.slice(11, 16) }}–{{ endLabel }}</span>
     </span>
 
-    <!-- 行3：（指名ありのみ）指名バッジ／メニュー -->
-    <span
-        class="reservation-service-line"
-    >
+    <!-- 行3：指名／希望バッジ＋メニュー。メニュー名は最大2行まで折り返して、空いている下の段も使う。 -->
+    <span class="reservation-service-line">
+        <span v-if="reservation.is_staff_requested" class="reservation-badge reservation-badge--nomination">指名</span>
         <span
-            v-if="
-                reservation.is_staff_requested
-            "
-            class="reservation-badge reservation-badge--nomination"
-            >指名</span
-        >
-        <span
-            v-if="
-                reservation.staff_gender_preference &&
-                !reservation.is_staff_requested
-            "
+            v-else-if="reservation.staff_gender_preference"
             :class="`reservation-gender reservation-gender--${reservation.staff_gender_preference}`"
-            >{{
-                reservation.staff_gender_preference ===
-                "male"
-                    ? "男希"
-                    : "女希"
-            }}</span
-        >
-        <span
-            class="reservation-service"
-            :title="
-                reservation.service_name
-            "
-        >
-            {{
-                reservation.service_name
-            }}
-        </span>
+        >{{ reservation.staff_gender_preference === "male" ? "男希" : "女希" }}</span>
+        <span class="reservation-service reservation-service--wrap" :title="reservation.service_name">{{ reservation.service_name }}</span>
     </span>
 </template>
 
@@ -290,7 +249,7 @@ defineProps<{
 
 .reservation-service-line {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 4px;
     width: 100%;
     min-width: 0;
@@ -325,6 +284,18 @@ defineProps<{
     flex: 1 1 auto;
     width: auto;
     min-width: 0;
+}
+
+/* メニュー名は最大2行まで折り返す（長いメニュー名でも切れにくくする）。 */
+.reservation-service--wrap {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    white-space: normal;
+    word-break: break-all;
+    line-height: 1.3;
 }
 
 /* 予約カードは狭い画面だと文字が潰れるので、最小限の情報を優先する。 */
