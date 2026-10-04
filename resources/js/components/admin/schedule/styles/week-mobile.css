@@ -1,0 +1,249 @@
+/* 週表示（§2-3）：スタッフ×日付のグリッド。各セルは営業時間を100%とした帯グラフ。 */
+.week-board-wrap {
+    overflow-x: auto;
+}
+
+.week-board {
+    display: grid;
+    min-width: 780px;
+    border: 1px solid #d9dee5;
+    border-radius: var(--ark-radius);
+    overflow: hidden;
+    background: rgb(var(--v-theme-surface));
+}
+
+.week-board__corner,
+.week-board__daycol,
+.week-board__lanename {
+    background: rgb(var(--v-theme-background));
+    border-bottom: 1px solid #d9dee5;
+    border-right: 1px solid #d9dee5;
+}
+
+.week-board__corner {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+}
+
+.week-board__daycol {
+    padding: var(--ark-space-2) var(--ark-space-1);
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(var(--v-theme-on-surface));
+}
+
+.week-board__daycol--today {
+    background: rgb(var(--v-theme-primary));
+    color: #fff;
+}
+
+.week-board__lanename {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--ark-space-2);
+    padding: var(--ark-space-2) var(--ark-space-3);
+    font-size: 0.75rem;
+    font-weight: 700;
+    min-width: 0;
+}
+
+.week-board__cell {
+    position: relative;
+    height: 64px;
+    border-bottom: 1px solid #d9dee5;
+    border-right: 1px solid #d9dee5;
+    background: rgb(var(--v-theme-surface));
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.week-board__cell:hover {
+    background: rgba(var(--v-theme-primary), 0.04);
+}
+
+.week-board__cell--today {
+    background: rgba(var(--v-theme-primary), 0.03);
+}
+
+.week-board__nonworking {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 0;
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(var(--v-theme-secondary), 0.16),
+        rgba(var(--v-theme-secondary), 0.16) 3px,
+        transparent 3px,
+        transparent 6px
+    );
+    pointer-events: none;
+}
+
+.week-board__bar {
+    position: absolute;
+    z-index: 1;
+    top: 4px;
+    height: 16px;
+    padding: 0 3px;
+    border: 0;
+    border-left: 3px solid transparent;
+    border-radius: 3px;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: left;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.week-board__bar:nth-of-type(n + 2) {
+    top: 22px;
+}
+
+.week-board__bar--selected {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: -1px;
+}
+
+.week-board__bar-name {
+    pointer-events: none;
+}
+
+.week-board__block {
+    position: absolute;
+    z-index: 1;
+    top: 40px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px dashed rgba(var(--v-theme-on-surface), 0.4);
+    border-radius: 3px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    color: rgba(var(--v-theme-on-surface), 0.78);
+    cursor: pointer;
+}
+
+.week-board__count {
+    position: absolute;
+    right: 3px;
+    bottom: 2px;
+    z-index: 1;
+    font-size: 0.5625rem;
+    color: rgba(var(--v-theme-on-surface), 0.68);
+    pointer-events: none;
+}
+
+@media (max-width: 800px) {
+    .schedule-toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
+    }
+
+    .toolbar-period,
+    .toolbar-field,
+    .toolbar-mode {
+        width: 100%;
+    }
+
+    .toolbar-period :deep(.v-btn) {
+        flex: 1 1 50%;
+    }
+
+    .toolbar-date,
+    .toolbar-staff {
+        min-width: 0;
+    }
+
+    .toolbar-mode {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--ark-space-1);
+    }
+
+    .toolbar-toggle {
+        display: flex;
+        width: 100%;
+    }
+
+    .toolbar-toggle :deep(.v-btn) {
+        flex: 1 1 50%;
+    }
+
+    .timeline-shell {
+        grid-template-columns: 96px minmax(0, 1fr);
+    }
+
+    .timeline-corner,
+    .timeline-lane-label {
+        padding-inline: var(--ark-space-2);
+    }
+}
+
+/* ───────────── スマホ（1023px 以下）で台帳を実際に使えるようにする ───────────── */
+@media (max-width: 1023px) {
+    /* ツールバーの各行が縦に伸びすぎるのを抑える。 */
+    .schedule-toolbar {
+        gap: var(--ark-space-2) var(--ark-space-3) !important;
+        padding: var(--ark-space-2) !important;
+    }
+
+    .schedule-topbar,
+    .board-layout {
+        margin-left: 0;
+    }
+
+    .toolbar-period {
+        padding-right: 0;
+        border-right: 0;
+    }
+
+    .toolbar-label {
+        display: none;
+    }
+
+    /* レールは画面中央に浮かせると台帳の操作を塞ぐため、下端の横並びバーにする。 */
+    .panel-rail {
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 52px;
+        transform: none;
+        flex: none;
+        flex-direction: row;
+        justify-content: center;
+        gap: var(--ark-space-5);
+        padding: 0;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+        box-shadow: 0 -4px 16px rgb(18 25 60 / 18%);
+    }
+
+    /* 下端のレールに隠れないよう、本文の下に逃げ場を作る。 */
+    .board-layout__main {
+        padding-bottom: 60px;
+    }
+
+    /* 集計は横スクロールさせず折り返す。 */
+    .daily-summary__row {
+        flex-wrap: wrap;
+        gap: var(--ark-space-3) var(--ark-space-4);
+    }
+
+    .daily-summary__divider {
+        display: none;
+    }
+}

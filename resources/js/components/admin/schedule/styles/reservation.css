@@ -1,0 +1,87 @@
+.reservation-card {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    overflow: hidden;
+    gap: 2px;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 3px var(--ark-space-2);
+    border: 1px solid #d9dee5;
+    border-left-width: 5px;
+    border-radius: var(--ark-radius);
+    background: rgb(var(--v-theme-surface));
+    color: rgb(var(--v-theme-on-surface));
+    cursor: pointer;
+    text-align: left;
+    line-height: 1.25;
+    box-shadow: var(--ark-shadow-1);
+}
+
+.reservation-card:hover {
+    filter: brightness(0.97);
+    box-shadow: var(--ark-shadow-2);
+}
+
+.reservation-card:disabled {
+    cursor: default;
+}
+
+.reservation-card:disabled:hover {
+    filter: none;
+    box-shadow: none;
+}
+
+.reservation-card:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: -2px;
+}
+
+.reservation-card--draggable {
+    cursor: grab;
+    touch-action: none;
+}
+
+.reservation-card--dragging {
+    cursor: grabbing;
+    z-index: 20;
+    box-shadow: 0 10px 28px rgb(18 25 60 / 26%);
+    opacity: 0.45;
+}
+
+.reservation-card--pending {
+    z-index: 19;
+    outline: 2px dashed rgb(var(--v-theme-primary));
+    outline-offset: -2px;
+}
+
+/* パネルで選択中の予約 */
+.reservation-card--selected {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: -2px;
+}
+
+/* 来店履歴から遷移した直後の一時ハイライト（数秒で戻る・§9） */
+.reservation-card--flash {
+    z-index: 18;
+    animation: rdp-flash 3.2s ease-out;
+}
+
+@keyframes rdp-flash {
+    0%,
+    45% {
+        outline: 3px solid rgb(var(--v-theme-warning));
+        outline-offset: -1px;
+        box-shadow: 0 0 0 6px rgba(var(--v-theme-warning), 0.3);
+    }
+
+    100% {
+        outline: 3px solid rgba(var(--v-theme-warning), 0);
+        outline-offset: -1px;
+        box-shadow: 0 0 0 6px rgba(var(--v-theme-warning), 0);
+    }
+}

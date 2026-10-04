@@ -384,6 +384,8 @@ const provisional = ref({ name: '', kana: '', phone: '' });
 /** お客様欄の切り替え：既存のお客様（上の検索で選ぶ）／新規のお客様（名前だけダイアログで仮登録）。 */
 const customerMode = ref<'existing' | 'new'>('existing');
 const provisionalOpen = ref(false);
+/** 「新規のお客様」で仮登録したお客様のID。これを選んだ直後は「新規」のまま表示する。 */
+const provisionalCreatedId = ref<number | null>(null);
 
 function setCustomerMode(mode: 'existing' | 'new'): void {
     if (mode === customerMode.value && mode === 'existing') {
@@ -394,6 +396,7 @@ function setCustomerMode(mode: 'existing' | 'new'): void {
         if (form.customer_id !== null) {
             clearCustomer();
         }
+        provisionalCreatedId.value = null;
         provisional.value = { name: '', kana: '', phone: '' };
         provisionalError.value = null;
         provisionalOpen.value = true;
@@ -414,7 +417,7 @@ function openCustomerPage(customerId: number): void {
 
 // 検索で顧客が選ばれたら「既存」に戻す。
 watch(() => form.customer_id, (id) => {
-    if (id !== null) {
+    if (id !== null && id !== provisionalCreatedId.value) {
         customerMode.value = 'existing';
     }
 });
@@ -501,6 +504,7 @@ async function submitProvisional(): Promise<void> {
 
         const created = (await response.json()) as CustomerOption;
         customerItems.value = [created];
+        provisionalCreatedId.value = created.user_id;
         form.customer_id = created.user_id;
         props.draft.customer_id = created.user_id;
         props.draft.customer_name = created.name;
@@ -510,6 +514,21 @@ async function submitProvisional(): Promise<void> {
         provisionalError.value = MESSAGES.reservation.provisionalCustomerNetwork;
     } finally {
         provisionalSaving.value = false;
+    }
+}
+
+/** 指名と性別希望は同時に選べない。片方を選ぶともう片方は外す。 */
+function toggleNomination(): void {
+    form.is_staff_requested = !form.is_staff_requested;
+    if (form.is_staff_requested) {
+        form.staff_gender_preference = null;
+    }
+}
+
+function togglePreference(value: string): void {
+    form.staff_gender_preference = form.staff_gender_preference === value ? null : value;
+    if (form.staff_gender_preference !== null) {
+        form.is_staff_requested = false;
     }
 }
 
@@ -987,22 +1006,22 @@ function submit(): void {
                 <div class="nrp__prefs" role="group" aria-label="担当の希望">
                     <button
                         type="button"
-                        class="nrp__pref"
+                        class="nrp__pref nrp__pref--nomination"
                         :class="{ 'nrp__pref--active': form.is_staff_requested }"
                         :disabled="selectedStaffId === null"
                         :aria-pressed="form.is_staff_requested"
                         data-testid="nrp-pref-nomination"
-                        @click="form.is_staff_requested = !form.is_staff_requested"
+                        @click="toggleNomination"
                     >指名</button>
                     <button
                         v-for="g in GENDER_PREFERENCES"
                         :key="g.value"
                         type="button"
                         class="nrp__pref"
-                        :class="{ 'nrp__pref--active': form.staff_gender_preference === g.value }"
+                        :class="[`nrp__pref--${g.value}`, { 'nrp__pref--active': form.staff_gender_preference === g.value }]"
                         :aria-pressed="form.staff_gender_preference === g.value"
                         :data-testid="`nrp-pref-${g.value}`"
-                        @click="form.staff_gender_preference = form.staff_gender_preference === g.value ? null : g.value"
+                        @click="togglePreference(g.value)"
                     >{{ g.label }}</button>
                 </div>
             </div>
@@ -1366,7 +1385,7 @@ function submit(): void {
 }
 
 .nrp__pref {
-    height: 30px;
+    height: 34px;
     padding: 0 4px;
     border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
     border-radius: 8px;
@@ -1376,10 +1395,15 @@ function submit(): void {
     color: rgba(var(--v-theme-on-surface), 0.75);
     white-space: nowrap;
     cursor: pointer;
+    transition: background-color 0.12s, border-color 0.12s, color 0.12s, transform 0.06s;
 }
 
 .nrp__pref:hover:not(:disabled) {
-    border-color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.nrp__pref:active:not(:disabled) {
+    transform: scale(0.96);
 }
 
 .nrp__pref:disabled {
@@ -1387,10 +1411,23 @@ function submit(): void {
     cursor: not-allowed;
 }
 
-.nrp__pref--active {
-    border-color: rgb(var(--v-theme-primary));
-    background: rgba(var(--v-theme-primary), 0.1);
-    color: rgb(var(--v-theme-primary));
+/* 選択中は色で一目で分かるようにする（指名＝赤、男性希望＝青、女性希望＝ピンク。ボードのバッジと同じ色）。 */
+.nrp__pref--active.nrp__pref--nomination {
+    border-color: rgb(var(--v-theme-error));
+    background: rgb(var(--v-theme-error));
+    color: #fff;
+}
+
+.nrp__pref--active.nrp__pref--male {
+    border-color: rgb(var(--v-theme-info));
+    background: rgb(var(--v-theme-info));
+    color: #fff;
+}
+
+.nrp__pref--active.nrp__pref--female {
+    border-color: #c2185b;
+    background: #c2185b;
+    color: #fff;
 }
 
 /* ラベル＋中身をひとかたまりにするブロック（顧客・バッファ・開始時間で使う）。 */

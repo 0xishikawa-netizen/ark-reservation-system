@@ -1,0 +1,124 @@
+/* ── 顧客・予約詳細パネル（左スライド） ── */
+.board-layout {
+    display: flex;
+    align-items: flex-start;
+    /* 台帳カードの左端の枠線が左パネルに密着して見えなくなるため、必ず隙間を空ける。 */
+    gap: var(--ark-space-2);
+}
+
+.board-layout__main {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* パネル開閉レール。上のツールバー行の下から始まる、幅44px・ARKブルー。 */
+.panel-rail {
+    display: flex;
+    flex: 0 0 48px;
+    width: 48px;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--ark-space-2);
+    padding: var(--ark-space-3) 0;
+    position: sticky;
+    top: var(--ark-space-4);
+    align-self: stretch;
+    background: rgb(var(--v-theme-surface));
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    border-radius: var(--ark-radius);
+}
+
+.panel-rail__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 0;
+    border-radius: var(--ark-radius);
+    background: none;
+    color: rgba(var(--v-theme-primary), 0.75);
+    cursor: pointer;
+}
+
+.panel-rail__btn:hover {
+    background: rgba(var(--v-theme-primary), 0.1);
+    color: rgb(var(--v-theme-primary));
+}
+
+.panel-rail__btn:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: -2px;
+}
+
+/* 幅は Peak Manager の左パネル参考（1023px 以下でレスポンシブに 100%）。
+   顧客詳細のタブ切替（顧客／履歴／今後の予約）分だけ 312px から少し広げた。 */
+.board-layout__panel {
+    flex: 0 0 352px;
+    width: 352px;
+    min-width: 0;
+    align-self: flex-start;
+    /* 高さは「本日の集計」に合わせず、画面内で使える最下部まで伸ばす（script 側で 100dvh 基準の calc を設定）。
+       中身が少ない時は panel-shell 側が伸びて埋め、長い時はパネル内スクロールにする。
+       極端に低い画面でも操作できるよう最小高さを持たせる。 */
+    min-height: 420px;
+    /* 幅はどのパネル種別でも必ず同じにする（中身のnowrap要素等で広がらないようoverflow/min-widthで固定）。 */
+    height: calc(100vh - 120px);
+    display: flex;
+    /* 顧客検索バー（常時表示）＋ 下に切り替わるパネル本体、を縦に積む。 */
+    flex-direction: column;
+    /* 横方向の広がりは既存どおり防ぎつつ、検索結果ドロップダウンは下にはみ出して表示できるようにする。 */
+    overflow: hidden;
+}
+
+/* 検索バーの下の、切り替わるパネル本体（各PanelShell）が残り高さを埋めるようにする。 */
+.board-layout__panel > :deep(.panel-shell) {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+}
+
+.board-layout__scrim {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2400;
+    background: rgb(18 25 60 / 32%);
+}
+
+/* 中間幅：Peak Manager の 1023px ブレークポイントまでは幅は固定のまま、台帳側を狭める。 */
+@media (max-width: 1279px) and (min-width: 1024px) {
+    .board-layout__panel {
+        flex-basis: 320px;
+        width: 320px;
+    }
+}
+
+/* iPad 縦・狭い画面（Peak Manager と同じ 1023px 以下）：パネルは幅100%のオーバーレイ（台帳を潰さない・§15） */
+@media (max-width: 1023px) {
+    .board-layout__panel {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 2500;
+        flex: none;
+        width: 100%;
+        max-height: none;
+        top: 0;
+        box-shadow: 0 0 40px rgb(18 25 60 / 28%);
+    }
+
+    .board-layout__scrim {
+        display: block;
+    }
+
+    /* パネルが幅100%のオーバーレイになっても隠れないよう、レールは固定表示で最前面に。 */
+    .panel-rail {
+        position: fixed;
+        top: 50%;
+        left: 0;
+        transform: translateY(-50%);
+        z-index: 2600;
+        border-radius: 0 var(--ark-radius) var(--ark-radius) 0;
+        box-shadow: 0 4px 16px rgb(18 25 60 / 24%);
+    }
+}

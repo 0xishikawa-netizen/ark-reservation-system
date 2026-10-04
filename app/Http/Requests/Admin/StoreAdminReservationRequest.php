@@ -48,6 +48,7 @@ final class StoreAdminReservationRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $this->validateNominationOrPreference($validator);
             $service = $this->validatedService($validator);
             $this->validateStaff($validator, $service);
             $this->validateBooth($validator);
@@ -89,6 +90,14 @@ final class StoreAdminReservationRequest extends FormRequest
                 'staff_id',
                 __('messages.reservation.staff_not_assigned_to_selected'),
             );
+        }
+    }
+
+    /** 指名と性別希望は同時に付けられない（指名は特定のスタッフ、希望は性別で、意味が重なるため）。 */
+    private function validateNominationOrPreference(Validator $validator): void
+    {
+        if ($this->boolean('is_staff_requested') && $this->filled('staff_gender_preference')) {
+            $validator->errors()->add('staff_gender_preference', __('messages.reservation.nomination_and_preference_exclusive'));
         }
     }
 

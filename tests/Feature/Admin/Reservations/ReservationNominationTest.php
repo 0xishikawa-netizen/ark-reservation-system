@@ -126,6 +126,70 @@ final class ReservationNominationTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_change_the_menu_and_the_duration_follows_it(): void
+    {
+        [$customer, $service, $staff, $booth] = $this->masters('menu-change');
+        $admin = $this->admin();
+        $reservation = $this->createReservation($customer, $service, $staff, $booth, $admin);
+        $other = Service::factory()->create(['name' => 'service-menu-other', 'duration_min' => 30, 'requires_staff' => true, 'is_active' => true]);
+        $other->staff()->attach($staff->user_id);
+
+        $this->actingAs($admin)
+            ->put("/admin/reservations/{$reservation->id}", [
+                'service_id' => $other->id,
+                'starts_at' => $reservation->starts_at->format('Y-m-d H:i:s'),
+                'staff_id' => $staff->user_id,
+                'booth_id' => $booth->id,
+                'version' => $reservation->version,
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $reservation->refresh();
+        $this->assertSame($other->id, (int) $reservation->service_id);
+        $this->assertSame(30 + (int) $reservation->buffer_min, (int) $reservation->starts_at->diffInMinutes($reservation->ends_at));
+    }
+
+    public function test_menu_cannot_change_to_one_the_staff_cannot_perform(): void
+    {
+        [$customer, $service, $staff, $booth] = $this->masters('menu-reject');
+        $admin = $this->admin();
+        $reservation = $this->createReservation($customer, $service, $staff, $booth, $admin);
+        $other = Service::factory()->create(['name' => 'service-menu-noassign', 'duration_min' => 30, 'requires_staff' => true, 'is_active' => true]);
+
+        $this->actingAs($admin)
+            ->put("/admin/reservations/{$reservation->id}", [
+                'service_id' => $other->id,
+                'starts_at' => $reservation->starts_at->format('Y-m-d H:i:s'),
+                'staff_id' => $staff->user_id,
+                'booth_id' => $booth->id,
+                'version' => $reservation->version,
+            ])
+            ->assertSessionHasErrors('staff_id');
+
+        $this->assertSame($service->id, (int) $reservation->fresh()->service_id);
+    }
+
+    public function test_nomination_and_gender_preference_cannot_be_combined(): void
+    {
+        [$customer, $service, $staff, $booth] = $this->masters('nom-exclusive');
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
+            ->post('/admin/reservations', [
+                'customer_id' => $customer->user_id,
+                'service_id' => $service->id,
+                'staff_id' => $staff->user_id,
+                'is_staff_requested' => true,
+                'staff_gender_preference' => 'female',
+                'booth_id' => $booth->id,
+                'starts_at' => '2026-10-01 10:00:00',
+            ])
+            ->assertSessionHasErrors('staff_gender_preference');
+
+        $this->assertDatabaseCount('reservations', 0);
+    }
+
     public function test_edit_screen_receives_the_nomination_flag_so_it_can_be_changed(): void
     {
         [$customer, $service, $staff, $booth] = $this->masters('nom-screen');

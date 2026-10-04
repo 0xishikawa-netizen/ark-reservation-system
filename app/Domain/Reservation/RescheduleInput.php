@@ -23,5 +23,7 @@ final readonly class RescheduleInput
         // 性別希望を更新する時だけ true（null = 希望なしへ戻す）。
         public bool $updateStaffGenderPreference = false,
         public ?string $staffGenderPreference = null,
+        // 管理画面でメニューを変える時だけ指定（null = 変更しない）。
+        public ?int $serviceId = null,
     ) {}
 }

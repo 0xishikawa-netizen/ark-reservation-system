@@ -25,6 +25,7 @@ final class UpdateAdminReservationRequest extends FormRequest
     {
         return [
             'starts_at' => ['required', 'date'],
+            'service_id' => ['nullable', 'integer', 'exists:services,id'],
             'staff_id' => ['nullable', 'integer', 'exists:staff,user_id'],
             'is_staff_requested' => ['nullable', 'boolean'],
             'staff_gender_preference' => ['nullable', 'string', 'in:male,female'],
@@ -37,6 +38,7 @@ final class UpdateAdminReservationRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $this->validateNominationOrPreference($validator);
             $this->validateStaff($validator);
             $this->validateBooth($validator);
             $this->validateBoundary($validator);
@@ -52,7 +54,10 @@ final class UpdateAdminReservationRequest extends FormRequest
             return;
         }
 
-        if ($reservation->service()->value('requires_staff') && $staffId === null) {
+        // メニューを変える場合は、変更後のメニューで担当の要否・担当可否を確かめる。
+        $serviceId = $this->input('service_id') !== null ? (int) $this->input('service_id') : (int) $reservation->service_id;
+
+        if (DB::table('services')->where('id', $serviceId)->value('requires_staff') && $staffId === null) {
             $validator->errors()->add('staff_id', __('messages.reservation.staff_required'));
 
             return;
@@ -64,7 +69,7 @@ final class UpdateAdminReservationRequest extends FormRequest
 
         $staff = Staff::query()->find((int) $staffId);
         $assigned = DB::table('service_staff')
-            ->where('service_id', $reservation->service_id)
+            ->where('service_id', $serviceId)
             ->where('staff_id', (int) $staffId)
             ->exists();
 
@@ -73,6 +78,14 @@ final class UpdateAdminReservationRequest extends FormRequest
                 'staff_id',
                 __('messages.reservation.staff_not_assigned_to_reserved'),
             );
+        }
+    }
+
+    /** 指名と性別希望は同時に付けられない（指名は特定のスタッフ、希望は性別で、意味が重なるため）。 */
+    private function validateNominationOrPreference(Validator $validator): void
+    {
+        if ($this->boolean('is_staff_requested') && $this->filled('staff_gender_preference')) {
+            $validator->errors()->add('staff_gender_preference', __('messages.reservation.nomination_and_preference_exclusive'));
         }
     }
 

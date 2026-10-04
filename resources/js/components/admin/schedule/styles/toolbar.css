@@ -1,0 +1,175 @@
+.schedule-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ark-space-5) var(--ark-space-6);
+    padding: var(--ark-space-2) var(--ark-space-4) !important;
+}
+
+/* v-container の既定パディング(24px)を打ち消して、画面の一番左（x=0）から表示する。 */
+.schedule-topbar,
+.board-layout {
+    margin-left: calc(-1 * var(--ark-space-5));
+}
+
+/* 元タイトル位置の行。カードに乗せず単独で置くため、ここだけ独自にモダンな見た目を付ける。 */
+.schedule-topbar {
+    /* ヘッダー直下の余白（v-containerの既定パディング24px）も詰める。 */
+    margin-top: calc(-1 * var(--ark-space-4));
+    background: rgb(var(--v-theme-surface));
+    border-radius: var(--ark-radius);
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+    box-shadow: var(--ark-shadow-1);
+}
+
+.schedule-topbar .toolbar-staff {
+    flex: 0 1 360px;
+}
+
+.preview-service-name {
+    display: block;
+    white-space: normal;
+    line-height: 1.35;
+    font-size: 0.875rem;
+}
+
+.preview-service-selection {
+    display: block;
+    overflow: hidden;
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.25;
+    font-size: 0.8125rem;
+}
+
+.toolbar-period {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: var(--ark-space-2);
+    padding-right: var(--ark-space-5);
+    border-right: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.toolbar-period :deep(.v-btn) {
+    height: 40px;
+    border-radius: 999px;
+}
+
+.toolbar-period :deep(.v-btn--icon) {
+    width: 40px;
+}
+
+.toolbar-field {
+    flex: 0 1 auto;
+}
+
+/* DateField内部(v-text-field)はスコープ属性が付かないため :deep() で当てる。 */
+:deep(.toolbar-date) {
+    width: 208px;
+    flex: 0 0 208px;
+}
+
+:deep(.toolbar-date input) {
+    min-width: 0;
+}
+
+.toolbar-staff {
+    flex: 1 1 230px;
+    min-width: 220px;
+}
+
+.toolbar-mode {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--ark-space-2);
+}
+
+.toolbar-mode--right {
+    margin-left: auto;
+}
+
+.toolbar-label {
+    color: rgb(var(--v-theme-on-surface));
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+    white-space: nowrap;
+}
+
+.toolbar-toggle :deep(.v-btn) {
+    min-width: 48px;
+    padding-inline: 12px;
+}
+
+.toolbar-today {
+    font-weight: 800;
+    font-size: 1rem;
+    padding-inline: var(--ark-space-5);
+}
+
+.toolbar-today :deep(.v-btn__content) {
+    color: #ffffff;
+}
+
+.toolbar-today--current {
+    box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.35);
+}
+
+.toolbar-daydrop--hover {
+    box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.6) inset;
+}
+
+.daily-summary {
+    padding: var(--ark-space-3) var(--ark-space-4);
+}
+
+.daily-summary__title {
+    margin-bottom: var(--ark-space-2);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: rgb(var(--v-theme-primary));
+}
+
+.daily-summary__row {
+    display: flex;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: var(--ark-space-5);
+}
+
+.daily-summary__item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.daily-summary__value {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: rgb(var(--v-theme-on-surface));
+    font-variant-numeric: tabular-nums;
+}
+
+.daily-summary__label {
+    font-size: 0.6875rem;
+    color: rgba(var(--v-theme-on-surface), 0.74);
+    white-space: nowrap;
+}
+
+.daily-summary__divider {
+    flex: 0 0 auto;
+    width: 1px;
+    align-self: stretch;
+    background: rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.daily-summary__item--revenue .daily-summary__value {
+    color: rgb(var(--v-theme-primary));
+}

@@ -25,7 +25,7 @@ final class ScheduleQuery
      *   staff: list<array{user_id: int, display_name: string, color: string, sort_order: int, is_working: bool}>,
      *   off_staff: list<array{user_id: int, display_name: string}>,
      *   shifts: list<array{staff_id: int, work_date: string, start_at: string, end_at: string}>,
-     *   reservations: list<array{id: int, customer_id: int, customer_name: string, customer_gender: string|null, is_new_customer: bool, service_id: int, service_name: string, service_color: string, staff_id: int|null, booth_id: int|null, starts_at: string, ends_at: string, status: string, source: string, version: int, is_staff_requested: bool}>,
+     *   reservations: list<array{id: int, customer_id: int, customer_name: string, customer_gender: string|null, is_new_customer: bool, service_id: int, service_name: string, service_color: string, staff_id: int|null, booth_id: int|null, starts_at: string, ends_at: string, status: string, source: string, version: int, is_staff_requested: bool, staff_gender_preference: string|null}>,
      *   blocks: list<array{id: int, staff_id: int|null, booth_id: int|null, date: string, start_at: string, end_at: string, type: string, type_label: string, title: string|null, note: string|null}>,
      *   business_hours: array{open: string, close: string, slot_minutes: int},
      *   view: 'day'|'week',
@@ -79,6 +79,7 @@ final class ScheduleQuery
                 'reservations.source',
                 'reservations.version',
                 'reservations.is_staff_requested',
+                'reservations.staff_gender_preference',
                 'customer_users.name as customer_name',
                 'customers.gender as customer_gender',
                 'services.id as service_id',
@@ -125,6 +126,7 @@ final class ScheduleQuery
                 'source' => (string) $row->source,
                 'version' => (int) $row->version,
                 'is_staff_requested' => (bool) $row->is_staff_requested,
+                'staff_gender_preference' => $row->staff_gender_preference,
             ])
             ->all();
 

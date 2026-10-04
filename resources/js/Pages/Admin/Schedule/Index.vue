@@ -11,7 +11,7 @@ import {
     watch,
 } from "vue";
 import AdminLayout from "@/layouts/AdminLayout.vue";
-import { ArkCalendar, DateField } from "@/components/ark";
+import { DateField } from "@/components/ark";
 import ReservationDetailPanel from "@/components/admin/ReservationDetailPanel.vue";
 import CustomerSearchPanel from "@/components/admin/CustomerSearchPanel.vue";
 import PanelCustomerSearchBar from "@/components/admin/PanelCustomerSearchBar.vue";
@@ -24,7 +24,12 @@ import ScheduleBlockCreatePanel, {
 import ScheduleBlockDetailPanel from "@/components/admin/ScheduleBlockDetailPanel.vue";
 import SlotChoicePanel from "@/components/admin/SlotChoicePanel.vue";
 import ScheduleNotifications from "@/components/admin/ScheduleNotifications.vue";
-import { firstErrorMessage } from "@/composables/inertiaErrors";
+import ScheduleMoveConfirmDialog from "@/components/admin/schedule/ScheduleMoveConfirmDialog.vue";
+import ScheduleReservationCardBody from "@/components/admin/schedule/ScheduleReservationCardBody.vue";
+import { useReservationDrag } from "@/components/admin/schedule/useReservationDrag";
+import { useBlockDrag } from "@/components/admin/schedule/useBlockDrag";
+import { useMenuPreview } from "@/components/admin/schedule/useMenuPreview";
+import ScheduleDragGhost from "@/components/admin/schedule/ScheduleDragGhost.vue";
 import {
     DEFAULT_NOTIFICATION_REPEAT,
     DEFAULT_NOTIFICATION_SOUND,
@@ -32,7 +37,6 @@ import {
     isNotificationRepeatMode,
     isNotificationSoundType,
 } from "@/composables/notificationSound";
-import { reservationStatusLabel, statusColor } from "@/design/tokens";
 import {
     popPanelHistoryStack,
     pushPanelHistoryStack,
@@ -46,138 +50,38 @@ import {
     resetReservationDraft,
 } from "@/composables/reservationDraft";
 import { cannotStartAtTimeMessage, MESSAGES } from "@/constants/messages";
+import {
+    timeToMinute,
+    minuteToLabel,
+    menuTintBackground,
+    todayIso,
+    dayLabel,
+    laneKey,
+} from "@/components/admin/schedule/scheduleFormat";
+import type {
+    ScheduleView,
+    ScheduleAxis,
+    ScheduleLane,
+    Staff,
+    OffStaff,
+    StaffOption,
+    Shift,
+    ScheduleReservation,
+    ScheduleBlock,
+    BusinessHours,
+    Booth,
+    DateRange,
+    Filters,
+    ShadeSegment,
+    MenuOption,
+    BoothOption,
+    DailySummary,
+    DisplayRow,
+    BlockDragState,
+    DragClickGuard,
+} from "@/components/admin/schedule/types";
 
 defineOptions({ layout: AdminLayout });
-
-type ScheduleView = "day" | "week";
-type ScheduleAxis = "staff" | "booth" | "both";
-
-interface ScheduleLane {
-    id: number | null;
-    display_name: string;
-    color: string;
-    sort_order: number;
-    kind: "staff" | "booth";
-    /** 勤務予定外（休みだが予約・予定がある）スタッフ行。 */
-    off_duty?: boolean;
-}
-
-interface Staff {
-    user_id: number;
-    display_name: string;
-    color: string;
-    sort_order: number;
-    /** 対象期間に勤務枠がある（false は休みなのに予約・予定が入っている等の矛盾データで表示しているスタッフ）。 */
-    is_working?: boolean;
-}
-
-interface OffStaff {
-    user_id: number;
-    display_name: string;
-}
-
-interface StaffOption {
-    user_id: number;
-    display_name: string;
-    color: string;
-}
-
-interface Shift {
-    staff_id: number;
-    work_date: string;
-    start_at: string;
-    end_at: string;
-}
-
-interface ScheduleReservation {
-    id: number;
-    customer_id: number;
-    customer_name: string;
-    customer_gender: string | null;
-    is_new_customer: boolean;
-    service_id: number;
-    service_name: string;
-    service_color: string;
-    staff_id: number | null;
-    booth_id: number | null;
-    starts_at: string;
-    /** 占有の終わり（終了後インターバルを含む）。 */
-    ends_at: string;
-    /** 終了後インターバル（分）。予約（施術）の終わりは ends_at − buffer_min。 */
-    buffer_min?: number;
-    status: string;
-    source: string;
-    version: number;
-    is_staff_requested: boolean;
-}
-
-interface ScheduleBlock {
-    id: number;
-    staff_id: number | null;
-    booth_id: number | null;
-    date: string;
-    start_at: string;
-    end_at: string;
-    type: string;
-    type_label: string;
-    title: string | null;
-    note: string | null;
-}
-
-interface BusinessHours {
-    open: string;
-    close: string;
-    slot_minutes: number;
-}
-
-interface Booth {
-    id: number;
-    name: string;
-    sort_order: number;
-}
-
-interface DateRange {
-    start: string;
-    end: string;
-}
-
-interface Filters {
-    date: string;
-    staff_id: number | null;
-    view: ScheduleView;
-    axis: ScheduleAxis;
-}
-
-interface ShadeSegment {
-    left: number;
-    width: number;
-}
-
-interface MenuOption {
-    id: number;
-    name: string;
-    duration_min: number;
-    requires_staff: boolean;
-    staff_ids: number[];
-    price: number;
-    category: string | null;
-    color: string;
-}
-
-interface BoothOption {
-    id: number;
-    name: string;
-}
-
-interface DailySummary {
-    total: number;
-    completed: number;
-    new_customers: number;
-    repeat_customers: number;
-    canceled: number;
-    no_show: number;
-    revenue: number | null;
-}
 
 const props = defineProps<{
     staff: Staff[];
@@ -276,7 +180,10 @@ function recalcPanelMaxHeight(): void {
         return;
     }
 
-    const summaryHeight = dailySummaryEl.value !== null ? dailySummaryEl.value.offsetHeight + 8 : 0;
+    const summaryHeight =
+        dailySummaryEl.value !== null
+            ? dailySummaryEl.value.offsetHeight + 8
+            : 0;
     // ページ下余白（v-container の padding 24px）分も残し、ページ全体に余計な縦スクロールを出さない。
     availableTrackSpace.value =
         window.innerHeight -
@@ -347,6 +254,17 @@ const pixelsPerMinute = computed(() => {
 
     return FIXED_PIXELS_PER_MINUTE;
 });
+const { previewServiceId, previewLoading, previewService, menuSegments } =
+    useMenuPreview({
+        menuOptions: () => props.menu_options,
+        slotMinutes: () => props.business_hours.slot_minutes,
+        date,
+        viewMode,
+        openMinute,
+        closeMinute,
+        pixelsPerMinute,
+    });
+
 const timelineWidth = computed(() =>
     Math.max(durationMinutes.value * pixelsPerMinute.value, 1),
 );
@@ -419,14 +337,6 @@ const lanes = computed<ScheduleLane[]>(() => {
     return staffLanes();
 });
 
-type DisplayRow =
-    | {
-          kind: "header";
-          sectionKind: "staff" | "booth";
-          label: string;
-          icon: string;
-      }
-    | { kind: "lane"; lane: ScheduleLane };
 
 /**
  * 「両方」表示のときだけ、横幅いっぱいの「スタッフ／ブース」見出し行を挟む（§25）。
@@ -457,7 +367,9 @@ const displayRows = computed<DisplayRow[]>(() => {
 
 /** 日表示の1行の高さ（px）。見出し行（「両方」表示のスタッフ／ブース見出し）は固定高さのまま。 */
 const timelineTrackHeight = computed(() => {
-    const laneRows = displayRows.value.filter((row) => row.kind === "lane").length;
+    const laneRows = displayRows.value.filter(
+        (row) => row.kind === "lane",
+    ).length;
 
     return scheduleTrackHeight(
         laneRows,
@@ -486,16 +398,6 @@ const timeTicks = computed(() => {
     return ticks;
 });
 
-function timeToMinute(value: string): number {
-    const [hour = 0, minute = 0] = value.slice(0, 5).split(":").map(Number);
-
-    return hour * 60 + minute;
-}
-
-function minuteToLabel(value: number): string {
-    return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
-}
-
 function reservationStyle(
     reservation: ScheduleReservation,
 ): Record<string, string> {
@@ -523,12 +425,17 @@ function reservationStyle(
 
 /** 予約（施術）の終了時刻。インターバルは予約の後ろに別区間として表示する（Task 11-29）。 */
 function serviceEndLabel(reservation: ScheduleReservation): string {
-    return minuteToLabel(timeToMinute(reservation.ends_at.slice(11, 16)) - (reservation.buffer_min ?? 0));
+    return minuteToLabel(
+        timeToMinute(reservation.ends_at.slice(11, 16)) -
+            (reservation.buffer_min ?? 0),
+    );
 }
 
 /** カード内でインターバル区間（右端）を描く幅。 */
 function bufferStyle(reservation: ScheduleReservation): Record<string, string> {
-    return { width: `${(reservation.buffer_min ?? 0) * pixelsPerMinute.value}px` };
+    return {
+        width: `${(reservation.buffer_min ?? 0) * pixelsPerMinute.value}px`,
+    };
 }
 
 function reservationsFor(
@@ -847,7 +754,8 @@ const createPanelKey = computed(
  */
 const slotPickActive = computed(
     () =>
-        panelKind.value === "create" && props.create_prefill.customer_id !== null,
+        panelKind.value === "create" &&
+        props.create_prefill.customer_id !== null,
 );
 /** まだ日時が決まっていない間だけ、マウスに予約内容を追従させる。 */
 const slotPickGhostVisible = computed(
@@ -1282,7 +1190,10 @@ function onSwitchToReservation(): void {
     if (panelKind.value === "slot-choice") {
         openCreatePanel({
             // 「メニューで空きを確認」中に選んだ枠なら、そのメニューを選択済みで開く（Task 11-30）。
-            serviceId: previewServiceId.value ?? reservationDraft.service_id ?? undefined,
+            serviceId:
+                previewServiceId.value ??
+                reservationDraft.service_id ??
+                undefined,
             staffId: props.create_prefill.staff_id ?? undefined,
             boothId: props.create_prefill.booth_id ?? undefined,
             date: props.create_prefill.date ?? undefined,
@@ -1506,69 +1417,16 @@ watch(boardPanelEl, (el) => {
 
 // 日/週・軸・日付の切替や本日の集計の有無で台帳の上端・空きが変わるため、行高と左パネル高さを測り直す。
 watch(
-    [timelineShellEl, dailySummaryEl, () => displayRows.value.length, isNarrowScreen],
+    [
+        timelineShellEl,
+        dailySummaryEl,
+        () => displayRows.value.length,
+        isNarrowScreen,
+    ],
     () => {
         void nextTick(() => recalcPanelMaxHeight());
     },
 );
-
-// 性別表示は簡素に「男 / 女」のみ。未登録・その他は表示しない（推測しない）。
-function genderLabel(gender: string | null): string | null {
-    if (gender === "male") return "男";
-    if (gender === "female") return "女";
-
-    return null;
-}
-
-function genderClass(gender: string | null): string {
-    return gender === "male" || gender === "female"
-        ? `reservation-gender reservation-gender--${gender}`
-        : "reservation-gender";
-}
-
-const statusLabel = reservationStatusLabel;
-
-// カード右上のステータスは色だけに頼らず、アイコン＋tooltip/aria-label で伝える（§26）。
-function statusIcon(status: string): string {
-    const icons: Record<string, string> = {
-        confirmed: "mdi-calendar-check-outline",
-        completed: "mdi-check-circle-outline",
-        no_show: "mdi-account-off-outline",
-        pending_payment: "mdi-timer-sand",
-        pending_external_sync: "mdi-sync",
-        canceled: "mdi-close-circle-outline",
-        expired: "mdi-clock-alert-outline",
-    };
-
-    return icons[status] ?? "mdi-information-outline";
-}
-
-/** メニュー色（HEX）から、カードの淡い背景色を作る。原色ベタ塗りを避ける（§22）。 */
-function menuTintBackground(hex: string): string {
-    const clean = hex.replace("#", "");
-    const full =
-        clean.length === 3
-            ? clean
-                  .split("")
-                  .map((c) => c + c)
-                  .join("")
-            : clean;
-    const value = Number.parseInt(full, 16);
-
-    if (Number.isNaN(value)) {
-        return "rgb(var(--v-theme-surface))";
-    }
-
-    const r = (value >> 16) & 255;
-    const g = (value >> 8) & 255;
-    const b = value & 255;
-
-    // 透けて見えないよう、背景と合成済みの不透明色にする（白に薄く色を混ぜる）。
-    const mix = (channel: number): number =>
-        Math.round(255 * 0.88 + channel * 0.12);
-
-    return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
-}
 
 function navigate(): void {
     panelHistoryStack.value = [];
@@ -1600,12 +1458,6 @@ function movePeriod(direction: number): void {
     const day = String(next.getDate()).padStart(2, "0");
     date.value = `${year}-${month}-${day}`;
     navigate();
-}
-
-function todayIso(): string {
-    const now = new Date();
-
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 const isViewingToday = computed(() => date.value === todayIso());
@@ -1652,9 +1504,7 @@ function onTrackClick(lane: ScheduleLane, event: MouseEvent): void {
             timeToMinute(reservation.ends_at.slice(11, 16)) -
             timeToMinute(reservation.starts_at.slice(11, 16));
         const originLaneId =
-            lane.kind === "staff"
-                ? reservation.staff_id
-                : reservation.booth_id;
+            lane.kind === "staff" ? reservation.staff_id : reservation.booth_id;
 
         // 移動先の日時を選んだら、「メニューで空きを確認」の絞り込みは自動で解除する。
         previewServiceId.value = null;
@@ -1690,14 +1540,6 @@ function onTrackClick(lane: ScheduleLane, event: MouseEvent): void {
     }
 
     openSlotChoicePanel(slotPrefill);
-}
-
-function dayLabel(value: string): string {
-    return new Intl.DateTimeFormat("ja-JP", {
-        month: "numeric",
-        day: "numeric",
-        weekday: "short",
-    }).format(new Date(`${value}T12:00:00`));
 }
 
 /** 現在時刻ラインの再計算トリガー。店舗で台帳を開きっぱなしにしても1分ごとに進むよう、
@@ -1742,7 +1584,8 @@ function scrollToNow(): void {
 
     const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
     const isLaterHalf =
-        currentTimeLeft.value > (closeMinute.value - openMinute.value) * pixelsPerMinute.value / 2;
+        currentTimeLeft.value >
+        ((closeMinute.value - openMinute.value) * pixelsPerMinute.value) / 2;
 
     if (!isLaterHalf) {
         scroller.scrollLeft = 0;
@@ -1884,10 +1727,6 @@ const hoverMinute = ref<number | null>(null);
 /** ガイドを出すレーン（スタッフ／ブース行）。全行に出すと、どの行を指しているか逆に分かりにくい。 */
 const hoverLaneKey = ref<string | null>(null);
 
-function laneKey(lane: ScheduleLane): string {
-    return `${lane.kind}-${lane.id ?? 'unassigned'}`;
-}
-
 function onTimelineHover(lane: ScheduleLane, event: MouseEvent): void {
     // ドラッグ中は移動先のゴーストが出るので、ガイドは邪魔になるため出さない。
     if (drag.value !== null || blockDrag.value !== null) {
@@ -1901,13 +1740,13 @@ function onTimelineHover(lane: ScheduleLane, event: MouseEvent): void {
 
     const canvas = event.currentTarget as HTMLElement;
     const rect = canvas.getBoundingClientRect();
-    const raw = openMinute.value + (event.clientX - rect.left) / pixelsPerMinute.value;
+    const raw =
+        openMinute.value + (event.clientX - rect.left) / pixelsPerMinute.value;
     const unit = slotUnitMinutes.value;
     // 枠を帯で塗るので、四捨五入ではなく切り捨てて「今いる枠の開始」に合わせる。
     // 営業開始からの相対で刻むことで、グリッド線と必ず同じ位置に乗る。
     const slotStart =
-        openMinute.value +
-        Math.floor((raw - openMinute.value) / unit) * unit;
+        openMinute.value + Math.floor((raw - openMinute.value) / unit) * unit;
 
     hoverMinute.value = Math.min(
         Math.max(slotStart, openMinute.value),
@@ -1937,8 +1776,8 @@ const hoverWidth = computed<number>(
  */
 const hoverFill = computed<string>(() =>
     hoverWidth.value < 8
-        ? 'rgba(var(--v-theme-accent), 0.9)'
-        : 'rgba(var(--v-theme-accent), 0.22)',
+        ? "rgba(var(--v-theme-accent), 0.9)"
+        : "rgba(var(--v-theme-accent), 0.22)",
 );
 
 const hoverLabel = computed<string>(() =>
@@ -2054,980 +1893,103 @@ const unbookableSegments = computed<UnbookableSegment[]>(() => {
     return segments;
 });
 
-/* ───────────────── ドラッグ&ドロップ（時間／担当スタッフ・ブース／日付・§13-17, §27-33） ───────────────── */
-
-const snapMinutes = computed(() =>
-    Math.max(props.business_hours.slot_minutes, 5),
-);
-
-function isDraggable(reservation: ScheduleReservation): boolean {
-    if (!canManage.value || viewMode.value !== "day") {
-        return false;
-    }
-
-    if (reservation.status !== "confirmed") {
-        return false;
-    }
-
-    // starts_at はサーバー（app.timezone=UTC）が返す素の日時文字列。'Z' を付けず
-    // new Date() に渡すとブラウザのローカルタイムゾーンとして解釈されてしまい、
-    // JST 環境では実時刻との比較が最大9時間ズレて「未来の予約なのにドラッグ不可」に
-    // なるバグがあったため、明示的に UTC として解釈する。
-    return (
-        new Date(`${reservation.starts_at.replace(" ", "T")}Z`).getTime() >
-        Date.now()
-    );
-}
-
-interface LaneRect {
-    laneId: number | null;
-    top: number;
-    bottom: number;
-}
-
-interface DragState {
-    id: number;
-    pointerId: number;
-    startX: number;
-    durationMin: number;
-    baseStartMin: number;
-    offsetMinutes: number;
-    moved: boolean;
-    originLaneId: number | null;
-    /** 掴んだカードの軸（スタッフ/ブース）。「両方」表示では同じ予約が両軸に
-     * 描画されるため、ドロップ先もこの軸のレーンだけに制限する（§26）。 */
-    laneKind: "staff" | "booth";
-    laneRects: LaneRect[];
-    targetLaneId: number | null;
-    dateOffsetDays: -1 | 0 | 1 | null;
-    pointerX: number;
-    pointerY: number;
-}
-
-const drag = ref<DragState | null>(null);
-
-interface CrossDateMoveState {
-    reservationId: number;
-    reservation: ScheduleReservation;
-}
-
-const crossDateMove = ref<CrossDateMoveState | null>(null);
-const crossDatePointer = reactive({ x: 0, y: 0 });
-const cardContextMenuOpen = ref(false);
-const cardContextMenuTarget = ref<HTMLElement>();
-const cardContextMenuReservation = ref<ScheduleReservation | null>(null);
-
-const crossDateMoveReservation = computed<ScheduleReservation | null>(() => {
-    const state = crossDateMove.value;
-
-    if (state === null) {
-        return null;
-    }
-
-    return (
-        props.reservations.find((r) => r.id === state.reservationId) ??
-        state.reservation
-    );
-});
-
-function onCrossDateMouseMove(event: MouseEvent): void {
-    crossDatePointer.x = event.clientX;
-    crossDatePointer.y = event.clientY;
-}
-
-watch(
-    () => crossDateMove.value !== null || slotPickGhostVisible.value,
-    (tracking) => {
-        if (!tracking) {
-            window.removeEventListener("mousemove", onCrossDateMouseMove);
-        } else {
-            window.addEventListener("mousemove", onCrossDateMouseMove);
-        }
-    },
-    { flush: "sync" },
-);
-
-onBeforeUnmount(() => {
-    window.removeEventListener("mousemove", onCrossDateMouseMove);
-});
-
-function onCardContextMenu(
-    reservation: ScheduleReservation,
-    event: MouseEvent,
-): void {
-    if (
-        !isDraggable(reservation) ||
-        crossDateMove.value !== null ||
-        pendingMove.value !== null
-    ) {
-        cardContextMenuOpen.value = false;
-
-        return;
-    }
-
-    cardContextMenuTarget.value = event.currentTarget as HTMLElement;
-    cardContextMenuReservation.value = reservation;
-    cardContextMenuOpen.value = true;
-}
-
-function startCrossDateMove(): void {
-    const reservation = cardContextMenuReservation.value;
-
-    if (reservation === null || !isDraggable(reservation)) {
-        cardContextMenuOpen.value = false;
-
-        return;
-    }
-
-    const rect = cardContextMenuTarget.value?.getBoundingClientRect();
-    crossDatePointer.x = rect?.right ?? 0;
-    crossDatePointer.y = rect?.top ?? 0;
-    crossDateMove.value = {
-        reservationId: reservation.id,
-        reservation,
-    };
-    cardContextMenuOpen.value = false;
-
-    if (previewServiceId.value === null) {
-        previewServiceId.value = reservation.service_id;
-    }
-}
-
-function cancelCrossDateMove(): void {
-    crossDateMove.value = null;
-    cardContextMenuOpen.value = false;
-    cardContextMenuReservation.value = null;
-}
-
-/** ドラッグ中のゴーストカードに出す内容（§16）。 */
-const draggedReservation = computed<ScheduleReservation | null>(() => {
-    if (drag.value === null || !drag.value.moved) {
-        return null;
-    }
-
-    return props.reservations.find((r) => r.id === drag.value?.id) ?? null;
-});
-
-interface PendingMove {
-    reservation: ScheduleReservation;
-    newStartMin: number;
-    newEndMin: number;
-    laneChanged: boolean;
-    newLaneId: number | null;
-    laneKind: "staff" | "booth";
-    /** 変更後の日付（ISO）。ドラッグ中は前日/今日/翌日ボタンへのドロップで ±1日まで、
-     * 確認ダイアログ内の「日付を変更」カレンダーで任意の日付まで変更できる（§4）。 */
-    targetDate: string;
-}
-
-const pendingMove = ref<PendingMove | null>(null);
-const moveSubmitting = ref(false);
-
-/** D&D（予約・予定ブロック共通）がサーバー側で拒否された時のトースト。
- * サーバー拒否時はダイアログを閉じてカードを即座に元の位置へ戻し、
- * 理由だけこのトーストで伝える（再読込しないと直らない見た目のズレを防ぐ・§ D&D失敗時ロールバック）。 */
-const dndErrorToast = ref<string | null>(null);
-
-// クリックとドラッグの分離（§16, §33）。pointer がこの距離を超えて動いたら drag とみなし、
-// その pointerup 直後の click では詳細パネルを開かない。
-const DRAG_THRESHOLD_PX = 6;
-let suppressNextClick = false;
-
-// 前日／今日／翌日ボタンへドロップすると日付を変更できる（§30）。
-const prevDayBtnEl = ref<HTMLElement | null>(null);
-const todayBtnEl = ref<HTMLElement | null>(null);
-const nextDayBtnEl = ref<HTMLElement | null>(null);
-
-function dateDropTargets(): { el: HTMLElement; offset: -1 | 0 | 1 }[] {
-    return [
-        prevDayBtnEl.value
-            ? { el: prevDayBtnEl.value, offset: -1 as const }
-            : null,
-        todayBtnEl.value ? { el: todayBtnEl.value, offset: 0 as const } : null,
-        nextDayBtnEl.value
-            ? { el: nextDayBtnEl.value, offset: 1 as const }
-            : null,
-    ].filter((v): v is { el: HTMLElement; offset: -1 | 0 | 1 } => v !== null);
-}
-
-function hitTestDateDrop(clientX: number, clientY: number): -1 | 0 | 1 | null {
-    for (const target of dateDropTargets()) {
-        const rect = target.el.getBoundingClientRect();
-
-        if (
-            clientX >= rect.left &&
-            clientX <= rect.right &&
-            clientY >= rect.top &&
-            clientY <= rect.bottom
-        ) {
-            return target.offset;
-        }
-    }
-
-    return null;
-}
-
-/** ドラッグ中／確認待ちのあいだ、そのカードに与える X 方向のオフセット（px）。 */
-function dragOffsetXPx(reservation: ScheduleReservation): number {
-    if (drag.value?.id === reservation.id) {
-        return drag.value.offsetMinutes * pixelsPerMinute.value;
-    }
-
-    if (
-        pendingMove.value?.reservation.id === reservation.id &&
-        pendingMove.value.targetDate === reservation.starts_at.slice(0, 10)
-    ) {
-        return (
-            (pendingMove.value.newStartMin -
-                timeToMinute(reservation.starts_at.slice(11, 16))) *
-            pixelsPerMinute.value
-        );
-    }
-
-    return 0;
-}
-
-/** レーン（行）の並び順インデックス。ドラッグ中に別スタッフ／ブース行へ視覚的に追従させるため。 */
-function laneRowIndex(laneId: number | null): number {
-    return lanes.value.findIndex((lane) => lane.id === laneId);
-}
-
-/**
- * ドラッグでスタッフ／ブース行を跨いだ場合、時間移動と同じように
- * カードをうっすら縦方向にも追従させる（§16 のゴーストに加え、元カード自体も動かす）。
- */
-function dragOffsetYPx(reservation: ScheduleReservation): number {
-    if (drag.value?.id !== reservation.id || !drag.value.moved) {
-        return 0;
-    }
-
-    if (drag.value.targetLaneId === drag.value.originLaneId) {
-        return 0;
-    }
-
-    const fromIndex = laneRowIndex(drag.value.originLaneId);
-    const toIndex = laneRowIndex(drag.value.targetLaneId);
-
-    if (fromIndex === -1 || toIndex === -1) {
-        return 0;
-    }
-
-    return (toIndex - fromIndex) * timelineTrackHeight.value;
-}
-
-/** ドラッグ中のカードが属する行だけ、他の行に重なって見えるよう一時的にクリップを外す。 */
-function isDragOriginLane(laneId: number | null): boolean {
-    return (
-        drag.value !== null &&
-        drag.value.moved &&
-        drag.value.originLaneId === laneId
-    );
-}
-
-/** ドラッグでホバー中のドロップ先レーン（自レーン以外）。左側レーンラベルの強調に使う（予約／予定共通・§17）。 */
-function isDropTargetLane(laneId: number | null): boolean {
-    const active =
-        drag.value !== null && drag.value.moved
-            ? drag.value
-            : blockDrag.value !== null && blockDrag.value.moved
-              ? blockDrag.value
-              : null;
-
-    return (
-        active !== null &&
-        active.targetLaneId === laneId &&
-        active.targetLaneId !== active.originLaneId
-    );
-}
-
-/**
- * ドラッグ中の「予約可能そう／不可そう」の見た目ヒント（§18）。
- * ここでは既に画面上にある予約・予定との時間帯重複だけを簡易チェックする
- * （勤務時間・メニュー対応可否まではクライアントで判定しない＝最終判定は必ずサーバー側）。
- */
-function dropTargetValidity(laneId: number | null): "valid" | "invalid" | null {
-    if (!isDropTargetLane(laneId)) {
-        return null;
-    }
-
-    const active = drag.value?.moved ? drag.value : blockDrag.value;
-
-    if (active === null) {
-        return null;
-    }
-
-    const newStart = active.baseStartMin + active.offsetMinutes;
-    const newEnd = newStart + active.durationMin;
-    const kind: "staff" | "booth" =
-        axisMode.value === "booth" ? "booth" : "staff";
-
-    const overlapsReservation = reservationsFor(
-        { id: laneId, kind },
-        date.value,
-    ).some((r) => {
-        if (drag.value !== null && r.id === drag.value.id) {
-            return false;
-        }
-        const rs = timeToMinute(r.starts_at.slice(11, 16));
-        const re = timeToMinute(r.ends_at.slice(11, 16));
-
-        return rs < newEnd && re > newStart;
-    });
-    const overlapsBlock = blocksFor({ id: laneId, kind }, date.value).some(
-        (b) => {
-            if (blockDrag.value !== null && b.id === blockDrag.value.id) {
-                return false;
-            }
-            const bs = timeToMinute(b.start_at);
-            const be = timeToMinute(b.end_at);
-
-            return bs < newEnd && be > newStart;
-        },
-    );
-
-    return overlapsReservation || overlapsBlock ? "invalid" : "valid";
-}
-
-const dateDropHoverOffset = ref<-1 | 0 | 1 | null>(null);
-
-function onCardPointerDown(
-    reservation: ScheduleReservation,
-    lane: ScheduleLane,
-    event: PointerEvent,
-): void {
-    if (
-        !isDraggable(reservation) ||
-        event.button !== 0 ||
-        pendingMove.value !== null ||
-        crossDateMove.value !== null
-    ) {
-        return;
-    }
-
-    const startMin = timeToMinute(reservation.starts_at.slice(11, 16));
-    const endMin = timeToMinute(reservation.ends_at.slice(11, 16));
-    const originLaneId = lane.id;
-
-    // 「両方」表示では同じ予約がスタッフ・ブース両方のレーンに描画されるため、
-    // ドロップ先も掴んだカードと同じ軸（kind）のレーンだけに絞る（§26）。
-    const laneRects: LaneRect[] = lanes.value
-        .filter((l) => l.kind === lane.kind)
-        .map((l) => {
-            const el = document.querySelector<HTMLElement>(
-                `.timeline-lane-label[data-lane-id="${l.id ?? "unassigned"}"]`,
-            );
-            const rect = el?.getBoundingClientRect();
-
-            return {
-                laneId: l.id,
-                top: rect?.top ?? 0,
-                bottom: rect?.bottom ?? 0,
-            };
-        });
-
-    drag.value = {
-        id: reservation.id,
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        durationMin: endMin - startMin,
-        baseStartMin: startMin,
-        offsetMinutes: 0,
-        moved: false,
-        originLaneId,
-        laneKind: lane.kind,
-        laneRects,
-        targetLaneId: originLaneId,
-        dateOffsetDays: 0,
-        pointerX: event.clientX,
-        pointerY: event.clientY,
-    };
-
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-}
-
-function onCardPointerMove(event: PointerEvent): void {
-    const state = drag.value;
-
-    if (state === null || event.pointerId !== state.pointerId) {
-        return;
-    }
-
-    state.pointerX = event.clientX;
-    state.pointerY = event.clientY;
-
-    const rawMinutes = (event.clientX - state.startX) / pixelsPerMinute.value;
-    const snapped =
-        Math.round(rawMinutes / snapMinutes.value) * snapMinutes.value;
-
-    // 開始が営業時間内、かつ終了が閉店を超えないよう丸める。
-    const minStart = openMinute.value;
-    const maxStart = closeMinute.value - state.durationMin;
-    const clampedStart = Math.min(
-        Math.max(state.baseStartMin + snapped, minStart),
-        maxStart,
-    );
-    const offset = clampedStart - state.baseStartMin;
-
-    if (offset !== state.offsetMinutes) {
-        state.offsetMinutes = offset;
-    }
-
-    // 別レーン（別スタッフ／別ブース）へのホバー判定（§29）。
-    const hit = state.laneRects.find(
-        (rect) => event.clientY >= rect.top && event.clientY <= rect.bottom,
-    );
-
-    if (hit !== undefined) {
-        state.targetLaneId = hit.laneId;
-    }
-
-    // 前日／今日／翌日ボタンへのホバー判定（§30）。
-    dateDropHoverOffset.value = hitTestDateDrop(event.clientX, event.clientY);
-
-    if (
-        Math.abs(event.clientX - state.startX) > DRAG_THRESHOLD_PX ||
-        state.targetLaneId !== state.originLaneId ||
-        dateDropHoverOffset.value !== null
-    ) {
-        state.moved = true;
-    }
-}
-
-function onCardPointerUp(
-    reservation: ScheduleReservation,
-    event: PointerEvent,
-): void {
-    const state = drag.value;
-
-    if (state === null || event.pointerId !== state.pointerId) {
-        return;
-    }
-
-    try {
-        (event.currentTarget as HTMLElement).releasePointerCapture(
-            event.pointerId,
-        );
-    } catch {
-        /* noop */
-    }
-
-    const dateOffsetDays = hitTestDateDrop(event.clientX, event.clientY) ?? 0;
-    dateDropHoverOffset.value = null;
-
-    if (state.moved) {
-        // しきい値を超えて動いた → 直後の click（詳細パネル）は無視する。
-        suppressNextClick = true;
-
-        const laneChanged = state.targetLaneId !== state.originLaneId;
-        const newStartMin =
-            dateOffsetDays !== 0
-                ? state.baseStartMin
-                : state.baseStartMin + state.offsetMinutes;
-
-        if (state.offsetMinutes !== 0 || laneChanged || dateOffsetDays !== 0) {
-            pendingMove.value = {
-                reservation,
-                newStartMin,
-                newEndMin: newStartMin + state.durationMin,
-                laneChanged,
-                newLaneId: state.targetLaneId,
-                laneKind: state.laneKind,
-                targetDate: shiftDateBy(
-                    reservation.starts_at.slice(0, 10),
-                    dateOffsetDays,
-                ),
-            };
-        }
-    }
-
-    drag.value = null;
-}
-
-function onCardClick(reservation: ScheduleReservation): void {
-    // ドラッグ直後・時間変更の確認中はパネルを開かない（§16, §33）。
-    if (suppressNextClick || pendingMove.value !== null) {
-        suppressNextClick = false;
-
-        return;
-    }
-
-    openReservationPanel(reservation.id);
-}
-
-function cancelMove(): void {
-    pendingMove.value = null;
-    moveSubmitting.value = false;
-    cancelCrossDateMove();
-}
-
-function shiftDateBy(iso: string, days: number): string {
-    const [y, m, d] = iso.split("-").map(Number);
-    const next = new Date(y, m - 1, d);
-    next.setDate(next.getDate() + days);
-
-    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
-}
-
-function pendingLaneName(
-    laneId: number | null,
-    kind: "staff" | "booth",
-): string {
-    if (laneId === null) {
-        return kind === "staff" ? "担当なし" : "ブース未割当";
-    }
-
-    return (
-        lanes.value.find(
-            (lane) => lane.kind === kind && lane.id === laneId,
-        )?.display_name ?? ""
-    );
-}
-
-function confirmMove(): void {
-    const move = pendingMove.value;
-
-    if (move === null) {
-        return;
-    }
-
-    const startsAt = `${move.targetDate} ${minuteToLabel(move.newStartMin)}:00`;
-    const body: Record<string, string | number | null> = {
-        starts_at: startsAt,
-        version: move.reservation.version,
-    };
-
-    // レーンを変更した場合のみ送る（未指定なら現状維持。§27, §29）。
-    // 更新するのは掴んだカードと同じ軸（laneKind）のみ（§26）。
-    if (move.laneChanged) {
-        if (move.laneKind === "staff") {
-            body.staff_id = move.newLaneId;
-        } else {
-            body.booth_id = move.newLaneId;
-        }
-    }
-
-    moveSubmitting.value = true;
-
-    router.put(
-        `/admin/schedule/reservations/${move.reservation.id}/time`,
-        body,
-        {
-            preserveScroll: true,
-            preserveState: true,
-            // 予約の競合エラーは「reservation」バッグで返るため、指定して平らな形で受け取る。
-            errorBag: "reservation",
-            onError: (errors) => {
-                dndErrorToast.value =
-                    firstErrorMessage(errors) ??
-                    MESSAGES.reservation.moveConflict;
-                // 失敗時はダイアログを閉じてカードを即座に元の位置へ戻す（再読込不要）。
-                pendingMove.value = null;
-                moveSubmitting.value = false;
-            },
-            onSuccess: () => {
-                pendingMove.value = null;
-                moveSubmitting.value = false;
-                cancelCrossDateMove();
-            },
-            onFinish: () => {
-                moveSubmitting.value = false;
-            },
-        },
-    );
-}
-
-function pendingBeforeLabel(): string {
-    if (pendingMove.value === null) {
-        return "";
-    }
-    const r = pendingMove.value.reservation;
-
-    return `${r.starts_at.slice(0, 10)} ${r.starts_at.slice(11, 16)}〜${r.ends_at.slice(11, 16)}`;
-}
-
-function pendingAfterLabel(): string {
-    if (pendingMove.value === null) {
-        return "";
-    }
-    const move = pendingMove.value;
-
-    return `${move.targetDate} ${minuteToLabel(move.newStartMin)}〜${minuteToLabel(move.newEndMin)}`;
-}
-
-/* ─────────── 予定ブロックの D&D（時間・担当・日付・§40。予約よりシンプル） ─────────── */
-
-interface BlockDragState {
-    id: number;
-    pointerId: number;
-    startX: number;
-    durationMin: number;
-    baseStartMin: number;
-    offsetMinutes: number;
-    moved: boolean;
-    originLaneId: number | null;
-    laneKind: "staff" | "booth";
-    laneRects: LaneRect[];
-    targetLaneId: number | null;
-}
-
+/* ───────────────── ドラッグ&ドロップ（予約・予定ブロック） ───────────────── */
 const blockDrag = ref<BlockDragState | null>(null);
-
-interface PendingBlockMove {
-    block: ScheduleBlock;
-    newStartMin: number;
-    newEndMin: number;
-    laneChanged: boolean;
-    newLaneId: number | null;
-    laneKind: "staff" | "booth";
-    /** 変更後の日付（ISO）。確認ダイアログ内の「日付を変更」カレンダーで任意の日付へ変更できる（§6）。 */
-    targetDate: string;
-}
-
-const pendingBlockMove = ref<PendingBlockMove | null>(null);
-const blockMoveSubmitting = ref(false);
-
-function isBlockDraggable(): boolean {
-    return canManage.value && viewMode.value === "day";
-}
-
-function blockDragOffsetXPx(block: ScheduleBlock): number {
-    if (blockDrag.value?.id === block.id) {
-        return blockDrag.value.offsetMinutes * pixelsPerMinute.value;
-    }
-
-    return 0;
-}
-
-/** 予約カードと同じく、予定ブロックも別スタッフ／ブース行へドラッグ中は縦にも追従させる。 */
-function blockDragOffsetYPx(block: ScheduleBlock): number {
-    if (blockDrag.value?.id !== block.id || !blockDrag.value.moved) {
-        return 0;
-    }
-
-    if (blockDrag.value.targetLaneId === blockDrag.value.originLaneId) {
-        return 0;
-    }
-
-    const fromIndex = laneRowIndex(blockDrag.value.originLaneId);
-    const toIndex = laneRowIndex(blockDrag.value.targetLaneId);
-
-    if (fromIndex === -1 || toIndex === -1) {
-        return 0;
-    }
-
-    return (toIndex - fromIndex) * timelineTrackHeight.value;
-}
-
-function isBlockDragOriginLane(laneId: number | null): boolean {
-    return (
-        blockDrag.value !== null &&
-        blockDrag.value.moved &&
-        blockDrag.value.originLaneId === laneId
-    );
-}
-
-function onBlockPointerDown(
-    block: ScheduleBlock,
-    lane: ScheduleLane,
-    event: PointerEvent,
-): void {
-    if (
-        !isBlockDraggable() ||
-        event.button !== 0 ||
-        pendingBlockMove.value !== null
-    ) {
-        return;
-    }
-
-    const startMin = timeToMinute(block.start_at);
-    const endMin = timeToMinute(block.end_at);
-    const originLaneId = lane.id;
-
-    // 予約カードと同様、ドロップ先も掴んだブロックと同じ軸のレーンだけに絞る（§26）。
-    const laneRects: LaneRect[] = lanes.value
-        .filter((l) => l.kind === lane.kind)
-        .map((l) => {
-            const el = document.querySelector<HTMLElement>(
-                `.timeline-lane-label[data-lane-id="${l.id ?? "unassigned"}"]`,
-            );
-            const rect = el?.getBoundingClientRect();
-
-            return {
-                laneId: l.id,
-                top: rect?.top ?? 0,
-                bottom: rect?.bottom ?? 0,
-            };
-        });
-
-    blockDrag.value = {
-        id: block.id,
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        durationMin: endMin - startMin,
-        baseStartMin: startMin,
-        offsetMinutes: 0,
-        moved: false,
-        originLaneId,
-        laneKind: lane.kind,
-        laneRects,
-        targetLaneId: originLaneId,
-    };
-
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-}
-
-function onBlockPointerMove(event: PointerEvent): void {
-    const state = blockDrag.value;
-
-    if (state === null || event.pointerId !== state.pointerId) {
-        return;
-    }
-
-    const rawMinutes = (event.clientX - state.startX) / pixelsPerMinute.value;
-    const snapped =
-        Math.round(rawMinutes / snapMinutes.value) * snapMinutes.value;
-    const minStart = openMinute.value;
-    const maxStart = closeMinute.value - state.durationMin;
-    const clampedStart = Math.min(
-        Math.max(state.baseStartMin + snapped, minStart),
-        maxStart,
-    );
-    state.offsetMinutes = clampedStart - state.baseStartMin;
-
-    const hit = state.laneRects.find(
-        (rect) => event.clientY >= rect.top && event.clientY <= rect.bottom,
-    );
-
-    if (hit !== undefined) {
-        state.targetLaneId = hit.laneId;
-    }
-
-    dateDropHoverOffset.value = hitTestDateDrop(event.clientX, event.clientY);
-
-    if (
-        Math.abs(event.clientX - state.startX) > DRAG_THRESHOLD_PX ||
-        state.targetLaneId !== state.originLaneId ||
-        dateDropHoverOffset.value !== null
-    ) {
-        state.moved = true;
-    }
-}
-
-function onBlockPointerUp(block: ScheduleBlock, event: PointerEvent): void {
-    const state = blockDrag.value;
-
-    if (state === null || event.pointerId !== state.pointerId) {
-        return;
-    }
-
-    try {
-        (event.currentTarget as HTMLElement).releasePointerCapture(
-            event.pointerId,
-        );
-    } catch {
-        /* noop */
-    }
-
-    const dateOffsetDays = hitTestDateDrop(event.clientX, event.clientY) ?? 0;
-    dateDropHoverOffset.value = null;
-
-    if (state.moved) {
-        suppressNextClick = true;
-        const laneChanged = state.targetLaneId !== state.originLaneId;
-        const newStartMin =
-            dateOffsetDays !== 0
-                ? state.baseStartMin
-                : state.baseStartMin + state.offsetMinutes;
-
-        if (state.offsetMinutes !== 0 || laneChanged || dateOffsetDays !== 0) {
-            pendingBlockMove.value = {
-                block,
-                newStartMin,
-                newEndMin: newStartMin + state.durationMin,
-                laneChanged,
-                newLaneId: state.targetLaneId,
-                laneKind: state.laneKind,
-                targetDate: shiftDateBy(block.date, dateOffsetDays),
-            };
-        }
-    }
-
-    blockDrag.value = null;
-}
-
-function onBlockClick(block: ScheduleBlock): void {
-    if (suppressNextClick || pendingBlockMove.value !== null) {
-        suppressNextClick = false;
-
-        return;
-    }
-
-    openBlockDetailPanel(block.id);
-}
-
-function cancelBlockMove(): void {
-    pendingBlockMove.value = null;
-    blockMoveSubmitting.value = false;
-}
-
-function pendingBlockBeforeLabel(): string {
-    if (pendingBlockMove.value === null) return "";
-    const b = pendingBlockMove.value.block;
-
-    return `${b.date} ${b.start_at}〜${b.end_at}`;
-}
-
-function pendingBlockAfterLabel(): string {
-    if (pendingBlockMove.value === null) return "";
-    const move = pendingBlockMove.value;
-
-    return `${move.targetDate} ${minuteToLabel(move.newStartMin)}〜${minuteToLabel(move.newEndMin)}`;
-}
-
-function pendingBlockLaneChangeLabel(): string | null {
-    const move = pendingBlockMove.value;
-
-    if (move === null || !move.laneChanged) {
-        return null;
-    }
-
-    const originLaneId =
-        move.laneKind === "staff" ? move.block.staff_id : move.block.booth_id;
-
-    return `${pendingLaneName(originLaneId, move.laneKind)} → ${pendingLaneName(move.newLaneId, move.laneKind)}`;
-}
-
-function confirmBlockMove(): void {
-    const move = pendingBlockMove.value;
-
-    if (move === null) {
-        return;
-    }
-
-    const body: Record<string, string | number | null> = {
-        work_date: move.targetDate,
-        start_at: minuteToLabel(move.newStartMin),
-        end_at: minuteToLabel(move.newEndMin),
-    };
-
-    if (move.laneChanged) {
-        if (move.laneKind === "staff") {
-            body.staff_id = move.newLaneId;
-            body.booth_id = null;
-        } else {
-            body.booth_id = move.newLaneId;
-            body.staff_id = null;
-        }
-    }
-
-    blockMoveSubmitting.value = true;
-
-    router.put(`/admin/schedule/blocks/${move.block.id}/time`, body, {
-        preserveScroll: true,
-        preserveState: true,
-        errorBag: "reservation",
-        onError: (errors) => {
-            dndErrorToast.value =
-                firstErrorMessage(errors) ??
-                MESSAGES.schedule.blockMoveConflict;
-            // 失敗時はダイアログを閉じてカードを即座に元の位置へ戻す（再読込不要）。
-            pendingBlockMove.value = null;
-            blockMoveSubmitting.value = false;
-        },
-        onSuccess: () => {
-            pendingBlockMove.value = null;
-            blockMoveSubmitting.value = false;
-        },
-        onFinish: () => {
-            blockMoveSubmitting.value = false;
-        },
-    });
-}
-
-function pendingLaneChangeLabel(): string | null {
-    const move = pendingMove.value;
-
-    if (move === null || !move.laneChanged) {
-        return null;
-    }
-
-    const originLaneId =
-        move.laneKind === "staff"
-            ? move.reservation.staff_id
-            : move.reservation.booth_id;
-
-    return `${pendingLaneName(originLaneId, move.laneKind)} → ${pendingLaneName(move.newLaneId, move.laneKind)}`;
-}
-
-/* ─────────── メニュー別「本当に予約できる開始時刻」プレビュー（§11） ─────────── */
-
-interface PreviewSlot {
-    starts_at: string;
-    available_staff_ids: number[];
-    /** その時刻に空いているブース（with_booths=1 で取得）。 */
-    available_booth_ids?: number[];
-}
-
-const previewServiceId = ref<number | null>(null);
-const previewSlots = ref<PreviewSlot[]>([]);
-const previewLoading = ref(false);
-let previewRequestId = 0;
-
-const previewService = computed<MenuOption | null>(
-    () =>
-        props.menu_options.find((m) => m.id === previewServiceId.value) ?? null,
-);
-
-async function fetchPreview(): Promise<void> {
-    const requestId = ++previewRequestId;
-    const serviceId = previewServiceId.value;
-
-    if (serviceId === null || viewMode.value !== "day") {
-        previewSlots.value = [];
-        previewLoading.value = false;
-
-        return;
-    }
-
-    previewLoading.value = true;
-
-    try {
-        const params = new URLSearchParams({
-            service_id: String(serviceId),
-            date: date.value,
-            // ブースが全部埋まっている時間は「空き」にしない。ブース行はそのブースが空いている時だけ空き。
-            with_booths: "1",
-        });
-        const response = await fetch(
-            `/admin/reservations/availability?${params.toString()}`,
-            {
-                headers: { Accept: "application/json" },
-                credentials: "same-origin",
-            },
-        );
-
-        const slots = response.ok ? ((await response.json()) as PreviewSlot[]) : [];
-
-        if (requestId === previewRequestId) {
-            previewSlots.value = slots;
-        }
-    } catch {
-        if (requestId === previewRequestId) {
-            previewSlots.value = [];
-        }
-    } finally {
-        if (requestId === previewRequestId) {
-            previewLoading.value = false;
-        }
-    }
-}
-
-watch(
-    () => [previewServiceId.value, date.value, viewMode.value] as const,
-    () => {
-        void fetchPreview();
-    },
-);
+const dragClickGuard: DragClickGuard = { suppress: false };
+
+const {
+    cancelCrossDateMove,
+    cancelMove,
+    cardContextMenuOpen,
+    cardContextMenuReservation,
+    cardContextMenuTarget,
+    confirmMove,
+    crossDateMove,
+    crossDateMoveReservation,
+    crossDatePointer,
+    dateDropHoverOffset,
+    dndErrorToast,
+    drag,
+    dragOffsetXPx,
+    dragOffsetYPx,
+    draggedReservation,
+    dropTargetValidity,
+    hitTestDateDrop,
+    isDragOriginLane,
+    isDraggable,
+    isDropTargetLane,
+    laneRowIndex,
+    moveSubmitting,
+    nextDayBtnEl,
+    onCardClick,
+    onCardContextMenu,
+    onCardPointerDown,
+    onCardPointerMove,
+    onCardPointerUp,
+    pendingAfterLabel,
+    pendingBeforeLabel,
+    pendingLaneName,
+    pendingMove,
+    prevDayBtnEl,
+    snapMinutes,
+    startCrossDateMove,
+    todayBtnEl,
+} = useReservationDrag({
+    axisMode,
+    blocksFor,
+    canManage,
+    closeMinute,
+    date,
+    lanes,
+    openMinute,
+    openReservationPanel,
+    pixelsPerMinute,
+    previewServiceId,
+    props,
+    reservationsFor,
+    slotPickGhostVisible,
+    timelineTrackHeight,
+    viewMode,
+    blockDrag,
+    dragClickGuard,
+});
+
+const {
+    blockDragOffsetXPx,
+    blockDragOffsetYPx,
+    blockMoveSubmitting,
+    cancelBlockMove,
+    confirmBlockMove,
+    isBlockDragOriginLane,
+    isBlockDraggable,
+    onBlockClick,
+    onBlockPointerDown,
+    onBlockPointerMove,
+    onBlockPointerUp,
+    pendingBlockAfterLabel,
+    pendingBlockBeforeLabel,
+    pendingBlockLaneChangeLabel,
+    pendingBlockMove,
+    pendingLaneChangeLabel,
+} = useBlockDrag({
+    canManage,
+    closeMinute,
+    lanes,
+    openBlockDetailPanel,
+    openMinute,
+    pixelsPerMinute,
+    timelineTrackHeight,
+    viewMode,
+    blockDrag,
+    dragClickGuard,
+    dateDropHoverOffset,
+    dndErrorToast,
+    hitTestDateDrop,
+    laneRowIndex,
+    pendingLaneName,
+    pendingMove,
+    snapMinutes,
+});
 
 /** 新規予約の通知音（設定 > 通知設定）。サーバーの値が不正なら既定値にする。 */
 const notificationSound = computed(() => {
@@ -3044,113 +2006,6 @@ const notificationSound = computed(() => {
             : DEFAULT_NOTIFICATION_REPEAT,
     };
 });
-
-/** 予約可能な開始「分」の集合。 */
-const previewStartMinutes = computed<Set<number>>(() => {
-    const set = new Set<number>();
-
-    for (const slot of previewSlots.value) {
-        set.add(timeToMinute(slot.starts_at.slice(11, 16)));
-    }
-
-    return set;
-});
-
-/** 開始「分」→ その時刻から開始できるスタッフ user_id 集合。 */
-const previewStaffByMinute = computed<Map<number, Set<number>>>(() => {
-    const map = new Map<number, Set<number>>();
-
-    for (const slot of previewSlots.value) {
-        map.set(
-            timeToMinute(slot.starts_at.slice(11, 16)),
-            new Set(slot.available_staff_ids),
-        );
-    }
-
-    return map;
-});
-
-/** 開始「分」→ その時刻に空いているブース id 集合。 */
-const previewBoothsByMinute = computed<Map<number, Set<number>>>(() => {
-    const map = new Map<number, Set<number>>();
-
-    for (const slot of previewSlots.value) {
-        map.set(
-            timeToMinute(slot.starts_at.slice(11, 16)),
-            new Set(slot.available_booth_ids ?? []),
-        );
-    }
-
-    return map;
-});
-
-/**
- * 選択メニューについて、レーンを「開始できる」帯と「開始できない」帯に分けてまとめる。
- * 判定はサーバー（AvailabilityService）が返した開始可能リストに基づく（§11・フロント推測なし）。
- * 「空いている」を緑、「空いていない」を灰で塗り分け、一目で分かるようにする。
- */
-function menuSegments(lane: ScheduleLane): {
-    available: ShadeSegment[];
-    blocked: ShadeSegment[];
-} {
-    if (previewServiceId.value === null || previewService.value === null) {
-        return { available: [], blocked: [] };
-    }
-
-    const laneId = lane.id;
-    const service = previewService.value;
-    const unit = Math.max(props.business_hours.slot_minutes, 5);
-    const staffAxisWithStaff =
-        lane.kind === "staff" && service.requires_staff && laneId !== null;
-    const available: ShadeSegment[] = [];
-    const blocked: ShadeSegment[] = [];
-    let runStart: number | null = null;
-    let runIsAvailable = false;
-
-    const flush = (endMinute: number): void => {
-        if (runStart === null) {
-            return;
-        }
-        (runIsAvailable ? available : blocked).push({
-            left: (runStart - openMinute.value) * pixelsPerMinute.value,
-            width: (endMinute - runStart) * pixelsPerMinute.value,
-        });
-        runStart = null;
-    };
-
-    for (
-        let minute = openMinute.value;
-        minute < closeMinute.value;
-        minute += unit
-    ) {
-        // サーバーは「担当（必要なら）と空きブースが揃う時刻」だけを返す。
-        // スタッフ行はそのスタッフが空いているか、ブース行はそのブースが空いているかで判定する。
-        const canStart =
-            minute + service.duration_min <= closeMinute.value &&
-            (staffAxisWithStaff
-                ? (previewStaffByMinute.value
-                      .get(minute)
-                      ?.has(laneId as number) ?? false)
-                : lane.kind === "booth" && laneId !== null
-                  ? (previewBoothsByMinute.value
-                        .get(minute)
-                        ?.has(laneId) ?? false)
-                  : previewStartMinutes.value.has(minute));
-
-        if (runStart === null) {
-            runStart = minute;
-            runIsAvailable = canStart;
-        } else if (canStart !== runIsAvailable) {
-            flush(minute);
-            runStart = minute;
-            runIsAvailable = canStart;
-        }
-    }
-
-    flush(closeMinute.value);
-
-    return { available, blocked };
-}
 </script>
 
 <template>
@@ -3250,12 +2105,22 @@ function menuSegments(lane: ScheduleLane): {
         >
             <!-- メニュー名は省略せず全文を出す（長い名前は折り返す。Task 11-30） -->
             <template #item="{ props: itemProps, item }">
-                <v-list-item v-bind="itemProps" :title="undefined" class="preview-service-item">
-                    <span class="preview-service-name">{{ item.raw.name }}</span>
+                <v-list-item
+                    v-bind="itemProps"
+                    :title="undefined"
+                    class="preview-service-item"
+                >
+                    <span class="preview-service-name">{{
+                        item.raw.name
+                    }}</span>
                 </v-list-item>
             </template>
             <template #selection="{ item }">
-                <span class="preview-service-selection" :title="item.raw.name">{{ item.raw.name }}</span>
+                <span
+                    class="preview-service-selection"
+                    :title="item.raw.name"
+                    >{{ item.raw.name }}</span
+                >
             </template>
         </v-select>
     </div>
@@ -3342,7 +2207,9 @@ function menuSegments(lane: ScheduleLane): {
         role="status"
     >
         <v-icon icon="mdi-calendar-cursor" size="16" />
-        <span class="slot-pick-bar__label">{{ slotPickLabel }} の日時を選択中</span>
+        <span class="slot-pick-bar__label"
+            >{{ slotPickLabel }} の日時を選択中</span
+        >
         <button
             type="button"
             class="slot-pick-bar__release"
@@ -3513,7 +2380,6 @@ function menuSegments(lane: ScheduleLane): {
         </div>
 
         <div ref="boardMainEl" class="board-layout__main">
-
             <v-card class="mb-2">
                 <v-card-text class="schedule-toolbar">
                     <div class="toolbar-mode">
@@ -3554,7 +2420,11 @@ function menuSegments(lane: ScheduleLane): {
                     <v-tooltip
                         v-if="axisMode !== 'booth' && offStaff.length > 0"
                         location="bottom"
-                        :text="offStaff.map((member) => member.display_name).join('、')"
+                        :text="
+                            offStaff
+                                .map((member) => member.display_name)
+                                .join('、')
+                        "
                     >
                         <template #activator="{ props: tip }">
                             <span
@@ -3562,7 +2432,10 @@ function menuSegments(lane: ScheduleLane): {
                                 class="toolbar-off-staff"
                                 data-testid="off-staff-count"
                             >
-                                <v-icon icon="mdi-account-off-outline" size="16" />
+                                <v-icon
+                                    icon="mdi-account-off-outline"
+                                    size="16"
+                                />
                                 {{ MESSAGES.schedule.offStaffLabel }}
                                 {{ offStaff.length }}名
                             </span>
@@ -3702,16 +2575,23 @@ function menuSegments(lane: ScheduleLane): {
                                     />
                                     <span
                                         class="timeline-lane-name"
-                                        :title="row.lane.off_duty ? MESSAGES.schedule.offDutyTitle : undefined"
+                                        :title="
+                                            row.lane.off_duty
+                                                ? MESSAGES.schedule.offDutyTitle
+                                                : undefined
+                                        "
                                     >
-                                        <span class="timeline-lane-name__text">{{
-                                            row.lane.display_name
-                                        }}</span>
+                                        <span
+                                            class="timeline-lane-name__text"
+                                            >{{ row.lane.display_name }}</span
+                                        >
                                         <span
                                             v-if="row.lane.off_duty"
                                             class="lane-off-duty"
                                             data-testid="lane-off-duty"
-                                            >{{ MESSAGES.schedule.offDutyBadge }}</span
+                                            >{{
+                                                MESSAGES.schedule.offDutyBadge
+                                            }}</span
                                         >
                                     </span>
                                     <v-icon
@@ -3750,16 +2630,23 @@ function menuSegments(lane: ScheduleLane): {
                                     />
                                     <span
                                         class="timeline-lane-name"
-                                        :title="row.lane.off_duty ? MESSAGES.schedule.offDutyTitle : undefined"
+                                        :title="
+                                            row.lane.off_duty
+                                                ? MESSAGES.schedule.offDutyTitle
+                                                : undefined
+                                        "
                                     >
-                                        <span class="timeline-lane-name__text">{{
-                                            row.lane.display_name
-                                        }}</span>
+                                        <span
+                                            class="timeline-lane-name__text"
+                                            >{{ row.lane.display_name }}</span
+                                        >
                                         <span
                                             v-if="row.lane.off_duty"
                                             class="lane-off-duty"
                                             data-testid="lane-off-duty"
-                                            >{{ MESSAGES.schedule.offDutyBadge }}</span
+                                            >{{
+                                                MESSAGES.schedule.offDutyBadge
+                                            }}</span
                                         >
                                     </span>
                                 </div>
@@ -3776,7 +2663,6 @@ function menuSegments(lane: ScheduleLane): {
                                 class="timeline-canvas"
                                 :style="{ width: `${timelineWidth}px` }"
                             >
-
                                 <div class="timeline-axis">
                                     <div
                                         v-for="block in hourBlocks"
@@ -3921,7 +2807,11 @@ function menuSegments(lane: ScheduleLane): {
                                                 left: `${segment.left}px`,
                                                 width: `${segment.width}px`,
                                             }"
-                                            :title="cannotStartAtTimeMessage(previewService?.name ?? '')"
+                                            :title="
+                                                cannotStartAtTimeMessage(
+                                                    previewService?.name ?? '',
+                                                )
+                                            "
                                         />
                                         <div
                                             class="timeline-empty-click"
@@ -3930,7 +2820,10 @@ function menuSegments(lane: ScheduleLane): {
                                                 onTrackClick(row.lane, $event)
                                             "
                                             @mousemove="
-                                                onTimelineHover(row.lane, $event)
+                                                onTimelineHover(
+                                                    row.lane,
+                                                    $event,
+                                                )
                                             "
                                             @mouseleave="clearTimelineHover"
                                         />
@@ -4004,169 +2897,16 @@ function menuSegments(lane: ScheduleLane): {
                                                 )
                                             "
                                         >
-                                            <!-- 終了後インターバル（予約の後ろの別区間。次の予約はここから後） -->
-                                            <span
-                                                v-if="(reservation.buffer_min ?? 0) > 0"
-                                                class="reservation-buffer"
-                                                :style="bufferStyle(reservation)"
-                                                :title="MESSAGES.schedule.bufferSegment.replace('{min}', String(reservation.buffer_min))"
-                                                aria-hidden="true"
-                                            />
-                                            <span
-                                                v-if="
-                                                    drag?.id ===
-                                                        reservation.id &&
-                                                    drag?.moved
+                                            <ScheduleReservationCardBody
+                                                :reservation="reservation"
+                                                :end-label="serviceEndLabel(reservation)"
+                                                :buffer-style="bufferStyle(reservation)"
+                                                :drag-label="
+                                                    drag?.id === reservation.id && drag?.moved
+                                                        ? `${minuteToLabel(drag.baseStartMin + drag.offsetMinutes)}〜${minuteToLabel(drag.baseStartMin + drag.offsetMinutes + drag.durationMin)}`
+                                                        : null
                                                 "
-                                                class="reservation-dragtip"
-                                            >
-                                                {{
-                                                    minuteToLabel(
-                                                        drag.baseStartMin +
-                                                            drag.offsetMinutes,
-                                                    )
-                                                }}〜{{
-                                                    minuteToLabel(
-                                                        drag.baseStartMin +
-                                                            drag.offsetMinutes +
-                                                            drag.durationMin,
-                                                    )
-                                                }}
-                                            </span>
-
-                                            <!-- 行1：性別・顧客名 …… 状態アイコン -->
-                                            <span class="reservation-topline">
-                                                <span
-                                                    class="reservation-nameline"
-                                                >
-                                                    <span
-                                                        v-if="
-                                                            genderLabel(
-                                                                reservation.customer_gender,
-                                                            )
-                                                        "
-                                                        :class="
-                                                            genderClass(
-                                                                reservation.customer_gender,
-                                                            )
-                                                        "
-                                                        :title="
-                                                            reservation.customer_gender ===
-                                                            'male'
-                                                                ? '男性'
-                                                                : '女性'
-                                                        "
-                                                        >{{
-                                                            genderLabel(
-                                                                reservation.customer_gender,
-                                                            )
-                                                        }}</span
-                                                    >
-                                                    <span
-                                                        class="reservation-customer"
-                                                        :title="
-                                                            reservation.customer_name
-                                                        "
-                                                    >
-                                                        {{
-                                                            reservation.customer_name
-                                                        }}
-                                                    </span>
-                                                </span>
-                                                <v-tooltip
-                                                    :text="
-                                                        statusLabel(
-                                                            reservation.status,
-                                                        )
-                                                    "
-                                                    location="top"
-                                                >
-                                                    <template
-                                                        #activator="{
-                                                            props: tip,
-                                                        }"
-                                                    >
-                                                        <v-icon
-                                                            v-bind="tip"
-                                                            :icon="
-                                                                statusIcon(
-                                                                    reservation.status,
-                                                                )
-                                                            "
-                                                            size="15"
-                                                            class="reservation-status-icon"
-                                                            :style="{
-                                                                color: `rgb(var(--v-theme-${statusColor(reservation.status)}))`,
-                                                            }"
-                                                            :aria-label="
-                                                                statusLabel(
-                                                                    reservation.status,
-                                                                )
-                                                            "
-                                                        />
-                                                    </template>
-                                                </v-tooltip>
-                                            </span>
-
-                                            <!-- 行2：（新規のみ）新規バッジ／時刻 -->
-                                            <span class="reservation-timeline">
-                                                <span
-                                                    v-if="
-                                                        reservation.is_new_customer
-                                                    "
-                                                    class="reservation-badge reservation-badge--new"
-                                                    >新</span
-                                                >
-                                                <span class="reservation-time">
-                                                    {{
-                                                        reservation.starts_at.slice(
-                                                            11,
-                                                            16,
-                                                        )
-                                                    }}–{{
-                                                        serviceEndLabel(reservation)
-                                                    }}
-                                                </span>
-                                            </span>
-
-                                            <!-- 行3：（指名ありのみ）指名バッジ／メニュー -->
-                                            <span
-                                                class="reservation-service-line"
-                                            >
-                                                <v-tooltip
-                                                    v-if="
-                                                        reservation.is_staff_requested
-                                                    "
-                                                    text="指名予約"
-                                                    location="bottom"
-                                                >
-                                                    <template
-                                                        #activator="{
-                                                            props: tip,
-                                                        }"
-                                                    >
-                                                        <span
-                                                            v-bind="tip"
-                                                            class="reservation-badge reservation-badge--nomination"
-                                                        >
-                                                            <v-icon
-                                                                icon="mdi-hand-pointing-right"
-                                                                size="10"
-                                                            />指名
-                                                        </span>
-                                                    </template>
-                                                </v-tooltip>
-                                                <span
-                                                    class="reservation-service"
-                                                    :title="
-                                                        reservation.service_name
-                                                    "
-                                                >
-                                                    {{
-                                                        reservation.service_name
-                                                    }}
-                                                </span>
-                                            </span>
+                                            />
                                         </button>
 
                                         <!-- 予定ブロック（休憩・他業務等）。予約カードとは明確に区別する（§27-46） -->
@@ -4218,11 +2958,11 @@ function menuSegments(lane: ScheduleLane): {
                                             "
                                             @click="onBlockClick(block)"
                                         >
-                                            <span
-                                                class="schedule-block__head"
-                                            >
+                                            <span class="schedule-block__head">
                                                 <v-icon
-                                                    :icon="blockIcon(block.type)"
+                                                    :icon="
+                                                        blockIcon(block.type)
+                                                    "
                                                     size="12"
                                                 />
                                                 <span
@@ -4284,15 +3024,22 @@ function menuSegments(lane: ScheduleLane): {
                                     />
                                     <span
                                         class="timeline-lane-name"
-                                        :title="lane.off_duty ? MESSAGES.schedule.offDutyTitle : undefined"
+                                        :title="
+                                            lane.off_duty
+                                                ? MESSAGES.schedule.offDutyTitle
+                                                : undefined
+                                        "
                                     >
-                                        <span class="timeline-lane-name__text">{{
-                                            lane.display_name
-                                        }}</span>
+                                        <span
+                                            class="timeline-lane-name__text"
+                                            >{{ lane.display_name }}</span
+                                        >
                                         <span
                                             v-if="lane.off_duty"
                                             class="lane-off-duty"
-                                            >{{ MESSAGES.schedule.offDutyBadge }}</span
+                                            >{{
+                                                MESSAGES.schedule.offDutyBadge
+                                            }}</span
                                         >
                                     </span>
                                 </div>
@@ -4417,67 +3164,70 @@ function menuSegments(lane: ScheduleLane): {
 
                 <!-- 本日の集計（§23-24, §48）。台帳の下に置き、上部は操作だけに集中させる。巨大なKPIカードは並べない。 -->
                 <div v-if="summary" ref="dailySummaryEl">
-                <v-card
-                    variant="outlined"
-                    class="daily-summary mt-2"
-                >
-                    <div class="daily-summary__title">本日の集計</div>
-                    <div class="daily-summary__row">
-                        <div class="daily-summary__item">
-                            <span class="daily-summary__value">{{
-                                summary.total
-                            }}</span>
-                            <span class="daily-summary__label">予約</span>
-                        </div>
-                        <div class="daily-summary__item">
-                            <span class="daily-summary__value">{{
-                                summary.completed
-                            }}</span>
-                            <span class="daily-summary__label">来店完了</span>
-                        </div>
-                        <div class="daily-summary__item">
-                            <span class="daily-summary__value">{{
-                                summary.new_customers
-                            }}</span>
-                            <span class="daily-summary__label">新規</span>
-                        </div>
-                        <div class="daily-summary__item">
-                            <span class="daily-summary__value">{{
-                                summary.repeat_customers
-                            }}</span>
-                            <span class="daily-summary__label">リピーター</span>
-                        </div>
-                        <div class="daily-summary__item">
-                            <span class="daily-summary__value">{{
-                                summary.canceled
-                            }}</span>
-                            <span class="daily-summary__label">キャンセル</span>
-                        </div>
-                        <div class="daily-summary__item">
-                            <span class="daily-summary__value">{{
-                                summary.no_show
-                            }}</span>
-                            <span class="daily-summary__label"
-                                >無断キャンセル</span
+                    <v-card variant="outlined" class="daily-summary mt-2">
+                        <div class="daily-summary__title">本日の集計</div>
+                        <div class="daily-summary__row">
+                            <div class="daily-summary__item">
+                                <span class="daily-summary__value">{{
+                                    summary.total
+                                }}</span>
+                                <span class="daily-summary__label">予約</span>
+                            </div>
+                            <div class="daily-summary__item">
+                                <span class="daily-summary__value">{{
+                                    summary.completed
+                                }}</span>
+                                <span class="daily-summary__label"
+                                    >来店完了</span
+                                >
+                            </div>
+                            <div class="daily-summary__item">
+                                <span class="daily-summary__value">{{
+                                    summary.new_customers
+                                }}</span>
+                                <span class="daily-summary__label">新規</span>
+                            </div>
+                            <div class="daily-summary__item">
+                                <span class="daily-summary__value">{{
+                                    summary.repeat_customers
+                                }}</span>
+                                <span class="daily-summary__label"
+                                    >リピーター</span
+                                >
+                            </div>
+                            <div class="daily-summary__item">
+                                <span class="daily-summary__value">{{
+                                    summary.canceled
+                                }}</span>
+                                <span class="daily-summary__label"
+                                    >キャンセル</span
+                                >
+                            </div>
+                            <div class="daily-summary__item">
+                                <span class="daily-summary__value">{{
+                                    summary.no_show
+                                }}</span>
+                                <span class="daily-summary__label"
+                                    >無断キャンセル</span
+                                >
+                            </div>
+                            <div
+                                class="daily-summary__divider"
+                                aria-hidden="true"
+                            />
+                            <div
+                                v-if="summary.revenue !== null"
+                                class="daily-summary__item daily-summary__item--revenue"
                             >
+                                <span class="daily-summary__value"
+                                    >¥{{
+                                        summary.revenue.toLocaleString("ja-JP")
+                                    }}</span
+                                >
+                                <span class="daily-summary__label">売上</span>
+                            </div>
                         </div>
-                        <div
-                            class="daily-summary__divider"
-                            aria-hidden="true"
-                        />
-                        <div
-                            v-if="summary.revenue !== null"
-                            class="daily-summary__item daily-summary__item--revenue"
-                        >
-                            <span class="daily-summary__value"
-                                >¥{{
-                                    summary.revenue.toLocaleString("ja-JP")
-                                }}</span
-                            >
-                            <span class="daily-summary__label">売上</span>
-                        </div>
-                    </div>
-                </v-card>
+                    </v-card>
                 </div>
             </template>
         </div>
@@ -4493,190 +3243,36 @@ function menuSegments(lane: ScheduleLane): {
     />
 
     <!-- D&D 時間変更の確認（誤操作防止・§14） -->
-    <v-dialog
-        :model-value="pendingMove !== null"
-        max-width="420"
-        @update:model-value="
-            (v) => {
-                if (!v) cancelMove();
-            }
-        "
-    >
-        <v-card v-if="pendingMove">
-            <v-card-title class="text-subtitle-1 font-weight-bold"
-                >{{ MESSAGES.reservation.confirmMove }}</v-card-title
-            >
-            <v-card-text>
-                <div class="mb-3">
-                    <div class="font-weight-medium">
-                        {{ pendingMove.reservation.customer_name }}
-                    </div>
-                    <div class="text-body-2 text-medium-emphasis">
-                        {{ pendingMove.reservation.service_name }}
-                    </div>
-                </div>
-                <div class="ark-move-compare">
-                    <div>
-                        <div class="text-caption text-medium-emphasis">
-                            変更前
-                        </div>
-                        <div class="text-body-1">
-                            {{ pendingBeforeLabel() }}
-                        </div>
-                    </div>
-                    <v-icon icon="mdi-arrow-right" class="mx-2" />
-                    <div>
-                        <div class="text-caption text-medium-emphasis">
-                            変更後
-                        </div>
-                        <div class="text-body-1 font-weight-bold text-primary">
-                            {{ pendingAfterLabel() }}
-                        </div>
-                    </div>
-                </div>
-                <div v-if="pendingLaneChangeLabel()" class="text-body-2 mt-3">
-                    <v-icon
-                        icon="mdi-account-switch-outline"
-                        size="16"
-                        class="mr-1"
-                    />
-                    {{ pendingLaneChangeLabel() }}
-                </div>
-                <!-- 任意の日付へ変更（§4）。前日/今日/翌日ボタンへのドロップは既存どおり ±1日。 -->
-                <v-menu :close-on-content-click="false" location="bottom start">
-                    <template #activator="{ props: menuProps }">
-                        <v-btn
-                            v-bind="menuProps"
-                            variant="text"
-                            size="small"
-                            color="accent"
-                            prepend-icon="mdi-calendar-edit-outline"
-                            class="mt-3"
-                        >
-                            日付を変更（{{ dayLabel(pendingMove.targetDate) }}）
-                        </v-btn>
-                    </template>
-                    <v-card>
-                        <ArkCalendar v-model="pendingMove.targetDate" />
-                    </v-card>
-                </v-menu>
-            </v-card-text>
-            <v-card-actions>
-                <v-spacer />
-                <v-btn
-                    variant="text"
-                    :disabled="moveSubmitting"
-                    @click="cancelMove"
-                    >キャンセル</v-btn
-                >
-                <v-btn
-                    color="primary"
-                    variant="flat"
-                    :loading="moveSubmitting"
-                    @click="confirmMove"
-                >
-                    変更する
-                </v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
+    <ScheduleMoveConfirmDialog
+        :open="pendingMove !== null"
+        :title="MESSAGES.reservation.confirmMove"
+        :name="pendingMove?.reservation.customer_name ?? ''"
+        :subtitle="pendingMove?.reservation.service_name"
+        :before-label="pendingMove ? pendingBeforeLabel() : ''"
+        :after-label="pendingMove ? pendingAfterLabel() : ''"
+        :lane-change-label="pendingMove ? pendingLaneChangeLabel() : null"
+        :target-date="pendingMove?.targetDate ?? ''"
+        :submitting="moveSubmitting"
+        @update:target-date="(v) => { if (pendingMove) pendingMove.targetDate = v; }"
+        @cancel="cancelMove"
+        @confirm="confirmMove"
+    />
 
     <!-- 予定ブロックD&Dの確認（§40） -->
-    <v-dialog
-        :model-value="pendingBlockMove !== null"
-        max-width="420"
-        @update:model-value="
-            (v) => {
-                if (!v) cancelBlockMove();
-            }
-        "
-    >
-        <v-card v-if="pendingBlockMove">
-            <v-card-title class="text-subtitle-1 font-weight-bold"
-                >{{ MESSAGES.schedule.confirmBlockMove }}</v-card-title
-            >
-            <v-card-text>
-                <div class="mb-3">
-                    <div class="font-weight-medium">
-                        {{ pendingBlockMove.block.type_label }}
-                    </div>
-                    <div
-                        v-if="pendingBlockMove.block.title"
-                        class="text-body-2 text-medium-emphasis"
-                    >
-                        {{ pendingBlockMove.block.title }}
-                    </div>
-                </div>
-                <div class="ark-move-compare">
-                    <div>
-                        <div class="text-caption text-medium-emphasis">
-                            変更前
-                        </div>
-                        <div class="text-body-1">
-                            {{ pendingBlockBeforeLabel() }}
-                        </div>
-                    </div>
-                    <v-icon icon="mdi-arrow-right" class="mx-2" />
-                    <div>
-                        <div class="text-caption text-medium-emphasis">
-                            変更後
-                        </div>
-                        <div class="text-body-1 font-weight-bold text-primary">
-                            {{ pendingBlockAfterLabel() }}
-                        </div>
-                    </div>
-                </div>
-                <div
-                    v-if="pendingBlockLaneChangeLabel()"
-                    class="text-body-2 mt-3"
-                >
-                    <v-icon
-                        icon="mdi-account-switch-outline"
-                        size="16"
-                        class="mr-1"
-                    />
-                    {{ pendingBlockLaneChangeLabel() }}
-                </div>
-                <!-- 任意の日付へ変更（§6）。前日/今日/翌日ボタンへのドロップは既存どおり ±1日。 -->
-                <v-menu :close-on-content-click="false" location="bottom start">
-                    <template #activator="{ props: menuProps }">
-                        <v-btn
-                            v-bind="menuProps"
-                            variant="text"
-                            size="small"
-                            color="accent"
-                            prepend-icon="mdi-calendar-edit-outline"
-                            class="mt-3"
-                        >
-                            日付を変更（{{
-                                dayLabel(pendingBlockMove.targetDate)
-                            }}）
-                        </v-btn>
-                    </template>
-                    <v-card>
-                        <ArkCalendar v-model="pendingBlockMove.targetDate" />
-                    </v-card>
-                </v-menu>
-            </v-card-text>
-            <v-card-actions>
-                <v-spacer />
-                <v-btn
-                    variant="text"
-                    :disabled="blockMoveSubmitting"
-                    @click="cancelBlockMove"
-                    >キャンセル</v-btn
-                >
-                <v-btn
-                    color="primary"
-                    variant="flat"
-                    :loading="blockMoveSubmitting"
-                    @click="confirmBlockMove"
-                >
-                    変更する
-                </v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
+    <ScheduleMoveConfirmDialog
+        :open="pendingBlockMove !== null"
+        :title="MESSAGES.schedule.confirmBlockMove"
+        :name="pendingBlockMove?.block.type_label ?? ''"
+        :subtitle="pendingBlockMove?.block.title"
+        :before-label="pendingBlockMove ? pendingBlockBeforeLabel() : ''"
+        :after-label="pendingBlockMove ? pendingBlockAfterLabel() : ''"
+        :lane-change-label="pendingBlockMove ? pendingBlockLaneChangeLabel() : null"
+        :target-date="pendingBlockMove?.targetDate ?? ''"
+        :submitting="blockMoveSubmitting"
+        @update:target-date="(v) => { if (pendingBlockMove) pendingBlockMove.targetDate = v; }"
+        @cancel="cancelBlockMove"
+        @confirm="confirmBlockMove"
+    />
 
     <!-- D&D（予約・予定ブロック共通）がサーバー側で拒否された時のエラー通知。
          カードは既に元の位置へ戻っているので、ここでは理由だけ伝えればよい。 -->
@@ -4698,23 +3294,14 @@ function menuSegments(lane: ScheduleLane): {
     </v-snackbar>
 
     <!-- D&D中のゴーストカード（§16） -->
-    <div
+    <ScheduleDragGhost
         v-if="draggedReservation && drag"
-        class="drag-ghost"
-        :style="{ left: `${drag.pointerX}px`, top: `${drag.pointerY}px` }"
-        aria-hidden="true"
-    >
-        <div class="drag-ghost__name">
-            {{ draggedReservation.customer_name }}
-        </div>
-        <div class="drag-ghost__time">
-            {{ minuteToLabel(drag.baseStartMin + drag.offsetMinutes) }}–{{
-                minuteToLabel(
-                    drag.baseStartMin + drag.offsetMinutes + drag.durationMin,
-                )
-            }}
-        </div>
-    </div>
+        :name="draggedReservation.customer_name"
+        :x="drag.pointerX"
+        :y="drag.pointerY"
+        :start-min="drag.baseStartMin + drag.offsetMinutes"
+        :duration-min="drag.durationMin"
+    />
 
     <!-- オンライン予約通知（§34-37） -->
     <ScheduleNotifications
@@ -4723,1441 +3310,9 @@ function menuSegments(lane: ScheduleLane): {
     />
 </template>
 
-<style scoped>
-/* ── 顧客・予約詳細パネル（左スライド） ── */
-.board-layout {
-    display: flex;
-    align-items: flex-start;
-    /* 台帳カードの左端の枠線が左パネルに密着して見えなくなるため、必ず隙間を空ける。 */
-    gap: var(--ark-space-2);
-}
-
-.board-layout__main {
-    flex: 1 1 0;
-    min-width: 0;
-}
-
-/* パネル開閉レール。上のツールバー行の下から始まる、幅44px・ARKブルー。 */
-.panel-rail {
-    display: flex;
-    flex: 0 0 48px;
-    width: 48px;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--ark-space-2);
-    padding: var(--ark-space-3) 0;
-    position: sticky;
-    top: var(--ark-space-4);
-    align-self: stretch;
-    background: rgb(var(--v-theme-surface));
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-    border-radius: var(--ark-radius);
-}
-
-.panel-rail__btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    border: 0;
-    border-radius: var(--ark-radius);
-    background: none;
-    color: rgba(var(--v-theme-primary), 0.75);
-    cursor: pointer;
-}
-
-.panel-rail__btn:hover {
-    background: rgba(var(--v-theme-primary), 0.1);
-    color: rgb(var(--v-theme-primary));
-}
-
-.panel-rail__btn:focus-visible {
-    outline: 2px solid rgb(var(--v-theme-primary));
-    outline-offset: -2px;
-}
-
-/* 幅は Peak Manager の左パネル参考（1023px 以下でレスポンシブに 100%）。
-   顧客詳細のタブ切替（顧客／履歴／今後の予約）分だけ 312px から少し広げた。 */
-.board-layout__panel {
-    flex: 0 0 352px;
-    width: 352px;
-    min-width: 0;
-    align-self: flex-start;
-    /* 高さは「本日の集計」に合わせず、画面内で使える最下部まで伸ばす（script 側で 100dvh 基準の calc を設定）。
-       中身が少ない時は panel-shell 側が伸びて埋め、長い時はパネル内スクロールにする。
-       極端に低い画面でも操作できるよう最小高さを持たせる。 */
-    min-height: 420px;
-    /* 幅はどのパネル種別でも必ず同じにする（中身のnowrap要素等で広がらないようoverflow/min-widthで固定）。 */
-    height: calc(100vh - 120px);
-    display: flex;
-    /* 顧客検索バー（常時表示）＋ 下に切り替わるパネル本体、を縦に積む。 */
-    flex-direction: column;
-    /* 横方向の広がりは既存どおり防ぎつつ、検索結果ドロップダウンは下にはみ出して表示できるようにする。 */
-    overflow: hidden;
-}
-
-/* 検索バーの下の、切り替わるパネル本体（各PanelShell）が残り高さを埋めるようにする。 */
-.board-layout__panel > :deep(.panel-shell) {
-    flex: 1 1 auto;
-    min-height: 0;
-    height: auto;
-}
-
-.board-layout__scrim {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 2400;
-    background: rgb(18 25 60 / 32%);
-}
-
-/* 中間幅：Peak Manager の 1023px ブレークポイントまでは幅は固定のまま、台帳側を狭める。 */
-@media (max-width: 1279px) and (min-width: 1024px) {
-    .board-layout__panel {
-        flex-basis: 320px;
-        width: 320px;
-    }
-}
-
-/* iPad 縦・狭い画面（Peak Manager と同じ 1023px 以下）：パネルは幅100%のオーバーレイ（台帳を潰さない・§15） */
-@media (max-width: 1023px) {
-    .board-layout__panel {
-        position: fixed;
-        inset: 0 auto 0 0;
-        z-index: 2500;
-        flex: none;
-        width: 100%;
-        max-height: none;
-        top: 0;
-        box-shadow: 0 0 40px rgb(18 25 60 / 28%);
-    }
-
-    .board-layout__scrim {
-        display: block;
-    }
-
-    /* パネルが幅100%のオーバーレイになっても隠れないよう、レールは固定表示で最前面に。 */
-    .panel-rail {
-        position: fixed;
-        top: 50%;
-        left: 0;
-        transform: translateY(-50%);
-        z-index: 2600;
-        border-radius: 0 var(--ark-radius) var(--ark-radius) 0;
-        box-shadow: 0 4px 16px rgb(18 25 60 / 24%);
-    }
-}
-
-.schedule-toolbar {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--ark-space-5) var(--ark-space-6);
-    padding: var(--ark-space-2) var(--ark-space-4) !important;
-}
-
-/* v-container の既定パディング(24px)を打ち消して、画面の一番左（x=0）から表示する。 */
-.schedule-topbar,
-.board-layout {
-    margin-left: calc(-1 * var(--ark-space-5));
-}
-
-/* 元タイトル位置の行。カードに乗せず単独で置くため、ここだけ独自にモダンな見た目を付ける。 */
-.schedule-topbar {
-    /* ヘッダー直下の余白（v-containerの既定パディング24px）も詰める。 */
-    margin-top: calc(-1 * var(--ark-space-4));
-    background: rgb(var(--v-theme-surface));
-    border-radius: var(--ark-radius);
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
-    box-shadow: var(--ark-shadow-1);
-}
-
-.schedule-topbar .toolbar-staff {
-    flex: 0 1 360px;
-}
-
-.preview-service-name {
-    display: block;
-    white-space: normal;
-    line-height: 1.35;
-    font-size: 0.875rem;
-}
-
-.preview-service-selection {
-    display: block;
-    overflow: hidden;
-    max-width: 100%;
-    white-space: normal;
-    line-height: 1.25;
-    font-size: 0.8125rem;
-}
-
-.toolbar-period {
-    display: flex;
-    align-items: center;
-    flex: 0 0 auto;
-    gap: var(--ark-space-2);
-    padding-right: var(--ark-space-5);
-    border-right: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-}
-
-.toolbar-period :deep(.v-btn) {
-    height: 40px;
-    border-radius: 999px;
-}
-
-.toolbar-period :deep(.v-btn--icon) {
-    width: 40px;
-}
-
-.toolbar-field {
-    flex: 0 1 auto;
-}
-
-/* DateField内部(v-text-field)はスコープ属性が付かないため :deep() で当てる。 */
-:deep(.toolbar-date) {
-    width: 208px;
-    flex: 0 0 208px;
-}
-
-:deep(.toolbar-date input) {
-    min-width: 0;
-}
-
-.toolbar-staff {
-    flex: 1 1 230px;
-    min-width: 220px;
-}
-
-.toolbar-mode {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: var(--ark-space-2);
-}
-
-.toolbar-mode--right {
-    margin-left: auto;
-}
-
-.toolbar-label {
-    color: rgb(var(--v-theme-on-surface));
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    opacity: 0.7;
-    white-space: nowrap;
-}
-
-.toolbar-toggle :deep(.v-btn) {
-    min-width: 48px;
-    padding-inline: 12px;
-}
-
-.toolbar-today {
-    font-weight: 800;
-    font-size: 1rem;
-    padding-inline: var(--ark-space-5);
-}
-
-.toolbar-today :deep(.v-btn__content) {
-    color: #ffffff;
-}
-
-.toolbar-today--current {
-    box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.35);
-}
-
-.toolbar-daydrop--hover {
-    box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.6) inset;
-}
-
-.daily-summary {
-    padding: var(--ark-space-3) var(--ark-space-4);
-}
-
-.daily-summary__title {
-    margin-bottom: var(--ark-space-2);
-    font-size: 0.75rem;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    color: rgb(var(--v-theme-primary));
-}
-
-.daily-summary__row {
-    display: flex;
-    align-items: stretch;
-    flex-wrap: wrap;
-    gap: var(--ark-space-5);
-}
-
-.daily-summary__item {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    flex: 0 0 auto;
-}
-
-.daily-summary__value {
-    font-size: 1.0625rem;
-    font-weight: 700;
-    line-height: 1.1;
-    color: rgb(var(--v-theme-on-surface));
-    font-variant-numeric: tabular-nums;
-}
-
-.daily-summary__label {
-    font-size: 0.6875rem;
-    color: rgba(var(--v-theme-on-surface), 0.74);
-    white-space: nowrap;
-}
-
-.daily-summary__divider {
-    flex: 0 0 auto;
-    width: 1px;
-    align-self: stretch;
-    background: rgba(var(--v-theme-on-surface), 0.12);
-}
-
-.daily-summary__item--revenue .daily-summary__value {
-    color: rgb(var(--v-theme-primary));
-}
-
-.schedule-card {
-    max-width: 100%;
-    overflow: hidden;
-}
-
-.timeline-shell {
-    display: grid;
-    grid-template-columns: 140px minmax(0, 1fr);
-    max-width: 100%;
-    overflow: hidden;
-}
-
-.timeline-lane-column {
-    position: sticky;
-    left: 0;
-    z-index: 5;
-    border-right: 1px solid #d9dee5;
-    background: rgb(var(--v-theme-surface));
-}
-
-.timeline-corner,
-.timeline-lane-label {
-    display: flex;
-    align-items: center;
-}
-
-.timeline-corner {
-    height: 44px;
-    padding-inline: var(--ark-space-4);
-    border-bottom: 1px solid #d9dee5;
-    color: rgb(var(--v-theme-primary));
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-}
-
-.timeline-lane-label {
-    position: relative;
-    gap: var(--ark-space-2);
-    min-width: 0;
-    padding-inline: var(--ark-space-3);
-    color: rgb(var(--v-theme-on-surface));
-    font-size: 0.8125rem;
-    font-weight: 700;
-    border-bottom: 1px solid #d9dee5;
-}
-
-.timeline-lane-label span:last-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* スタッフ名（＋勤務予定外バッジ）。行が高い日も名前は1行で省略表示する。 */
-.timeline-lane-name {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    min-width: 0;
-}
-
-.timeline-lane-name__text {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* 休み設定なのに予約・予定が入っているスタッフ行（予約を隠さず、状態だけ知らせる）。 */
-.lane-off-duty {
-    padding: 0 6px;
-    border-radius: 999px;
-    background: rgb(var(--v-theme-warning), 0.14);
-    color: rgb(151 90 0);
-    font-size: 0.6875rem;
-    font-weight: 700;
-    line-height: 1.6;
-    white-space: nowrap;
-}
-
-.toolbar-off-staff {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 10px;
-    border-radius: 999px;
-    background: rgba(var(--v-theme-on-surface), 0.05);
-    color: rgba(var(--v-theme-on-surface), 0.7);
-    font-size: 0.75rem;
-    font-weight: 600;
-    white-space: nowrap;
-    cursor: default;
-}
-
-.timeline-lane-label--unassigned {
-    background: rgb(var(--v-theme-background));
-    font-weight: 500;
-}
-
-.timeline-lane-dot {
-    flex: 0 0 auto;
-    width: 4px;
-    height: 28px;
-    border: 0;
-    border-radius: 999px;
-    box-shadow: none;
-}
-
-/* スタッフ行はボタン化し、クリックで勤務枠へ（§19）。見た目は通常のラベル行と揃える。 */
-.timeline-lane-label--link {
-    width: 100%;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    cursor: pointer;
-    text-align: left;
-}
-
-.timeline-lane-label--link:hover {
-    background: rgba(var(--v-theme-primary), 0.06);
-}
-
-.timeline-lane-label--link:hover .timeline-lane-label__icon {
-    opacity: 1;
-}
-
-.timeline-lane-label__icon {
-    flex: 0 0 auto;
-    margin-left: auto;
-    opacity: 0;
-    color: rgb(var(--v-theme-primary));
-    transition: opacity 0.12s ease;
-}
-
-/* D&D で別レーンにホバー中（§17, §29） */
-.timeline-lane-label--drop {
-    background: rgba(var(--v-theme-primary), 0.14) !important;
-    outline: 1px dashed rgb(var(--v-theme-primary));
-}
-
-/* 見た目のヒントのみ。最終判定は必ずサーバー側（§18） */
-.timeline-lane-label--drop-valid {
-    background: rgba(var(--v-theme-accent), 0.16) !important;
-    outline: 2px solid rgb(var(--v-theme-accent));
-}
-
-.timeline-lane-label--drop-invalid {
-    background: rgba(var(--v-theme-error), 0.12) !important;
-    outline: 2px solid rgb(var(--v-theme-error));
-}
-
-/* 「両方」表示：横幅いっぱいの「スタッフ／ブース」見出し行（§25） */
-.timeline-section-header {
-    display: flex;
-    align-items: center;
-    gap: var(--ark-space-1);
-    height: 28px;
-    padding: 0 var(--ark-space-2);
-    background: rgba(var(--v-theme-primary), 0.08);
-    border-top: 1px solid rgba(var(--v-theme-primary), 0.25);
-    border-bottom: 1px solid rgba(var(--v-theme-primary), 0.25);
-    font-size: 0.6875rem;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    color: rgb(var(--v-theme-primary));
-}
-
-.timeline-track-section-header {
-    height: 28px;
-    background: rgba(var(--v-theme-primary), 0.05);
-    border-top: 1px solid rgba(var(--v-theme-primary), 0.25);
-    border-bottom: 1px solid rgba(var(--v-theme-primary), 0.25);
-}
-
-/* 空き枠クリックで新規予約（§17）。カード（z-index:2）の下に敷く透明レイヤー。 */
-.timeline-empty-click {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    cursor: pointer;
-}
-
-.board-layout--cross-date-move .timeline-empty-click {
-    cursor: crosshair;
-}
-
-.cross-date-ghost {
-    position: fixed;
-    z-index: 2600;
-    display: inline-flex;
-    align-items: center;
-    max-width: min(360px, calc(100vw - 32px));
-    gap: var(--ark-space-2);
-    padding: 6px 8px 6px 12px;
-    border: 1px solid rgba(var(--v-theme-primary), 0.35);
-    border-radius: 999px;
-    background: rgba(var(--v-theme-surface), 0.9);
-    color: rgb(var(--v-theme-on-surface));
-    font-size: 0.75rem;
-    font-weight: 700;
-    box-shadow: var(--ark-shadow-2);
-    pointer-events: none;
-    backdrop-filter: blur(4px);
-}
-
-.slot-pick-bar {
-    position: fixed;
-    left: 50%;
-    bottom: var(--ark-space-4);
-    z-index: 2600;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ark-space-2);
-    max-width: min(560px, calc(100vw - 32px));
-    padding: 6px 6px 6px 14px;
-    border-radius: 999px;
-    background: rgb(var(--v-theme-primary));
-    color: rgb(var(--v-theme-on-primary));
-    font-size: 0.8rem;
-    font-weight: 700;
-    box-shadow: var(--ark-shadow-2);
-    transform: translateX(-50%);
-}
-
-.slot-pick-bar--move {
-    background: rgb(var(--v-theme-warning));
-    color: rgb(var(--v-theme-on-warning));
-}
-
-.slot-pick-bar__label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.slot-pick-bar__release {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 2px;
-    padding: 4px 10px;
-    border: 0;
-    border-radius: 999px;
-    background: rgb(255 255 255 / 0.18);
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-}
-
-.slot-pick-bar__release:hover {
-    background: rgb(255 255 255 / 0.3);
-}
-
-.cross-date-ghost > span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.cross-date-ghost__close {
-    display: grid;
-    flex: 0 0 22px;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    background: rgba(var(--v-theme-on-surface), 0.08);
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
-    line-height: 1;
-    pointer-events: auto;
-    place-items: center;
-}
-
-.timeline-scroll {
-    min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    background: rgb(var(--v-theme-surface));
-}
-
-.timeline-scroll:focus-visible {
-    outline: 2px solid rgb(var(--v-theme-primary));
-    outline-offset: -2px;
-}
-
-.timeline-canvas {
-    position: relative;
-    min-width: 100%;
-}
-
-.timeline-axis {
-    position: relative;
-    height: 44px;
-    border-bottom: 1px solid #d9dee5;
-    background: rgb(var(--v-theme-background));
-}
-
-/* 1 時間ぶんの見出しを中央寄せで表示（＝時間セルを結合して中央揃え） */
-.timeline-hour {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-left: 1px solid #d9dee5;
-}
-
-.timeline-hour__label {
-    font-size: 0.8125rem;
-    font-weight: 700;
-    color: rgb(var(--v-theme-primary));
-    font-variant-numeric: tabular-nums;
-}
-
-.timeline-minor-tick {
-    position: absolute;
-    bottom: 0;
-    width: 1px;
-    height: 6px;
-    background: #c7cdd6;
-}
-
-.timeline-minor-tick--ten {
-    height: 3px;
-    background: #e1e5eb;
-}
-
-/* 予約できない時間帯の帯（軸のすぐ下） */
-.timeline-unbookable {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 44px;
-    height: 10px;
-    z-index: 4;
-    pointer-events: none;
-}
-
-.timeline-unbookable__seg {
-    position: absolute;
-    top: 0;
-    height: 10px;
-}
-
-.timeline-unbookable__seg.is-closed {
-    background-image: repeating-linear-gradient(
-        45deg,
-        rgba(var(--v-theme-secondary), 0.28),
-        rgba(var(--v-theme-secondary), 0.28) 4px,
-        transparent 4px,
-        transparent 8px
-    );
-}
-
-.timeline-unbookable__seg.is-full {
-    background: rgba(var(--v-theme-warning), 0.5);
-}
-
-.timeline-track {
-    position: relative;
-    overflow: hidden;
-    background: rgb(var(--v-theme-surface));
-    border-bottom: 1px solid #d9dee5;
-}
-
-/* ドラッグ中の元カードが別スタッフ／ブース行へ視覚的に追従できるよう、
-   ドラッグ元の行だけ一時的にクリップを外し、他行より前面に出す（時間移動と同じ「うっすら動く」体験）。 */
-.timeline-track--drag-origin {
-    z-index: 6;
-    overflow: visible;
-}
-
-.timeline-grid-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: #d9dee5;
-    opacity: 0.7;
-}
-
-.schedule-legend {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--ark-space-4);
-    margin-bottom: var(--ark-space-2);
-    padding-inline: var(--ark-space-1);
-}
-
-.schedule-legend__item {
-    display: inline-flex;
-    font-size: 0.78rem;
-    color: rgb(var(--v-theme-on-surface));
-    align-items: center;
-    gap: 6px;
-}
-
-.schedule-legend__swatch {
-    width: 22px;
-    height: 12px;
-    border-radius: 3px;
-    border: 1px solid #d9dee5;
-}
-
-.schedule-legend__swatch.is-menu-available {
-    background: rgba(var(--v-theme-success), 0.16);
-    border-top: 3px solid rgb(var(--v-theme-success));
-    box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.25);
-}
-
-.schedule-legend__swatch.is-menu-blocked {
-    background: repeating-linear-gradient(
-        -45deg,
-        rgb(var(--v-theme-on-surface), 0.08),
-        rgb(var(--v-theme-on-surface), 0.08) 3px,
-        rgb(var(--v-theme-on-surface), 0.16) 3px,
-        rgb(var(--v-theme-on-surface), 0.16) 6px
-    );
-}
-
-.schedule-legend__swatch.is-closed {
-    background-image: repeating-linear-gradient(
-        45deg,
-        rgba(var(--v-theme-secondary), 0.28),
-        rgba(var(--v-theme-secondary), 0.28) 4px,
-        transparent 4px,
-        transparent 8px
-    );
-}
-
-.schedule-legend__swatch.is-full {
-    background: rgba(var(--v-theme-warning), 0.5);
-}
-
-.non-working {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    background: repeating-linear-gradient(
-        -45deg,
-        rgb(var(--v-theme-on-surface), 0.035),
-        rgb(var(--v-theme-on-surface), 0.035) 6px,
-        rgb(var(--v-theme-on-surface), 0.075) 6px,
-        rgb(var(--v-theme-on-surface), 0.075) 12px
-    );
-}
-
-/* 選択メニューがその時間から開始できるセル（§11）。緑で一目で分かるようにする。 */
-.menu-available {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    z-index: 1;
-    background: rgba(var(--v-theme-success), 0.14);
-    border-top: 3px solid rgb(var(--v-theme-success));
-    box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.18);
-    box-sizing: border-box;
-    pointer-events: none;
-}
-
-/* 選択メニューがその時間から開始できないセル（§11）。斜線でしっかり分かるようにする（淡め）。 */
-.menu-blocked {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    z-index: 1;
-    background: repeating-linear-gradient(
-        -45deg,
-        rgb(var(--v-theme-on-surface), 0.04),
-        rgb(var(--v-theme-on-surface), 0.04) 6px,
-        rgb(var(--v-theme-on-surface), 0.1) 6px,
-        rgb(var(--v-theme-on-surface), 0.1) 12px
-    );
-    pointer-events: none;
-}
-
-/* 終了後インターバル：予約カードの右端に、施術と区別できる斜線の区間として描く（Task 11-29）。 */
-.reservation-buffer {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    pointer-events: none;
-    border-left: 1px dashed rgba(15, 23, 42, 0.25);
-    background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.85) 0 3px, rgba(148, 163, 184, 0.35) 3px 6px);
-}
-
-.reservation-card {
-    position: absolute;
-    z-index: 2;
-    top: 0;
-    bottom: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    overflow: hidden;
-    gap: 2px;
-    box-sizing: border-box;
-    min-width: 0;
-    padding: 3px var(--ark-space-2);
-    border: 1px solid #d9dee5;
-    border-left-width: 5px;
-    border-radius: var(--ark-radius);
-    background: rgb(var(--v-theme-surface));
-    color: rgb(var(--v-theme-on-surface));
-    cursor: pointer;
-    text-align: left;
-    line-height: 1.25;
-    box-shadow: var(--ark-shadow-1);
-}
-
-.reservation-card:hover {
-    filter: brightness(0.97);
-    box-shadow: var(--ark-shadow-2);
-}
-
-.reservation-card:disabled {
-    cursor: default;
-}
-
-.reservation-card:disabled:hover {
-    filter: none;
-    box-shadow: none;
-}
-
-.reservation-card:focus-visible {
-    outline: 2px solid rgb(var(--v-theme-primary));
-    outline-offset: -2px;
-}
-
-.reservation-card--draggable {
-    cursor: grab;
-    touch-action: none;
-}
-
-.reservation-card--dragging {
-    cursor: grabbing;
-    z-index: 20;
-    box-shadow: 0 10px 28px rgb(18 25 60 / 26%);
-    opacity: 0.45;
-}
-
-.reservation-card--pending {
-    z-index: 19;
-    outline: 2px dashed rgb(var(--v-theme-primary));
-    outline-offset: -2px;
-}
-
-/* パネルで選択中の予約 */
-.reservation-card--selected {
-    outline: 2px solid rgb(var(--v-theme-primary));
-    outline-offset: -2px;
-}
-
-/* 来店履歴から遷移した直後の一時ハイライト（数秒で戻る・§9） */
-.reservation-card--flash {
-    z-index: 18;
-    animation: rdp-flash 3.2s ease-out;
-}
-
-@keyframes rdp-flash {
-    0%,
-    45% {
-        outline: 3px solid rgb(var(--v-theme-warning));
-        outline-offset: -1px;
-        box-shadow: 0 0 0 6px rgba(var(--v-theme-warning), 0.3);
-    }
-
-    100% {
-        outline: 3px solid rgba(var(--v-theme-warning), 0);
-        outline-offset: -1px;
-        box-shadow: 0 0 0 6px rgba(var(--v-theme-warning), 0);
-    }
-}
-
-.reservation-dragtip {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    z-index: 2;
-    padding: 1px 6px;
-    border-radius: 999px;
-    background: rgb(var(--v-theme-primary));
-    color: #fff;
-    font-size: 0.6875rem;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-}
-
-.ark-move-compare {
-    display: flex;
-    align-items: center;
-    padding: var(--ark-space-3);
-    background: rgba(var(--v-theme-on-surface), 0.04);
-    border-radius: var(--ark-radius);
-}
-
-.reservation-topline {
-    display: flex;
-    width: 100%;
-    min-width: 0;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ark-space-1);
-}
-
-.reservation-nameline {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    min-width: 0;
-    overflow: hidden;
-}
-
-.reservation-status-icon {
-    flex: 0 0 auto;
-}
-
-.reservation-timeline {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    width: 100%;
-    min-width: 0;
-}
-
-.reservation-time {
-    flex: 0 0 auto;
-    font-size: 0.6875rem;
-    font-weight: 800;
-    letter-spacing: 0.01em;
-}
-
-.reservation-customer,
-.reservation-service {
-    display: block;
-    overflow: hidden;
-    width: 100%;
-    min-width: 0;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.reservation-customer {
-    font-size: 0.75rem;
-    font-weight: 700;
-}
-
-.reservation-badges {
-    display: flex;
-    width: 100%;
-    min-width: 0;
-    align-items: center;
-    gap: 4px;
-}
-
-.reservation-badge {
-    flex: 0 0 auto;
-    padding: 0 4px;
-    border-radius: var(--ark-radius-sm);
-    font-size: 0.625rem;
-    font-weight: 800;
-    line-height: 1.6;
-    letter-spacing: 0.02em;
-}
-
-.reservation-badge--new {
-    background: rgb(var(--v-theme-error));
-    color: #fff;
-}
-
-.reservation-badge--nomination {
-    display: inline-flex;
-    align-items: center;
-    gap: 1px;
-    background: rgba(var(--v-theme-primary), 0.14);
-    color: rgb(var(--v-theme-primary));
-}
-
-.reservation-service-line {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    width: 100%;
-    min-width: 0;
-}
-
-.reservation-gender {
-    flex: 0 0 auto;
-    padding: 0 4px;
-    border-radius: var(--ark-radius-sm);
-    font-size: 0.625rem;
-    font-weight: 800;
-    line-height: 1.6;
-}
-
-.reservation-gender--male {
-    color: rgb(var(--v-theme-info));
-    background: rgba(var(--v-theme-info), 0.12);
-}
-
-.reservation-gender--female {
-    color: rgb(var(--v-theme-error));
-    background: rgba(var(--v-theme-error), 0.1);
-}
-
-.reservation-service {
-    color: rgb(var(--v-theme-on-surface));
-    font-size: 0.6875rem;
-    opacity: 0.72;
-}
-
-.reservation-service-line .reservation-service {
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 0;
-}
-
-/* 予定ブロック（休憩・他業務等）。予約カードとは明確に色・レイアウトを分ける（§27-46） */
-.schedule-block {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    z-index: 2;
-    /* 短い予定でも「種類」と「時間」の両方が読めるよう2段組みにする
-       （1行だと幅が足りず開始時刻しか見えなかった）。 */
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 1px;
-    padding: 0 6px;
-    border: 1px dashed rgba(var(--v-theme-on-surface), 0.28);
-    border-radius: var(--ark-radius-sm);
-    background: rgba(var(--v-theme-on-surface), 0.06);
-    color: rgba(var(--v-theme-on-surface), 0.8);
-    font-size: 0.6875rem;
-    font-weight: 700;
-    overflow: hidden;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: transform 0.05s linear;
-}
-
-.schedule-block--warning {
-    background: rgba(var(--v-theme-warning), 0.1);
-    border-color: rgba(var(--v-theme-warning), 0.4);
-    color: rgb(var(--v-theme-warning));
-}
-
-.schedule-block--info {
-    background: rgba(var(--v-theme-info), 0.1);
-    border-color: rgba(var(--v-theme-info), 0.4);
-    color: rgb(var(--v-theme-info));
-}
-
-.schedule-block--success {
-    background: rgba(var(--v-theme-success), 0.1);
-    border-color: rgba(var(--v-theme-success), 0.4);
-    color: rgb(var(--v-theme-success));
-}
-
-.schedule-block--accent {
-    background: rgba(var(--v-theme-accent), 0.1);
-    border-color: rgba(var(--v-theme-accent), 0.4);
-    color: rgb(var(--v-theme-accent));
-}
-
-.schedule-block--secondary {
-    background: rgba(var(--v-theme-secondary), 0.1);
-    border-color: rgba(var(--v-theme-secondary), 0.4);
-    color: rgb(var(--v-theme-secondary));
-}
-
-.schedule-block__head {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    max-width: 100%;
-    min-width: 0;
-}
-
-.schedule-block__time {
-    flex: 0 0 auto;
-    font-size: 0.625rem;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    opacity: 0.9;
-}
-
-.schedule-block__label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.schedule-block--draggable {
-    cursor: grab;
-}
-
-.schedule-block--dragging {
-    z-index: 5;
-    opacity: 0.45;
-    box-shadow: 0 4px 14px rgb(18 25 60 / 22%);
-}
-
-.schedule-block--pending {
-    outline: 2px solid rgb(var(--v-theme-primary));
-    outline-offset: 1px;
-}
-
-/* D&D中のゴーストカード（§16） */
-.drag-ghost {
-    position: fixed;
-    z-index: 2700;
-    transform: translate(14px, -50%);
-    padding: var(--ark-space-2) var(--ark-space-3);
-    background: rgb(var(--v-theme-primary));
-    color: #fff;
-    border-radius: var(--ark-radius);
-    box-shadow: 0 10px 28px rgb(18 25 60 / 32%);
-    pointer-events: none;
-    white-space: nowrap;
-}
-
-.drag-ghost__name {
-    font-size: 0.8125rem;
-    font-weight: 800;
-}
-
-.drag-ghost__time {
-    font-size: 0.75rem;
-    font-variant-numeric: tabular-nums;
-    opacity: 0.9;
-}
-
-/* カーソル位置ガイド。線ではなく「今いる枠」を縦帯で塗る（どの枠かひと目で分かる）。
-   現在時刻線（navy の細い実線）とは形が違うので取り違えない。 */
-.hover-time-line {
-    position: absolute;
-    z-index: 3;
-    top: 0;
-    bottom: 0;
-    box-sizing: border-box;
-    /* 塗りの濃さは幅に応じて hoverFill で切り替える（細い時はほぼ塗りつぶし）。 */
-    pointer-events: none;
-}
-
-/* 行の中に出すので、時刻は行の上端に小さく添える。 */
-.hover-time-line__label {
-    position: absolute;
-    top: 1px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 0 5px;
-    border-radius: 999px;
-    background: rgb(var(--v-theme-accent));
-    color: #ffffff;
-    font-size: 0.5625rem;
-    font-weight: 800;
-    line-height: 1.6;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-}
-
-.current-time-line {
-    position: absolute;
-    z-index: 4;
-    top: 44px;
-    bottom: 0;
-    width: 2px;
-    background: rgb(var(--v-theme-primary));
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
-    pointer-events: none;
-}
-
-/* 週表示（§2-3）：スタッフ×日付のグリッド。各セルは営業時間を100%とした帯グラフ。 */
-.week-board-wrap {
-    overflow-x: auto;
-}
-
-.week-board {
-    display: grid;
-    min-width: 780px;
-    border: 1px solid #d9dee5;
-    border-radius: var(--ark-radius);
-    overflow: hidden;
-    background: rgb(var(--v-theme-surface));
-}
-
-.week-board__corner,
-.week-board__daycol,
-.week-board__lanename {
-    background: rgb(var(--v-theme-background));
-    border-bottom: 1px solid #d9dee5;
-    border-right: 1px solid #d9dee5;
-}
-
-.week-board__corner {
-    position: sticky;
-    left: 0;
-    z-index: 2;
-}
-
-.week-board__daycol {
-    padding: var(--ark-space-2) var(--ark-space-1);
-    text-align: center;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: rgb(var(--v-theme-on-surface));
-}
-
-.week-board__daycol--today {
-    background: rgb(var(--v-theme-primary));
-    color: #fff;
-}
-
-.week-board__lanename {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    gap: var(--ark-space-2);
-    padding: var(--ark-space-2) var(--ark-space-3);
-    font-size: 0.75rem;
-    font-weight: 700;
-    min-width: 0;
-}
-
-.week-board__cell {
-    position: relative;
-    height: 64px;
-    border-bottom: 1px solid #d9dee5;
-    border-right: 1px solid #d9dee5;
-    background: rgb(var(--v-theme-surface));
-    cursor: pointer;
-    overflow: hidden;
-}
-
-.week-board__cell:hover {
-    background: rgba(var(--v-theme-primary), 0.04);
-}
-
-.week-board__cell--today {
-    background: rgba(var(--v-theme-primary), 0.03);
-}
-
-.week-board__nonworking {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    z-index: 0;
-    background-image: repeating-linear-gradient(
-        45deg,
-        rgba(var(--v-theme-secondary), 0.16),
-        rgba(var(--v-theme-secondary), 0.16) 3px,
-        transparent 3px,
-        transparent 6px
-    );
-    pointer-events: none;
-}
-
-.week-board__bar {
-    position: absolute;
-    z-index: 1;
-    top: 4px;
-    height: 16px;
-    padding: 0 3px;
-    border: 0;
-    border-left: 3px solid transparent;
-    border-radius: 3px;
-    font-size: 0.5625rem;
-    font-weight: 700;
-    line-height: 16px;
-    text-align: left;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    cursor: pointer;
-}
-
-.week-board__bar:nth-of-type(n + 2) {
-    top: 22px;
-}
-
-.week-board__bar--selected {
-    outline: 2px solid rgb(var(--v-theme-primary));
-    outline-offset: -1px;
-}
-
-.week-board__bar-name {
-    pointer-events: none;
-}
-
-.week-board__block {
-    position: absolute;
-    z-index: 1;
-    top: 40px;
-    height: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: 1px dashed rgba(var(--v-theme-on-surface), 0.4);
-    border-radius: 3px;
-    background: rgba(var(--v-theme-on-surface), 0.06);
-    color: rgba(var(--v-theme-on-surface), 0.78);
-    cursor: pointer;
-}
-
-.week-board__count {
-    position: absolute;
-    right: 3px;
-    bottom: 2px;
-    z-index: 1;
-    font-size: 0.5625rem;
-    color: rgba(var(--v-theme-on-surface), 0.68);
-    pointer-events: none;
-}
-
-@media (max-width: 800px) {
-    .schedule-toolbar {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        align-items: stretch;
-    }
-
-    .toolbar-period,
-    .toolbar-field,
-    .toolbar-mode {
-        width: 100%;
-    }
-
-    .toolbar-period :deep(.v-btn) {
-        flex: 1 1 50%;
-    }
-
-    .toolbar-date,
-    .toolbar-staff {
-        min-width: 0;
-    }
-
-    .toolbar-mode {
-        flex-direction: column;
-        align-items: stretch;
-        gap: var(--ark-space-1);
-    }
-
-    .toolbar-toggle {
-        display: flex;
-        width: 100%;
-    }
-
-    .toolbar-toggle :deep(.v-btn) {
-        flex: 1 1 50%;
-    }
-
-    .timeline-shell {
-        grid-template-columns: 96px minmax(0, 1fr);
-    }
-
-    .timeline-corner,
-    .timeline-lane-label {
-        padding-inline: var(--ark-space-2);
-    }
-}
-
-/* ───────────── スマホ（1023px 以下）で台帳を実際に使えるようにする ───────────── */
-@media (max-width: 1023px) {
-    /* ツールバーの各行が縦に伸びすぎるのを抑える。 */
-    .schedule-toolbar {
-        gap: var(--ark-space-2) var(--ark-space-3) !important;
-        padding: var(--ark-space-2) !important;
-    }
-
-    .schedule-topbar,
-    .board-layout {
-        margin-left: 0;
-    }
-
-    .toolbar-period {
-        padding-right: 0;
-        border-right: 0;
-    }
-
-    .toolbar-label {
-        display: none;
-    }
-
-    /* レールは画面中央に浮かせると台帳の操作を塞ぐため、下端の横並びバーにする。 */
-    .panel-rail {
-        top: auto;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        width: 100%;
-        height: 52px;
-        transform: none;
-        flex: none;
-        flex-direction: row;
-        justify-content: center;
-        gap: var(--ark-space-5);
-        padding: 0;
-        border-radius: 0;
-        border-left: 0;
-        border-right: 0;
-        box-shadow: 0 -4px 16px rgb(18 25 60 / 18%);
-    }
-
-    /* 下端のレールに隠れないよう、本文の下に逃げ場を作る。 */
-    .board-layout__main {
-        padding-bottom: 60px;
-    }
-
-    /* 予約カードは狭い画面だと文字が潰れるので、最小限の情報を優先する。 */
-    .reservation-service-line {
-        display: none;
-    }
-
-    /* 集計は横スクロールさせず折り返す。 */
-    .daily-summary__row {
-        flex-wrap: wrap;
-        gap: var(--ark-space-3) var(--ark-space-4);
-    }
-
-    .daily-summary__divider {
-        display: none;
-    }
-}
-</style>
+<style scoped src="@/components/admin/schedule/styles/panel.css"></style>
+<style scoped src="@/components/admin/schedule/styles/toolbar.css"></style>
+<style scoped src="@/components/admin/schedule/styles/timeline.css"></style>
+<style scoped src="@/components/admin/schedule/styles/reservation.css"></style>
+<style scoped src="@/components/admin/schedule/styles/block-dnd.css"></style>
+<style scoped src="@/components/admin/schedule/styles/week-mobile.css"></style>

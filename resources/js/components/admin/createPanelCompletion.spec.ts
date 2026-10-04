@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NewReservationPanel from './NewReservationPanel.vue';
 import ScheduleBlockCreatePanel from './ScheduleBlockCreatePanel.vue';
 import { createEmptyBlockDraft, createEmptyReservationDraft } from '@/composables/reservationDraft';
@@ -33,7 +33,14 @@ vi.mock('@inertiajs/vue3', async () => {
     };
 });
 
+// 作成日を過去日と判定されないよう、現在日時を固定する（Date のみ）。
+beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-02T09:00:00+09:00'));
+});
+
 afterEach(() => {
+    vi.useRealTimers();
     posted.calls.length = 0;
     vi.unstubAllGlobals();
     document.body.innerHTML = '';

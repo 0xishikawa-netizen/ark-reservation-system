@@ -174,6 +174,23 @@ final class ReservationService
                 // 予約が確保している施術分数（延長を含む）と終了後バッファを保ったまま時間を動かす。
                 // 以前は標準所要時間だけで ends_at を作り直していたため、変更するとバッファが消えていた。
                 $bookedMinutes = max(1, (int) $reservation->starts_at->diffInMinutes($reservation->ends_at) - (int) $reservation->buffer_min);
+
+                // メニュー変更：施術時間は新しいメニューの標準時間になる。延長済み・事前決済/回数券/月額の予約は
+                // 料金・台帳の整合が崩れるため変更させない（いったんキャンセルして取り直す）。
+                $serviceChanged = $in->serviceId !== null && $in->serviceId !== (int) $reservation->service_id;
+                if ($serviceChanged) {
+                    if (! $in->adminContext) {
+                        $this->throwValidation('service_id', __('messages.reservation.service_change_not_allowed'));
+                    }
+                    if ($reservation->segments()->exists()) {
+                        $this->throwValidation('service_id', __('messages.reservation.service_change_extended'));
+                    }
+                    if (! in_array($reservation->payment_method, [PaymentMethod::Onsite, PaymentMethod::Unpaid, null], true)) {
+                        $this->throwValidation('service_id', __('messages.reservation.service_change_prepaid'));
+                    }
+                    $service = Service::query()->findOrFail($in->serviceId);
+                    $bookedMinutes = (int) $service->duration_min;
+                }
                 $endsAt = $in->startsAt->addMinutes($bookedMinutes + (int) $reservation->buffer_min);
                 $boothId = $this->resolveBooth($service, $in->boothId, $in->startsAt, $endsAt, (int) $reservation->id);
 
@@ -200,6 +217,7 @@ final class ReservationService
                 ));
 
                 $changes = [
+                    'service_id' => $service->id,
                     'starts_at' => $in->startsAt,
                     'ends_at' => $endsAt,
                     'staff_id' => $in->staffId,

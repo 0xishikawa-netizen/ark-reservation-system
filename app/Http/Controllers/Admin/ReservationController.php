@@ -333,7 +333,10 @@ final class ReservationController extends Controller
         $genderProvided = array_key_exists('staff_gender_preference', $data);
         $genderPreference = $genderProvided ? ($data['staff_gender_preference'] ?: null) : $reservation->staff_gender_preference;
         $genderChanged = $genderProvided && $genderPreference !== $reservation->staff_gender_preference;
-        $scheduleChanged = ! $startsAt->equalTo(CarbonImmutable::instance($reservation->starts_at))
+        $serviceId = isset($data['service_id']) ? (int) $data['service_id'] : null;
+        $serviceChanged = $serviceId !== null && $serviceId !== (int) $reservation->service_id;
+        $scheduleChanged = $serviceChanged
+            || ! $startsAt->equalTo(CarbonImmutable::instance($reservation->starts_at))
             || $staffId !== ($reservation->staff_id === null ? null : (int) $reservation->staff_id)
             || $boothId !== ($reservation->booth_id === null ? null : (int) $reservation->booth_id);
         $user = $this->userFor($request);
@@ -352,6 +355,7 @@ final class ReservationController extends Controller
                 isStaffRequested: $nominationProvided ? $isStaffRequested : null,
                 updateStaffGenderPreference: $genderProvided,
                 staffGenderPreference: $genderPreference,
+                serviceId: $serviceChanged ? $serviceId : null,
             ));
         } else {
             if ($notesChanged) {

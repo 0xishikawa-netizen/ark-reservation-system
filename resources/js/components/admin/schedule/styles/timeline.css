@@ -1,0 +1,481 @@
+.schedule-card {
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.timeline-shell {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.timeline-lane-column {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    border-right: 1px solid #d9dee5;
+    background: rgb(var(--v-theme-surface));
+}
+
+.timeline-corner,
+.timeline-lane-label {
+    display: flex;
+    align-items: center;
+}
+
+.timeline-corner {
+    height: 44px;
+    padding-inline: var(--ark-space-4);
+    border-bottom: 1px solid #d9dee5;
+    color: rgb(var(--v-theme-primary));
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.timeline-lane-label {
+    position: relative;
+    gap: var(--ark-space-2);
+    min-width: 0;
+    padding-inline: var(--ark-space-3);
+    color: rgb(var(--v-theme-on-surface));
+    font-size: 0.8125rem;
+    font-weight: 700;
+    border-bottom: 1px solid #d9dee5;
+}
+
+.timeline-lane-label span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* スタッフ名（＋勤務予定外バッジ）。行が高い日も名前は1行で省略表示する。 */
+.timeline-lane-name {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+}
+
+.timeline-lane-name__text {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 休み設定なのに予約・予定が入っているスタッフ行（予約を隠さず、状態だけ知らせる）。 */
+.lane-off-duty {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgb(var(--v-theme-warning), 0.14);
+    color: rgb(151 90 0);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.6;
+    white-space: nowrap;
+}
+
+.toolbar-off-staff {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(var(--v-theme-on-surface), 0.05);
+    color: rgba(var(--v-theme-on-surface), 0.7);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: default;
+}
+
+.timeline-lane-label--unassigned {
+    background: rgb(var(--v-theme-background));
+    font-weight: 500;
+}
+
+.timeline-lane-dot {
+    flex: 0 0 auto;
+    width: 4px;
+    height: 28px;
+    border: 0;
+    border-radius: 999px;
+    box-shadow: none;
+}
+
+/* スタッフ行はボタン化し、クリックで勤務枠へ（§19）。見た目は通常のラベル行と揃える。 */
+.timeline-lane-label--link {
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+}
+
+.timeline-lane-label--link:hover {
+    background: rgba(var(--v-theme-primary), 0.06);
+}
+
+.timeline-lane-label--link:hover .timeline-lane-label__icon {
+    opacity: 1;
+}
+
+.timeline-lane-label__icon {
+    flex: 0 0 auto;
+    margin-left: auto;
+    opacity: 0;
+    color: rgb(var(--v-theme-primary));
+    transition: opacity 0.12s ease;
+}
+
+/* D&D で別レーンにホバー中（§17, §29） */
+.timeline-lane-label--drop {
+    background: rgba(var(--v-theme-primary), 0.14) !important;
+    outline: 1px dashed rgb(var(--v-theme-primary));
+}
+
+/* 見た目のヒントのみ。最終判定は必ずサーバー側（§18） */
+.timeline-lane-label--drop-valid {
+    background: rgba(var(--v-theme-accent), 0.16) !important;
+    outline: 2px solid rgb(var(--v-theme-accent));
+}
+
+.timeline-lane-label--drop-invalid {
+    background: rgba(var(--v-theme-error), 0.12) !important;
+    outline: 2px solid rgb(var(--v-theme-error));
+}
+
+/* 「両方」表示：横幅いっぱいの「スタッフ／ブース」見出し行（§25） */
+.timeline-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--ark-space-1);
+    height: 28px;
+    padding: 0 var(--ark-space-2);
+    background: rgba(var(--v-theme-primary), 0.08);
+    border-top: 1px solid rgba(var(--v-theme-primary), 0.25);
+    border-bottom: 1px solid rgba(var(--v-theme-primary), 0.25);
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: rgb(var(--v-theme-primary));
+}
+
+.timeline-track-section-header {
+    height: 28px;
+    background: rgba(var(--v-theme-primary), 0.05);
+    border-top: 1px solid rgba(var(--v-theme-primary), 0.25);
+    border-bottom: 1px solid rgba(var(--v-theme-primary), 0.25);
+}
+
+/* 空き枠クリックで新規予約（§17）。カード（z-index:2）の下に敷く透明レイヤー。 */
+.timeline-empty-click {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    cursor: pointer;
+}
+
+.board-layout--cross-date-move .timeline-empty-click {
+    cursor: crosshair;
+}
+
+.cross-date-ghost {
+    position: fixed;
+    z-index: 2600;
+    display: inline-flex;
+    align-items: center;
+    max-width: min(360px, calc(100vw - 32px));
+    gap: var(--ark-space-2);
+    padding: 6px 8px 6px 12px;
+    border: 1px solid rgba(var(--v-theme-primary), 0.35);
+    border-radius: 999px;
+    background: rgba(var(--v-theme-surface), 0.9);
+    color: rgb(var(--v-theme-on-surface));
+    font-size: 0.75rem;
+    font-weight: 700;
+    box-shadow: var(--ark-shadow-2);
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+}
+
+.slot-pick-bar {
+    position: fixed;
+    left: 50%;
+    bottom: var(--ark-space-4);
+    z-index: 2600;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ark-space-2);
+    max-width: min(560px, calc(100vw - 32px));
+    padding: 6px 6px 6px 14px;
+    border-radius: 999px;
+    background: rgb(var(--v-theme-primary));
+    color: rgb(var(--v-theme-on-primary));
+    font-size: 0.8rem;
+    font-weight: 700;
+    box-shadow: var(--ark-shadow-2);
+    transform: translateX(-50%);
+}
+
+.slot-pick-bar--move {
+    background: rgb(var(--v-theme-warning));
+    color: rgb(var(--v-theme-on-warning));
+}
+
+.slot-pick-bar__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.slot-pick-bar__release {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 10px;
+    border: 0;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.18);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.slot-pick-bar__release:hover {
+    background: rgb(255 255 255 / 0.3);
+}
+
+.cross-date-ghost > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cross-date-ghost__close {
+    display: grid;
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(var(--v-theme-on-surface), 0.08);
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    line-height: 1;
+    pointer-events: auto;
+    place-items: center;
+}
+
+.timeline-scroll {
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: rgb(var(--v-theme-surface));
+}
+
+.timeline-scroll:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: -2px;
+}
+
+.timeline-canvas {
+    position: relative;
+    min-width: 100%;
+}
+
+.timeline-axis {
+    position: relative;
+    height: 44px;
+    border-bottom: 1px solid #d9dee5;
+    background: rgb(var(--v-theme-background));
+}
+
+/* 1 時間ぶんの見出しを中央寄せで表示（＝時間セルを結合して中央揃え） */
+.timeline-hour {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid #d9dee5;
+}
+
+.timeline-hour__label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: rgb(var(--v-theme-primary));
+    font-variant-numeric: tabular-nums;
+}
+
+.timeline-minor-tick {
+    position: absolute;
+    bottom: 0;
+    width: 1px;
+    height: 6px;
+    background: #c7cdd6;
+}
+
+.timeline-minor-tick--ten {
+    height: 3px;
+    background: #e1e5eb;
+}
+
+/* 予約できない時間帯の帯（軸のすぐ下） */
+.timeline-unbookable {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 44px;
+    height: 10px;
+    z-index: 4;
+    pointer-events: none;
+}
+
+.timeline-unbookable__seg {
+    position: absolute;
+    top: 0;
+    height: 10px;
+}
+
+.timeline-unbookable__seg.is-closed {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(var(--v-theme-secondary), 0.28),
+        rgba(var(--v-theme-secondary), 0.28) 4px,
+        transparent 4px,
+        transparent 8px
+    );
+}
+
+.timeline-unbookable__seg.is-full {
+    background: rgba(var(--v-theme-warning), 0.5);
+}
+
+.timeline-track {
+    position: relative;
+    overflow: hidden;
+    background: rgb(var(--v-theme-surface));
+    border-bottom: 1px solid #d9dee5;
+}
+
+/* ドラッグ中の元カードが別スタッフ／ブース行へ視覚的に追従できるよう、
+   ドラッグ元の行だけ一時的にクリップを外し、他行より前面に出す（時間移動と同じ「うっすら動く」体験）。 */
+.timeline-track--drag-origin {
+    z-index: 6;
+    overflow: visible;
+}
+
+.timeline-grid-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: #d9dee5;
+    opacity: 0.7;
+}
+
+.schedule-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ark-space-4);
+    margin-bottom: var(--ark-space-2);
+    padding-inline: var(--ark-space-1);
+}
+
+.schedule-legend__item {
+    display: inline-flex;
+    font-size: 0.78rem;
+    color: rgb(var(--v-theme-on-surface));
+    align-items: center;
+    gap: 6px;
+}
+
+.schedule-legend__swatch {
+    width: 22px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid #d9dee5;
+}
+
+.schedule-legend__swatch.is-menu-available {
+    background: rgba(var(--v-theme-success), 0.16);
+    border-top: 3px solid rgb(var(--v-theme-success));
+    box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.25);
+}
+
+.schedule-legend__swatch.is-menu-blocked {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgb(var(--v-theme-on-surface), 0.08),
+        rgb(var(--v-theme-on-surface), 0.08) 3px,
+        rgb(var(--v-theme-on-surface), 0.16) 3px,
+        rgb(var(--v-theme-on-surface), 0.16) 6px
+    );
+}
+
+.schedule-legend__swatch.is-closed {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(var(--v-theme-secondary), 0.28),
+        rgba(var(--v-theme-secondary), 0.28) 4px,
+        transparent 4px,
+        transparent 8px
+    );
+}
+
+.schedule-legend__swatch.is-full {
+    background: rgba(var(--v-theme-warning), 0.5);
+}
+
+.non-working {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        -45deg,
+        rgb(var(--v-theme-on-surface), 0.035),
+        rgb(var(--v-theme-on-surface), 0.035) 6px,
+        rgb(var(--v-theme-on-surface), 0.075) 6px,
+        rgb(var(--v-theme-on-surface), 0.075) 12px
+    );
+}
+
+/* 選択メニューがその時間から開始できるセル（§11）。緑で一目で分かるようにする。 */
+.menu-available {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 1;
+    background: rgba(var(--v-theme-success), 0.14);
+    border-top: 3px solid rgb(var(--v-theme-success));
+    box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.18);
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+/* 選択メニューがその時間から開始できないセル（§11）。斜線でしっかり分かるようにする（淡め）。 */
+.menu-blocked {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 1;
+    background: repeating-linear-gradient(
+        -45deg,
+        rgb(var(--v-theme-on-surface), 0.04),
+        rgb(var(--v-theme-on-surface), 0.04) 6px,
+        rgb(var(--v-theme-on-surface), 0.1) 6px,
+        rgb(var(--v-theme-on-surface), 0.1) 12px
+    );
+    pointer-events: none;
+}

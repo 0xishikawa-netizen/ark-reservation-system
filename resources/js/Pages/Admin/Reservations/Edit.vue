@@ -100,6 +100,7 @@ const props = defineProps<{
     payment_summary: PaymentSummary;
 }>();
 
+const selectedServiceId = ref<number>(props.reservation.service_id);
 const selectedStaffId = ref<number | null>(props.reservation.staff_id);
 const selectedBoothId = ref<number | null>(props.reservation.booth_id);
 const date = ref(props.reservation.starts_at.slice(0, 10));
@@ -125,7 +126,7 @@ const adjustmentForm = useForm({
 });
 
 const service = computed<ServiceOption | null>(() =>
-    props.services.find((item) => item.id === props.reservation.service_id) ?? null,
+    props.services.find((item) => item.id === selectedServiceId.value) ?? null,
 );
 
 const eligibleStaff = computed(() => {
@@ -156,6 +157,7 @@ const boothItems = computed(() => {
 });
 
 const form = useForm({
+    service_id: props.reservation.service_id,
     starts_at: props.reservation.starts_at as string | null,
     staff_id: props.reservation.staff_id,
     booth_id: props.reservation.booth_id,
@@ -189,7 +191,19 @@ const desiredStartsAt = ref<string | null>(props.reservation.starts_at);
  */
 let availabilityTimer: ReturnType<typeof setTimeout> | null = null;
 
-watch([selectedStaffId, selectedBoothId, date], () => {
+watch(selectedServiceId, () => {
+    // メニューを変えたら、そのメニューで担当できないスタッフ・使えないブースは外す。
+    form.service_id = selectedServiceId.value;
+    if (selectedStaffId.value !== null && !(service.value?.staff_ids.includes(selectedStaffId.value) ?? false)) {
+        selectedStaffId.value = null;
+    }
+    const allowedBooths = service.value?.booth_ids ?? [];
+    if (selectedBoothId.value !== null && allowedBooths.length > 0 && !allowedBooths.includes(selectedBoothId.value)) {
+        selectedBoothId.value = null;
+    }
+});
+
+watch([selectedServiceId, selectedStaffId, selectedBoothId, date], () => {
     if (availabilityTimer !== null) {
         clearTimeout(availabilityTimer);
     }
@@ -231,7 +245,7 @@ async function loadAvailability(): Promise<void> {
     availabilityError.value = '';
 
     const params = new URLSearchParams({
-        service_id: String(props.reservation.service_id),
+        service_id: String(selectedServiceId.value),
         date: date.value,
     });
 
@@ -295,6 +309,21 @@ const selectedSlotValue = computed<string | null>({
         }
     },
 });
+
+/** 指名と性別希望は同時に選べない。片方を選ぶともう片方は外す。 */
+function toggleNomination(): void {
+    form.is_staff_requested = !form.is_staff_requested;
+    if (form.is_staff_requested) {
+        form.staff_gender_preference = null;
+    }
+}
+
+function togglePreference(value: string): void {
+    form.staff_gender_preference = form.staff_gender_preference === value ? null : value;
+    if (form.staff_gender_preference !== null) {
+        form.is_staff_requested = false;
+    }
+}
 
 function submit(): void {
     justSaved.value = false;
@@ -438,11 +467,29 @@ function submitAdjustment(): void {
         <v-form @submit.prevent="submit">
             <div class="field-grid">
                 <v-select
+                    v-model="selectedServiceId"
+                    :items="services"
+                    item-title="name"
+                    item-value="id"
+                    :label="MESSAGES.reservation.serviceLabel"
+                    class="field-grid__full"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details="auto"
+                    :disabled="!isConfirmed"
+                    :error-messages="form.errors.service_id"
+                    :hint="MESSAGES.reservation.serviceChangeHint"
+                    persistent-hint
+                    data-testid="edit-service"
+                />
+                <v-select
                     v-model="selectedStaffId"
                     :items="eligibleStaff"
                     item-title="display_name"
                     item-value="user_id"
                     label="担当スタッフ"
+                    variant="outlined"
+                    density="comfortable"
                     clearable
                     hide-details="auto"
                     :disabled="!isConfirmed"
@@ -450,26 +497,6 @@ function submitAdjustment(): void {
                     :hint="selectedStaffIneligible ? MESSAGES.reservation.staffNotEligibleHint : undefined"
                     persistent-hint
                 />
-                <div class="edit-prefs" role="group" aria-label="担当の希望">
-                    <v-btn
-                        size="small"
-                        :variant="form.is_staff_requested ? 'flat' : 'outlined'"
-                        :color="form.is_staff_requested ? 'primary' : undefined"
-                        :disabled="!isConfirmed || selectedStaffId === null"
-                        data-testid="edit-nomination"
-                        @click="form.is_staff_requested = !form.is_staff_requested"
-                    >指名</v-btn>
-                    <v-btn
-                        v-for="g in [{ value: 'male', label: '男性希望' }, { value: 'female', label: '女性希望' }]"
-                        :key="g.value"
-                        size="small"
-                        :variant="form.staff_gender_preference === g.value ? 'flat' : 'outlined'"
-                        :color="form.staff_gender_preference === g.value ? 'primary' : undefined"
-                        :disabled="!isConfirmed"
-                        :data-testid="`edit-pref-${g.value}`"
-                        @click="form.staff_gender_preference = form.staff_gender_preference === g.value ? null : g.value"
-                    >{{ g.label }}</v-btn>
-                </div>
                 <v-select
                     v-model="selectedBoothId"
                     :items="boothItems"
@@ -483,6 +510,26 @@ function submitAdjustment(): void {
                     :disabled="!isConfirmed"
                     :error-messages="form.errors.booth_id"
                 />
+                <div class="edit-prefs field-grid__full" role="group" aria-label="担当の希望">
+                    <v-btn
+                        size="small"
+                        :variant="form.is_staff_requested ? 'flat' : 'outlined'"
+                        :color="form.is_staff_requested ? 'error' : undefined"
+                        :disabled="!isConfirmed || selectedStaffId === null"
+                        data-testid="edit-nomination"
+                        @click="toggleNomination"
+                    >指名</v-btn>
+                    <v-btn
+                        v-for="g in [{ value: 'male', label: '男性希望' }, { value: 'female', label: '女性希望' }]"
+                        :key="g.value"
+                        size="small"
+                        :variant="form.staff_gender_preference === g.value ? 'flat' : 'outlined'"
+                        :color="form.staff_gender_preference === g.value ? (g.value === 'male' ? 'info' : '#c2185b') : undefined"
+                        :disabled="!isConfirmed"
+                        :data-testid="`edit-pref-${g.value}`"
+                        @click="togglePreference(g.value)"
+                    >{{ g.label }}</v-btn>
+                </div>
             </div>
 
             <div class="d-flex ga-3 align-start flex-wrap mt-4">
@@ -801,7 +848,12 @@ function submitAdjustment(): void {
 .field-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    align-items: start;
     gap: 1rem;
+}
+
+.field-grid__full {
+    grid-column: 1 / -1;
 }
 
 @media (max-width: 720px) {

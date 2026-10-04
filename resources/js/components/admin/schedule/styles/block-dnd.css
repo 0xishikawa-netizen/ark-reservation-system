@@ -1,0 +1,132 @@
+/* 予定ブロック（休憩・他業務等）。予約カードとは明確に色・レイアウトを分ける（§27-46） */
+.schedule-block {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+    /* 短い予定でも「種類」と「時間」の両方が読めるよう2段組みにする
+       （1行だと幅が足りず開始時刻しか見えなかった）。 */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1px;
+    padding: 0 6px;
+    border: 1px dashed rgba(var(--v-theme-on-surface), 0.28);
+    border-radius: var(--ark-radius-sm);
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    color: rgba(var(--v-theme-on-surface), 0.8);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.05s linear;
+}
+
+.schedule-block--warning {
+    background: rgba(var(--v-theme-warning), 0.1);
+    border-color: rgba(var(--v-theme-warning), 0.4);
+    color: rgb(var(--v-theme-warning));
+}
+
+.schedule-block--info {
+    background: rgba(var(--v-theme-info), 0.1);
+    border-color: rgba(var(--v-theme-info), 0.4);
+    color: rgb(var(--v-theme-info));
+}
+
+.schedule-block--success {
+    background: rgba(var(--v-theme-success), 0.1);
+    border-color: rgba(var(--v-theme-success), 0.4);
+    color: rgb(var(--v-theme-success));
+}
+
+.schedule-block--accent {
+    background: rgba(var(--v-theme-accent), 0.1);
+    border-color: rgba(var(--v-theme-accent), 0.4);
+    color: rgb(var(--v-theme-accent));
+}
+
+.schedule-block--secondary {
+    background: rgba(var(--v-theme-secondary), 0.1);
+    border-color: rgba(var(--v-theme-secondary), 0.4);
+    color: rgb(var(--v-theme-secondary));
+}
+
+.schedule-block__head {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.schedule-block__time {
+    flex: 0 0 auto;
+    font-size: 0.625rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.9;
+}
+
+.schedule-block__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.schedule-block--draggable {
+    cursor: grab;
+}
+
+.schedule-block--dragging {
+    z-index: 5;
+    opacity: 0.45;
+    box-shadow: 0 4px 14px rgb(18 25 60 / 22%);
+}
+
+.schedule-block--pending {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: 1px;
+}
+
+/* D&D中のゴーストカード（§16） */
+/* カーソル位置ガイド。線ではなく「今いる枠」を縦帯で塗る（どの枠かひと目で分かる）。
+   現在時刻線（navy の細い実線）とは形が違うので取り違えない。 */
+.hover-time-line {
+    position: absolute;
+    z-index: 3;
+    top: 0;
+    bottom: 0;
+    box-sizing: border-box;
+    /* 塗りの濃さは幅に応じて hoverFill で切り替える（細い時はほぼ塗りつぶし）。 */
+    pointer-events: none;
+}
+
+/* 行の中に出すので、時刻は行の上端に小さく添える。 */
+.hover-time-line__label {
+    position: absolute;
+    top: 1px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgb(var(--v-theme-accent));
+    color: #ffffff;
+    font-size: 0.5625rem;
+    font-weight: 800;
+    line-height: 1.6;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.current-time-line {
+    position: absolute;
+    z-index: 4;
+    top: 44px;
+    bottom: 0;
+    width: 2px;
+    background: rgb(var(--v-theme-primary));
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
+    pointer-events: none;
+}

@@ -697,9 +697,9 @@ function submitConfirm(): void {
                                 v-if="data.reservation.is_staff_requested"
                                 class="rdp__nomination"
                             >
-                                <v-icon icon="mdi-star" size="10" />指名
+                                指名
                             </span>
-                            <span v-if="data.reservation.staff_gender_preference" class="rdp__nomination">
+                            <span v-if="data.reservation.staff_gender_preference" class="rdp__nomination" :class="`rdp__nomination--${data.reservation.staff_gender_preference}`">
                                 {{ data.reservation.staff_gender_preference === "male" ? "男性希望" : "女性希望" }}
                             </span>
                         </dd>
@@ -1131,8 +1131,8 @@ function submitConfirm(): void {
 }
 
 .rdp__gender--female {
-    color: rgb(var(--v-theme-error));
-    background: rgba(var(--v-theme-error), 0.1);
+    color: #c2185b;
+    background: rgba(194, 24, 91, 0.12);
 }
 
 .rdp__topline {
@@ -1455,9 +1455,19 @@ function submitConfirm(): void {
     border-radius: var(--ark-radius-sm);
     font-size: 0.625rem;
     font-weight: 800;
-    color: rgb(var(--v-theme-primary));
-    background: rgba(var(--v-theme-primary), 0.12);
+    color: #fff;
+    background: rgb(var(--v-theme-error));
     vertical-align: middle;
+}
+
+.rdp__nomination--male {
+    color: rgb(var(--v-theme-info));
+    background: rgba(var(--v-theme-info), 0.12);
+}
+
+.rdp__nomination--female {
+    color: #c2185b;
+    background: rgba(194, 24, 91, 0.12);
 }
 
 .rdp__muted {

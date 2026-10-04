@@ -60,6 +60,8 @@ export const MESSAGES = {
         staffNotEligibleSuffix: '（このメニューを担当できません）',
         staffNotEligibleHint: 'このスタッフは今のメニューを担当できません（スタッフ設定の「実施できる施術」・「保有資格」を確認するか、担当を変更してください）。',
         boothNotAllowedSuffix: '（このメニューでは使えません）',
+        serviceLabel: 'メニュー',
+        serviceChangeHint: 'メニューを変えると施術時間も変わります。延長済み・カード決済・回数券・月額利用の予約は変更できません。',
         boothMappedLabel: 'ブース（このメニューで使えるブース）',
         unavailableUnknown: 'この時間は予約できません。別の時間を選んでください。',
         notConfirmedNotEditable: 'この予約は確定状態ではないため、変更操作はできません。',

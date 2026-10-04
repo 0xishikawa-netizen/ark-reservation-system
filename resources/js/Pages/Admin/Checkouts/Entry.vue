@@ -368,7 +368,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                 <!-- 担当・指名（来店全体） -->
                 <div class="assign">
                     <v-select v-model="primaryStaffId" :items="staffItems" :label="labels.primaryStaff" :readonly="!visitEditable" hide-details clearable prepend-inner-icon="mdi-account-outline" @update:model-value="touch" />
-                    <v-select v-model="nominated" :items="staffItems" :label="labels.nominations" :readonly="!visitEditable" multiple chips closable-chips hide-details prepend-inner-icon="mdi-star-outline" data-testid="nominations" @update:model-value="touch" />
+                    <v-select v-model="nominated" :items="staffItems" :label="labels.nominations" :readonly="!visitEditable" multiple chips closable-chips hide-details prepend-inner-icon="mdi-account-star-outline" data-testid="nominations" @update:model-value="touch" />
                     <p class="assign__hint">{{ labels.nominationsHint }}</p>
                 </div>
 
