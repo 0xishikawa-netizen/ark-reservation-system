@@ -39,8 +39,9 @@
 | 11-30 | ブッキングボード・予約パネルUX | DONE（2026-09-27）`docs/BOOKING_RESOURCES.md` |
 | 11-31 | 月次レポート（タブ再編・日計明細・予約分析・概要） | DONE（2026-09-27）`docs/REPORTS_UI.md` |
 | 11-32 | 業務シナリオ結合確認・全回帰 | DONE（2026-09-27）`docs/PHASE11_OPERATIONAL_VERIFICATION.md` |
+| 11-33 | 品質向上：全体レビュー指摘（H-1〜H-5・Medium/Low）の修正と回帰テスト強化 | DONE（2026-10-07）`docs/review/2026-10-07-full-code-review.md` §5 |
 
-**Current Task: なし。** 11-27〜11-32 は 2026-09-27 に DONE（一括承認分を1 Taskずつ実施）。 2026-09-27、実物帳票サンプル比較（`docs/handoff/2026-09-26-sample-comparison.md`）に基づき、ユーザーが11-19〜11-26と11-13再開を一括承認した。
+**Current Task: なし。** 11-33 は 2026-10-07 に DONE。 11-27〜11-32 は 2026-09-27 に DONE（一括承認分を1 Taskずつ実施）。 2026-09-27、実物帳票サンプル比較（`docs/handoff/2026-09-26-sample-comparison.md`）に基づき、ユーザーが11-19〜11-26と11-13再開を一括承認した。
 ただし実装は常に1 Taskずつ（完了→次TaskをCURRENTへ）進める。
 
 実装できるのは `docs/PLAN.md` の Current Task と本表の **CURRENT / APPROVED** が一致する1 Taskだけ。
@@ -606,3 +607,38 @@ Task 11-1では生成せず、必要データ、テンプレート管理、シ�
 - **11-30 ボード・パネルUX**：スタッフ/ブース/両方で行高を揃え、画面を埋めるための伸長をしない。予約パネルを操作順に整理し、確認サマリーを置く。空き枠検索で選んだメニュー等を保持する。「予定」ボタンを予約と区別する。メニュー名を見切れさせない。
 - **11-31 月次レポート**：対象月・売上基準・基準日を共有するタブ（概要／月計表／日計明細／日報／顧客統計／予約分析／スタッフ稼働／時間帯別／スタッフ売上／コース・物販）。日計明細は手入力させずFactから自動表示する。既存URLは維持する。
 - **11-32 結合確認**：実業務シナリオをブラウザで通し、全回帰する。
+
+### Task 11-33 — 品質向上（2026-10-07 ユーザー承認・DONE 2026-10-07）
+
+目的：`docs/review/2026-10-07-full-code-review.md` の指摘を起点に、金銭・予約・回数券・月額・会計の不整合を実運用で起こさない品質へ引き上げる。**必要最小限の変更**で直し、修正ごとに「修正前は失敗し、修正後は成功する」回帰テストを付ける。既存テストの削除・無効化、無関係なリファクタリング・整形、課金仕様の変更、既存データを壊す migration は禁止。未コミットの予約台帳日次集計・マスタ画面UIの変更（作業ツリー上）を失わないこと。
+
+#### 仕様判断（Claude Code が既存コード・テスト・設計書から確定。実装はこれに従う）
+
+- **H-1 月額の解約予定**：`MembershipReservationService::reserve` は、`canceling` の会員について「予約開始の JST 営業日（`BusinessTime::businessDate($reservation->starts_at)`）> `current_period_end`」なら拒否する。期末日当日の予約は可（従来の「期末までは利用可」の inclusive 解釈を維持）。加えて従来どおり「今日（JST）> 期末」も拒否。日付比較は文字列 `Y-m-d` 同士で行い、`now()`/`today()` の UTC 日付を使わない。既存テスト `MembershipRedTeamRegressionTest::test_f07_*` は予約日を明示して偶然に依存しないよう直す（アサーションは弱めない）。
+- **M-1（予約は予約時点の期の回数を使う）**：現仕様として許容。次期の GRANT は請求成功時に作られるため、予約時点で存在しない。変更しない。
+- **H-2 会計取消と回数券**：`CheckoutService::void` は同一トランザクション内で、その会計の回数券明細から付与された回数券（dedupe `grant:checkout-line:{line}:{n}`）を特定し行ロックする。①いずれかの回数券に押さえ中（HOLD）または消化済み（CONSUME）の利用があれば取消を拒否（ValidationException、`lang/ja/messages.php` に文言追加。先に予約の支払方法変更・キャンセルや手動調整を促す）。②未使用なら利用可能残数をすべて `REVOKE`（dedupe `checkout-void:{checkout}:{wallet}`、理由＝会計取消理由）し、残数 0 の状態へ（既存の status 遷移規則に従う）。行の削除はしない。台帳・監査を残す。施術日基準の売上契約（`revenue_recognition_contracts`）がその回数券に紐づいていれば既存の状態遷移で無効化する（存在しなければ何もしない）。
+- **H-3 ゲストのキャンセル返金**：`ReservationService::cancel` で、操作者が null かつ顧客コンテキストの場合、返金の操作者を予約の顧客ユーザー（`reservation->customer->user`）とし、会員のマイページキャンセルと同じ返金経路を通す。返金の失敗・曖昧応答は従来どおり `needs_attention`。
+- **H-4 Stripe 外部返金との整合**：返金の上限は「Stripe 上の返金累計」と「ARK の返金記録」の安全側で決める。(a) `PaymentService::refund` は TX1 の前に Stripe から PaymentIntent を取得して `refunded_amount` を同期する（取得できなければ返金しない＝安全側）。(b) TX1 の上限検査は `max(payments.refunded_amount, 成功済み payment_refunds 合計) + 保留中 payment_refunds 合計 + 今回 ≦ 決済額`。(c) `completeRefund` は `refunded_amount` を減らさない（`max(既存値, 成功済み合計)`）、状態もその値で決める。(d) キャンセル規定の返金額計算も同期後の値を使う。外部返金分の `payment_refunds` 行は作らない（`created_by` 必須のため。設計書に明記）。
+- **H-5 バックアップ**：DB（必須）と `storage/app`（過去データ取込の原本コピー等）を日次バックアップし、世代管理・失敗検知・ログ・復元手順・**復元検証**を用意する。依存追加は可（理由を `docs/OPERATIONS.md` に明記）。`OPERATIONS.md` 既存記載（spatie/laravel-backup、7 日＋4 週）を第一候補とし、Laravel 13 非対応などで不可なら mysqldump ベースの最小 artisan コマンドにする。復元検証コマンド（最新バックアップを検証用 DB に戻し主要テーブルの件数を比較）を用意し、開発環境で backup → 別 DB へ restore → 確認まで実施。本番の保存先・認証情報は未設定のため「未検証」と明記。システム状態画面の「最終バックアップ」が実データを表示すること。
+- **M-2（FEFO が予約日を見ない）**：現仕様として許容（`preserve_hold` により押さえた分は期限後も有効で、期限の近い回数券を先に使う方が顧客に有利）。変更しない。
+- **M-3 予定ブロックと予約の同時作成**：`ReservationService` の create / reschedule / extend と `ScheduleBlockService` の create / update で、トランザクション内で対象スタッフ行・ブース行を `FOR UPDATE` で固定してから、ブロック重複（予約側）／予約重複（ブロック側）を判定する。
+- **M-4 未来予約の無断キャンセル**：`markNoShow` は開始時刻前を拒否する（`messages.reservation.*` に文言追加）。既存テストで未来日時の予約を no-show にしているものは、予約の開始を過去に設定するよう fixture を直す（アサーションは削らない）。
+- **M-5 日次集計の客単価**：客単価は月次概要と同じ定義（来店に紐づく確定会計の税込合計 ÷ 完了来店数）にする。既存の Reporting サービスに同じ値があれば再利用し、新しい定義を作らない。施術等／物販は Task 11-20 で決済日基準に揃っているため現状維持。
+- **M-6 有効/無効スイッチ**：`@update:model-value` で切替、処理中は disabled、連打で二重送信しない（Products / BusinessMasters の全スイッチ）。BusinessMasters の編集ダイアログは全項目のエラーを表示する。
+- **L-1**：キャンセルの顧客コンテキスト推定は、操作者が `admin.access` を持たない場合だけにする。
+- **L-2**：延長で追加するメニューが無効なら拒否。
+- **L-3**：来店完了・無断キャンセルの Outbox 記録は外部連携の実仕様確定まで見送り（Deferred）。
+- **L-4**：既存の直書き文言の全面移行は見送り（Deferred）。本 Task で新規・変更する文言は `lang/ja/messages.php` / `messages.ts` に置く（`ScheduleDailySummary.vue` の表示文言を含む）。
+- **L-5**：`Schedule/Index.vue` の `(el: any)` を型付けする。
+- **L-6**：巨大ファイル分割は見送り（Deferred）。
+- **L-7**：`ScheduleQuery` 日次集計の戻り値を配列 shape で型付けし、分析分類名は来店がある時だけ取得する。`online` の定義（`source ≠ ADMIN`）は新着通知と同じ既存定義なので維持。
+- **L-8**：ゲストの予約変更で、担当必須でないメニューは担当の自動選択を行わず現在の担当（または null）で再予約する。
+- **L-9**：信頼済み端末 365 日は `SESSION_POLICY.md` の方針として許容し、`OPERATIONS.md` に共用端末の運用注意を追記。
+
+#### 受け入れ条件
+
+- [x] 上記の修正それぞれに、修正前なら失敗する回帰テスト（時刻固定・日付明示で偶然に依存しない）。
+- [x] 業務シナリオテスト（`tests/Feature/Scenario/` 6 クラス）：①ゲスト予約→決済→確定→来店→会計→日次売上、②カード決済予約→キャンセル→返金→Webhook→整合、③会計での回数券購入→付与→予約→消化／予約キャンセル→復元、④会計→回数券付与→会計取消→回数券取消・売上から除外、⑤月額→解約予定→期末前・期末当日は可・期末後は拒否、⑥外部返金→Webhook→同期→ARK から再返金→上限で拒否（二重返金なし）。Stripe は既存の Fake Gateway を使う。
+- [x] 並行・冪等（`tests/Feature/Concurrency/`。既存で網羅済みのケースはレビュー報告に列挙）：同一枠の二重予約（一意制約）、キャンセル・返金・会計確定・会計取消・Webhook の多重実行、最後の 1 回の回数券の取り合い、楽観ロック競合を、既存テストで未カバーのものだけ追加。
+- [x] `./vendor/bin/sail artisan test` 全件成功（2026-10-07：1242 件・174,122 assertions）、`./vendor/bin/sail npm run build` 成功・型エラー 0、`migrate:status` に pending なし。
+- [x] `docs/specs/`、`docs/review/2026-10-07-full-code-review.md`、`docs/OPERATIONS.md` を最終実装に同期。

@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Tests\Feature\Admin;
 
 use App\Models\User;
+use App\Support\System\SystemStatusReport;
+use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -71,5 +74,54 @@ final class SystemStatusTest extends TestCase
 
         $this->assertStringNotContainsString('sk_test', $content);
         $this->assertStringNotContainsString('sk_live', $content);
+    }
+
+    public function test_backup_status_is_unhealthy_when_no_backup_exists(): void
+    {
+        Storage::fake('backups');
+
+        $status = app(SystemStatusReport::class)->generate()['last_backup'];
+
+        $this->assertTrue($status['measured']);
+        $this->assertFalse($status['healthy']);
+        $this->assertNull($status['newest_at']);
+        $this->assertNull($status['size_bytes']);
+    }
+
+    public function test_backup_status_reports_a_fresh_backup(): void
+    {
+        Storage::fake('backups');
+        CarbonImmutable::setTestNow('2026-10-07 03:00:00');
+        $path = config('backup.backup.name').'/2026-10-07-02-00-00.zip';
+        Storage::disk('backups')->put($path, 'fresh-backup');
+
+        try {
+            $status = app(SystemStatusReport::class)->generate()['last_backup'];
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
+
+        $this->assertTrue($status['measured']);
+        $this->assertTrue($status['healthy']);
+        $this->assertSame(strlen('fresh-backup'), $status['size_bytes']);
+        $this->assertNotNull($status['newest_at']);
+    }
+
+    public function test_backup_status_reports_a_stale_backup(): void
+    {
+        Storage::fake('backups');
+        CarbonImmutable::setTestNow('2026-10-07 03:00:00');
+        $path = config('backup.backup.name').'/2026-10-05-00-00-00.zip';
+        Storage::disk('backups')->put($path, 'stale-backup');
+
+        try {
+            $status = app(SystemStatusReport::class)->generate()['last_backup'];
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
+
+        $this->assertTrue($status['measured']);
+        $this->assertFalse($status['healthy']);
+        $this->assertGreaterThan(24, $status['age_hours']);
     }
 }

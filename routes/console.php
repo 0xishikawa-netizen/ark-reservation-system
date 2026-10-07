@@ -55,3 +55,8 @@ Schedule::command('reservations:reconcile-providers')
     ->cron((string) config('reservation_integration.reconcile.cron', '0 5 * * *'))
     ->withoutOverlapping();
 Schedule::command('reservations:prune-sync-logs')->dailyAt('02:50')->withoutOverlapping();
+
+// DB と storage/app のバックアップ、世代整理、健全性監視。
+Schedule::command('backup:clean')->dailyAt('01:00')->withoutOverlapping();
+Schedule::command('backup:run')->dailyAt('01:30')->withoutOverlapping();
+Schedule::command('backup:monitor')->dailyAt('07:00')->withoutOverlapping();

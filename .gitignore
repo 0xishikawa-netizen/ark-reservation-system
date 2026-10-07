@@ -28,3 +28,6 @@ docker-compose.override.yml
 
 # ローカル検証で生成した帳票出力（Phase 11 検証証跡。リポジトリには含めない）
 /outputs/
+
+# バックアップの保存先（DBダンプ・個人情報を含むため絶対にコミットしない。Task 11-33）
+/storage/backups/

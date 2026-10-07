@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 return [
 
     /*
@@ -44,6 +46,13 @@ return [
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
             'throw' => false,
+            'report' => false,
+        ],
+
+        'backups' => [
+            'driver' => env('BACKUP_DISK_DRIVER') ?: 'local',
+            'root' => env('BACKUP_DISK_ROOT') ?: storage_path('backups'),
+            'throw' => true,
             'report' => false,
         ],
 

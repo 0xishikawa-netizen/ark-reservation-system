@@ -13,6 +13,8 @@
 | [PHASE0_REPORT.md](PHASE0_REPORT.md) | Phase 0（環境確認・scaffold）の実測結果と判断 |
 | [REPORTS_UI.md](REPORTS_UI.md) | Reports・ブッキングボード・設定メニューの表示ルール（null表示・共通Filter/DatePicker/Table・スタッフ表示仕様） |
 | [handoff/2026-09-26-cloud-handoff.md](handoff/2026-09-26-cloud-handoff.md) | Claude Cloud への引継ぎ（現在の状態・未解決事項・最初に比較すべき帳票） |
+| [specs/README.md](specs/README.md) | 基本設計書・詳細設計書（2026-10-07 時点の実装を体系化） |
+| [review/2026-10-07-full-code-review.md](review/2026-10-07-full-code-review.md) | 全体コードレビュー報告（指摘事項・文書と実装の食い違い） |
 
 ## 進め方
 

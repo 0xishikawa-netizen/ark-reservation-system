@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import { statusColor } from '@/design/tokens';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -26,6 +27,15 @@ interface UnmeasuredStatus {
     note: string;
 }
 
+interface LastBackupStatus {
+    measured: boolean;
+    newest_at: string | null;
+    size_bytes: number | null;
+    age_hours: number | null;
+    healthy: boolean;
+    note: string;
+}
+
 interface SystemStatusProps {
     stripe_mode: StripeMode;
     reservation_authority: string;
@@ -34,7 +44,7 @@ interface SystemStatusProps {
     stale_pending_reservations: number;
     db_size: DbSizeStatus;
     reconcile: UnmeasuredStatus;
-    last_backup: UnmeasuredStatus;
+    last_backup: LastBackupStatus;
     real_stripe_test_mode_qa: 'incomplete';
     membership_production_readiness: 'not_ready';
 }
@@ -71,6 +81,12 @@ const qaLabel = computed<string>(() =>
 const membershipReadinessLabel = computed<string>(() =>
     props.membership_production_readiness === 'not_ready' ? '不可' : '可',
 );
+
+const backupSize = (bytes: number): string => {
+    const megabytes = bytes / 1024 / 1024;
+
+    return `${megabytes.toLocaleString('ja-JP', { maximumFractionDigits: 1 })} MB`;
+};
 </script>
 
 <template>
@@ -196,9 +212,17 @@ const membershipReadinessLabel = computed<string>(() =>
         <v-col cols="12" md="6">
             <SectionCard title="最終バックアップ" variant="outlined" height="100%">
                 <template #append>
-                    <StatusChip status="canceled" label="未計測" />
+                    <StatusChip
+                        :status="!last_backup.measured ? 'canceled' : last_backup.healthy ? 'active' : 'failed'"
+                        :label="!last_backup.measured ? MESSAGES.system.backupUnmeasured : last_backup.healthy ? MESSAGES.system.backupOk : MESSAGES.system.backupWarning"
+                    />
                 </template>
-                {{ last_backup.note }}
+                <div>{{ last_backup.note }}</div>
+                <div v-if="last_backup.newest_at" class="text-body-2 text-medium-emphasis mt-2">
+                    {{ MESSAGES.system.backupNewestAt }}: {{ last_backup.newest_at }}<br>
+                    {{ MESSAGES.system.backupSize }}: {{ backupSize(last_backup.size_bytes ?? 0) }} ／
+                    {{ MESSAGES.system.backupAge }}: {{ last_backup.age_hours ?? 0 }} {{ MESSAGES.system.backupHours }}
+                </div>
             </SectionCard>
         </v-col>
     </v-row>

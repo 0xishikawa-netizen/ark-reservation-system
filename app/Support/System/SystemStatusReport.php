@@ -6,8 +6,11 @@ namespace App\Support\System;
 
 use App\Enums\Reservation\ReservationStatus;
 use App\Support\Jobs\FailedJobsReader;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Spatie\Backup\BackupDestination\BackupDestination;
+use Throwable;
 
 final class SystemStatusReport
 {
@@ -26,7 +29,7 @@ final class SystemStatusReport
      *     stale_pending_reservations: int,
      *     db_size: array{latest_mb: int|null, captured_on: string|null, alert_mb: int, over_threshold: bool},
      *     reconcile: array{measured: false, note: string},
-     *     last_backup: array{measured: false, note: string},
+     *     last_backup: array{measured: bool, newest_at: string|null, size_bytes: int|null, age_hours: float|null, healthy: bool, note: string},
      *     real_stripe_test_mode_qa: string,
      *     membership_production_readiness: string
      * }
@@ -62,13 +65,56 @@ final class SystemStatusReport
                 'measured' => false,
                 'note' => '日次バッチで実行。結果は失敗ジョブ / ログを参照。',
             ],
-            'last_backup' => [
-                'measured' => false,
-                'note' => 'バックアップ痕跡の記録は未実装。',
-            ],
+            'last_backup' => $this->lastBackup(),
             'real_stripe_test_mode_qa' => self::REAL_STRIPE_TEST_MODE_QA,
             'membership_production_readiness' => self::MEMBERSHIP_PRODUCTION_READINESS,
         ];
+    }
+
+    /** @return array{measured: bool, newest_at: string|null, size_bytes: int|null, age_hours: float|null, healthy: bool, note: string} */
+    private function lastBackup(): array
+    {
+        try {
+            $destination = BackupDestination::create('backups', (string) config('backup.backup.name'));
+            if (! $destination->isReachable()) {
+                throw $destination->connectionError() ?? new \RuntimeException('backup disk is unreachable');
+            }
+
+            $backup = $destination->newestBackup();
+            if ($backup === null) {
+                return [
+                    'measured' => true,
+                    'newest_at' => null,
+                    'size_bytes' => null,
+                    'age_hours' => null,
+                    'healthy' => false,
+                    'note' => __('messages.backup.status_none'),
+                ];
+            }
+
+            $newestAt = CarbonImmutable::instance($backup->date())->setTimezone('Asia/Tokyo');
+            $now = CarbonImmutable::now('Asia/Tokyo');
+            $ageHours = round(max(0, $newestAt->diffInSeconds($now, false)) / 3600, 1);
+            $healthy = $newestAt->gte($now->subDay());
+
+            return [
+                'measured' => true,
+                'newest_at' => $newestAt->format('Y-m-d H:i:s').' JST',
+                'size_bytes' => (int) $backup->sizeInBytes(),
+                'age_hours' => $ageHours,
+                'healthy' => $healthy,
+                'note' => __($healthy ? 'messages.backup.status_fresh' : 'messages.backup.status_stale'),
+            ];
+        } catch (Throwable) {
+            return [
+                'measured' => false,
+                'newest_at' => null,
+                'size_bytes' => null,
+                'age_hours' => null,
+                'healthy' => false,
+                'note' => __('messages.backup.status_error'),
+            ];
+        }
     }
 
     private function stripeMode(): string
