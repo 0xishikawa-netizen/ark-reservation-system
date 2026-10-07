@@ -10,6 +10,7 @@ import {
     ref,
     watch,
 } from "vue";
+import type { ComponentPublicInstance } from "vue";
 import AdminLayout from "@/layouts/AdminLayout.vue";
 import { DateField } from "@/components/ark";
 import ReservationDetailPanel from "@/components/admin/ReservationDetailPanel.vue";
@@ -31,6 +32,7 @@ import { useBlockDrag } from "@/components/admin/schedule/useBlockDrag";
 import { useScheduleShading } from "@/components/admin/schedule/useScheduleShading";
 import { useTimelineGuides } from "@/components/admin/schedule/useTimelineGuides";
 import { useMenuPreview } from "@/components/admin/schedule/useMenuPreview";
+import ScheduleDailySummary from "@/components/admin/schedule/ScheduleDailySummary.vue";
 import ScheduleDragGhost from "@/components/admin/schedule/ScheduleDragGhost.vue";
 import {
     DEFAULT_NOTIFICATION_REPEAT,
@@ -144,12 +146,25 @@ const timelineScrollEl = ref<HTMLElement | null>(null);
 const timelineScrollWidth = ref(0);
 let timelineResizeObserver: ResizeObserver | null = null;
 
+/** 左パネルの高さの下限（極端に低い画面でも検索・入力ができるように）。 */
+const PANEL_MIN_HEIGHT = 480;
+
 // 左パネルの高さ。右側（ツールバー〜台帳〜本日の集計）の下端にぴったり揃える。
 // ブース表示などで台帳が縦に長くなっても、紺の背景が「本日の集計」の下端まで伸びる。
 // 中身の方が長い時はパネル内でスクロールする。
 const boardPanelEl = ref<HTMLElement | null>(null);
 const boardMainEl = ref<HTMLElement | null>(null);
 const boardLayoutEl = ref<HTMLElement | null>(null);
+
+const componentRootElement = (el: Element | ComponentPublicInstance | null): HTMLElement | null => {
+    if (el instanceof Element) {
+        return el instanceof HTMLElement ? el : null;
+    }
+
+    const rootElement: unknown = el?.$el;
+
+    return rootElement instanceof HTMLElement ? rootElement : null;
+};
 const panelMaxHeight = ref("calc(100dvh - 140px)");
 
 /** 要素の上端のページ内位置（スクロール量に依存しない）。 */
@@ -158,8 +173,8 @@ function documentTop(el: HTMLElement): number {
 }
 
 /**
- * 左パネルは「本日の集計」の高さに合わせず、ブラウザ画面内で使える最下部（画面下端−ページ下余白）まで伸ばす。
- * 上端位置（ヘッダー＋上部操作領域の高さ）は画面幅で折り返しが変わるため実測し、高さは 100dvh 基準の calc にする。
+ * 左パネルの高さ：最低は画面の下端まで、「本日の集計」がそれより下にある時は集計の下端まで。
+ * 上端・下端の位置は画面幅や集計の折り返しで変わるため毎回実測する。
  * あわせて日表示の行高の計算に使う「台帳に使える縦の空き」も更新する。
  */
 function recalcPanelMaxHeight(): void {
@@ -167,10 +182,18 @@ function recalcPanelMaxHeight(): void {
         return;
     }
 
-    const layout = boardLayoutEl.value;
+    // 最低の高さ＝画面の下端まで（ページ下余白 24px を残す）。台帳が短い日でもパネルが画面いっぱいに安定する。
+    // 「本日の集計」（集計が無い週表示などは右側の台帳全体）の下端の方が下にある時は、そこまで伸ばして揃える。
+    const panelTopEl = boardPanelEl.value ?? boardLayoutEl.value;
 
-    if (layout !== null) {
-        panelMaxHeight.value = `calc(100dvh - ${Math.max(Math.round(documentTop(layout)), 0)}px - var(--ark-space-5))`;
+    if (panelTopEl !== null) {
+        const top = documentTop(panelTopEl);
+        const screenHeight = window.innerHeight - top - 24;
+        const bottomEl = dailySummaryEl.value ?? boardMainEl.value;
+        const summaryHeight = bottomEl !== null
+            ? bottomEl.getBoundingClientRect().bottom + window.scrollY - top
+            : 0;
+        panelMaxHeight.value = `${Math.round(Math.max(screenHeight, summaryHeight, PANEL_MIN_HEIGHT))}px`;
     }
 
     const shell = timelineShellEl.value;
@@ -1624,8 +1647,8 @@ const notificationSound = computed(() => {
                     <v-btn
                         v-bind="tip"
                         :ref="
-                            (el: any) => {
-                                prevDayBtnEl = el?.$el ?? null;
+                            (el: Element | ComponentPublicInstance | null) => {
+                                prevDayBtnEl = componentRootElement(el);
                             }
                         "
                         icon="mdi-chevron-left"
@@ -1642,8 +1665,8 @@ const notificationSound = computed(() => {
             <v-btn
                 v-if="viewMode === 'day'"
                 :ref="
-                    (el: any) => {
-                        todayBtnEl = el?.$el ?? null;
+                    (el: Element | ComponentPublicInstance | null) => {
+                        todayBtnEl = componentRootElement(el);
                     }
                 "
                 variant="flat"
@@ -1666,8 +1689,8 @@ const notificationSound = computed(() => {
                     <v-btn
                         v-bind="tip"
                         :ref="
-                            (el: any) => {
-                                nextDayBtnEl = el?.$el ?? null;
+                            (el: Element | ComponentPublicInstance | null) => {
+                                nextDayBtnEl = componentRootElement(el);
                             }
                         "
                         icon="mdi-chevron-right"
@@ -2765,70 +2788,12 @@ const notificationSound = computed(() => {
 
                 <!-- 本日の集計（§23-24, §48）。台帳の下に置き、上部は操作だけに集中させる。巨大なKPIカードは並べない。 -->
                 <div v-if="summary" ref="dailySummaryEl">
-                    <v-card variant="outlined" class="daily-summary mt-2">
-                        <div class="daily-summary__title">本日の集計</div>
-                        <div class="daily-summary__row">
-                            <div class="daily-summary__item">
-                                <span class="daily-summary__value">{{
-                                    summary.total
-                                }}</span>
-                                <span class="daily-summary__label">予約</span>
-                            </div>
-                            <div class="daily-summary__item">
-                                <span class="daily-summary__value">{{
-                                    summary.completed
-                                }}</span>
-                                <span class="daily-summary__label"
-                                    >来店完了</span
-                                >
-                            </div>
-                            <div class="daily-summary__item">
-                                <span class="daily-summary__value">{{
-                                    summary.new_customers
-                                }}</span>
-                                <span class="daily-summary__label">新規</span>
-                            </div>
-                            <div class="daily-summary__item">
-                                <span class="daily-summary__value">{{
-                                    summary.repeat_customers
-                                }}</span>
-                                <span class="daily-summary__label"
-                                    >リピーター</span
-                                >
-                            </div>
-                            <div class="daily-summary__item">
-                                <span class="daily-summary__value">{{
-                                    summary.canceled
-                                }}</span>
-                                <span class="daily-summary__label"
-                                    >キャンセル</span
-                                >
-                            </div>
-                            <div class="daily-summary__item">
-                                <span class="daily-summary__value">{{
-                                    summary.no_show
-                                }}</span>
-                                <span class="daily-summary__label"
-                                    >無断キャンセル</span
-                                >
-                            </div>
-                            <div
-                                class="daily-summary__divider"
-                                aria-hidden="true"
-                            />
-                            <div
-                                v-if="summary.revenue !== null"
-                                class="daily-summary__item daily-summary__item--revenue"
-                            >
-                                <span class="daily-summary__value"
-                                    >¥{{
-                                        summary.revenue.toLocaleString("ja-JP")
-                                    }}</span
-                                >
-                                <span class="daily-summary__label">売上</span>
-                            </div>
-                        </div>
-                    </v-card>
+                    <ScheduleDailySummary
+                        :summary="summary"
+                        :title="isViewingToday
+                            ? MESSAGES.schedule.dailySummary.todayTitle
+                            : MESSAGES.schedule.dailySummary.dateTitle.replace('{date}', dayLabel(date))"
+                    />
                 </div>
             </template>
         </div>

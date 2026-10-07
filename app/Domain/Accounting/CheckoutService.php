@@ -9,6 +9,8 @@ use App\Enums\Accounting\CheckoutLineItemType;
 use App\Enums\Accounting\CheckoutStatus;
 use App\Enums\Accounting\CheckoutTenderStatus;
 use App\Enums\Accounting\TenderAllocationCategory;
+use App\Enums\Ticket\TicketReservationUsageStatus;
+use App\Enums\Ticket\TicketTransactionType;
 use App\Models\Checkout;
 use App\Models\CheckoutLine;
 use App\Models\CheckoutTender;
@@ -20,6 +22,9 @@ use App\Models\Staff;
 use App\Models\StaffRevenueAllocation;
 use App\Models\TaxCategory;
 use App\Models\TicketProduct;
+use App\Models\TicketReservationUsage;
+use App\Models\TicketTransaction;
+use App\Models\TicketWallet;
 use App\Models\Visit;
 use App\Models\VisitTreatmentStaff;
 use App\Support\Audit\AuditLogger;
@@ -312,8 +317,10 @@ final class CheckoutService
             if ($locked->status !== CheckoutStatus::Finalized || trim($reason) === '') {
                 throw ValidationException::withMessages(['checkout' => '確定済み会計と取消理由が必要です。']);
             }
-            $locked->forceFill(['status' => CheckoutStatus::Voided, 'voided_at' => now(), 'void_reason' => trim($reason)])->save();
-            $this->audit->log('checkout.voided', $locked, '会計を取消: '.trim($reason), $actor);
+            $reason = trim($reason);
+            $this->revokePurchasedTickets($locked, $reason, $actor);
+            $locked->forceFill(['status' => CheckoutStatus::Voided, 'voided_at' => now(), 'void_reason' => $reason])->save();
+            $this->audit->log('checkout.voided', $locked, '会計を取消: '.$reason, $actor);
 
             return $locked->refresh();
         });
@@ -347,6 +354,77 @@ final class CheckoutService
                     null,
                     "checkout-line:{$line->getKey()}:{$index}",
                     __('messages.checkout_entry.ticket_grant_reason', ['id' => $checkout->getKey()]),
+                    $actor,
+                );
+            }
+        }
+    }
+
+    /** この会計で付与した未使用回数券だけを追記型台帳で取り消す。 */
+    private function revokePurchasedTickets(Checkout $checkout, string $voidReason, ?Authenticatable $actor): void
+    {
+        $ticketLines = CheckoutLine::query()
+            ->where('checkout_id', $checkout->getKey())
+            ->where('item_type', CheckoutLineItemType::Ticket->value)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get(['id', 'quantity']);
+        $grantKeys = [];
+
+        foreach ($ticketLines as $line) {
+            for ($index = 1; $index <= (int) $line->quantity; $index++) {
+                $grantKeys[] = "grant:checkout-line:{$line->getKey()}:{$index}";
+            }
+        }
+
+        if ($grantKeys === []) {
+            return;
+        }
+
+        $walletIds = TicketTransaction::query()
+            ->where('type', TicketTransactionType::Grant->value)
+            ->whereIn('dedupe_key', $grantKeys)
+            ->orderBy('ticket_wallet_id')
+            ->lockForUpdate()
+            ->pluck('ticket_wallet_id')
+            ->map(static fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($walletIds->isEmpty()) {
+            return;
+        }
+
+        $wallets = TicketWallet::query()
+            ->whereIn('id', $walletIds->all())
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+        $inUse = TicketReservationUsage::query()
+            ->whereIn('ticket_wallet_id', $walletIds->all())
+            ->whereIn('status', [
+                TicketReservationUsageStatus::Held->value,
+                TicketReservationUsageStatus::Consumed->value,
+            ])
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->first() !== null;
+
+        if ($inUse) {
+            throw ValidationException::withMessages([
+                'checkout' => __('messages.checkout_entry.void_ticket_in_use'),
+            ]);
+        }
+
+        foreach ($wallets as $wallet) {
+            $available = $this->tickets->available($wallet);
+
+            if ($available > 0) {
+                $this->tickets->revoke(
+                    $wallet,
+                    $available,
+                    "checkout-void:{$checkout->getKey()}:{$wallet->getKey()}",
+                    "会計取消 #{$checkout->getKey()}（{$voidReason}）",
                     $actor,
                 );
             }

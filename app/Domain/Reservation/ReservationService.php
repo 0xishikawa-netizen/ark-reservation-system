@@ -80,6 +80,9 @@ final class ReservationService
 
         try {
             $reservation = DB::transaction(function () use ($in, $endsAt, $slots, $boothId): Reservation {
+                $this->lockResources([$in->staffId], [$boothId]);
+                $this->assertNoScheduleBlockOverlap($in->staffId, $boothId, $in->startsAt, $endsAt);
+
                 // カード決済（single）は Stripe の与信が済むまで確定しない。
                 // 枠は pending_payment + payment_expires_at で HOLD する（PLAN §7）。
                 $isCard = $in->paymentMethod === PaymentMethod::Single;
@@ -193,6 +196,10 @@ final class ReservationService
                 }
                 $endsAt = $in->startsAt->addMinutes($bookedMinutes + (int) $reservation->buffer_min);
                 $boothId = $this->resolveBooth($service, $in->boothId, $in->startsAt, $endsAt, (int) $reservation->id);
+                $this->lockResources(
+                    [$reservation->staff_id, $in->staffId],
+                    [$reservation->booth_id, $boothId],
+                );
 
                 $this->validateReservationDetails(
                     service: $service,
@@ -284,6 +291,9 @@ final class ReservationService
                 }
                 $baseService = $reservation->service()->firstOrFail();
                 $segmentService = $serviceId !== null ? Service::query()->findOrFail($serviceId) : $baseService;
+                if (! $segmentService->is_active) {
+                    $this->throwValidation('service_id', __('messages.reservation.service_unavailable'));
+                }
                 if ($reservation->staff_id !== null && ! $this->resources->canPerform($segmentService, (int) $reservation->staff_id)) {
                     $this->throwValidation('staff_id', $this->resources->isQualified($segmentService, (int) $reservation->staff_id)
                         ? __('messages.reservation.staff_not_assigned')
@@ -295,6 +305,7 @@ final class ReservationService
                 $bookedMinutes = $reservation->bookedMinutes() + $minutes;
                 $startsAt = CarbonImmutable::parse($reservation->starts_at->format('Y-m-d H:i:s'));
                 $endsAt = $startsAt->addMinutes($bookedMinutes + (int) $reservation->buffer_min);
+                $this->lockResources([$reservation->staff_id], [$reservation->booth_id]);
                 $this->validateReservationDetails(
                     service: $baseService,
                     staffId: $reservation->staff_id,
@@ -345,7 +356,9 @@ final class ReservationService
         bool $customerContext = false,
     ): Reservation {
         $customerContext = $customerContext
-            || ($actor instanceof User && $actor->customer !== null);
+            || ($actor instanceof User
+                && ! $actor->can('admin.access')
+                && $actor->customer !== null);
 
         $persisted = Reservation::query()->findOrFail($reservation->getKey());
 
@@ -417,20 +430,43 @@ final class ReservationService
         // Stripe 返金は予約キャンセル transaction の commit 後にだけ実行する。
         $payment = $reservation->payments()
             ->where('kind', PaymentKind::Single->value)
-            ->where('status', CardPaymentStatus::Succeeded->value)
+            ->whereIn('status', [
+                CardPaymentStatus::Succeeded->value,
+                CardPaymentStatus::PartiallyRefunded->value,
+            ])
             ->whereColumn('refunded_amount', '<', 'amount')
             ->latest('id')
             ->first();
 
         if ($payment !== null) {
+            $refundActor = $actor;
+
+            if ($refundActor === null && $customerContext) {
+                $refundActor = $reservation->customer()->with('user')->first()?->user;
+            }
+
+            try {
+                // 外部返金を先に同期し、キャンセル規定の返金額を安全な残額へクランプする。
+                $payment = $this->payments->syncFromStripe($payment);
+            } catch (Throwable) {
+                $percent = $this->cancellationPolicy->refundPercentFor($reservation, now());
+                $amount = $this->cancellationPolicy->refundableAmount($payment->fresh() ?? $payment, $percent);
+                $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $refundActor);
+
+                return $reservation;
+            }
+
             $percent = $this->cancellationPolicy->refundPercentFor($reservation, now());
-            $amount = $this->cancellationPolicy->refundableAmount($payment, $percent);
+            $amount = min(
+                $this->cancellationPolicy->refundableAmount($payment, $percent),
+                $this->payments->remainingRefundableAmount($payment),
+            );
 
             if ($amount > 0) {
-                $actorId = $actor instanceof User ? (int) $actor->id : null;
+                $actorId = $refundActor instanceof User ? (int) $refundActor->id : null;
 
                 if ($actorId === null) {
-                    $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $actor);
+                    $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $refundActor);
                 } else {
                     try {
                         // PaymentService の既存契約は Authenticatable を受け取るため、検証済み User を渡す。
@@ -438,10 +474,10 @@ final class ReservationService
                             $payment,
                             $amount,
                             "キャンセルポリシーによる返金（{$percent}%）",
-                            $actor,
+                            $refundActor,
                         );
                     } catch (Throwable) {
-                        $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $actor);
+                        $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $refundActor);
 
                         return $reservation;
                     }
@@ -457,10 +493,10 @@ final class ReservationService
                             'reservation.cancel_refunded',
                             $reservation,
                             "予約キャンセル返金 #{$reservation->id} {$amount}円（{$percent}%{$settlementNote}）",
-                            $actor,
+                            $refundActor,
                         );
                     } elseif ($refund->status === RefundStatus::Failed) {
-                        $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $actor);
+                        $this->recordCancelRefundFailure($reservation, $payment, $amount, $percent, $refundActor);
                     }
                 }
             }
@@ -513,6 +549,9 @@ final class ReservationService
     ): Reservation {
         $reservation = DB::transaction(function () use ($reservation, $actor): Reservation {
             $reservation = $this->lockReservation($reservation);
+            if ($reservation->starts_at->isFuture()) {
+                $this->throwValidation('starts_at', __('messages.reservation.not_started_no_show'));
+            }
             $this->applyStatus($reservation, ReservationStatus::NoShow);
             $this->tickets->handleNoShow($reservation, $actor);
             $this->memberships->handleNoShow($reservation, $actor);
@@ -587,10 +626,6 @@ final class ReservationService
             if (! $withinShift) {
                 $this->throwValidation('starts_at', __('messages.reservation.outside_shift'));
             }
-
-            if ($this->hasScheduleBlockOverlap('staff_id', $staffId, $startsAt, $endsAt)) {
-                $this->throwValidation('staff_id', __('messages.reservation.staff_block_overlap'));
-            }
         }
 
         if ($boothId !== null) {
@@ -604,11 +639,9 @@ final class ReservationService
             if (! $this->resources->boothAllowed($service, $boothId)) {
                 $this->throwValidation('booth_id', __('messages.reservation.booth_not_for_service'));
             }
-
-            if ($this->hasScheduleBlockOverlap('booth_id', $boothId, $startsAt, $endsAt)) {
-                $this->throwValidation('booth_id', __('messages.reservation.booth_block_overlap'));
-            }
         }
+
+        $this->assertNoScheduleBlockOverlap($staffId, $boothId, $startsAt, $endsAt);
 
         if (! $adminContext && ! $startsAt->isFuture()) {
             $this->throwValidation('starts_at', __('messages.reservation.past_datetime'));
@@ -672,6 +705,56 @@ final class ReservationService
             ->whereTime('start_at', '<', $endsAt->format('H:i:s'))
             ->whereTime('end_at', '>', $startsAt->format('H:i:s'))
             ->exists();
+    }
+
+    private function assertNoScheduleBlockOverlap(
+        ?int $staffId,
+        ?int $boothId,
+        CarbonImmutable $startsAt,
+        CarbonImmutable $endsAt,
+    ): void {
+        if ($staffId !== null && $this->hasScheduleBlockOverlap('staff_id', $staffId, $startsAt, $endsAt)) {
+            $this->throwValidation('staff_id', __('messages.reservation.staff_block_overlap'));
+        }
+
+        if ($boothId !== null && $this->hasScheduleBlockOverlap('booth_id', $boothId, $startsAt, $endsAt)) {
+            $this->throwValidation('booth_id', __('messages.reservation.booth_block_overlap'));
+        }
+    }
+
+    /**
+     * @param  list<int|null>  $staffIds
+     * @param  list<int|null>  $boothIds
+     */
+    private function lockResources(array $staffIds, array $boothIds): void
+    {
+        $staffIds = array_values(array_unique(array_map(
+            static fn (mixed $id): int => (int) $id,
+            array_filter($staffIds, static fn (mixed $id): bool => $id !== null),
+        )));
+        sort($staffIds);
+        $boothIds = array_values(array_unique(array_map(
+            static fn (mixed $id): int => (int) $id,
+            array_filter($boothIds, static fn (mixed $id): bool => $id !== null),
+        )));
+        sort($boothIds);
+
+        if ($staffIds !== []) {
+            Staff::withTrashed()
+                ->whereIn('user_id', $staffIds)
+                ->orderBy('user_id')
+                ->lockForUpdate()
+                ->get();
+        }
+
+        if ($boothIds !== []) {
+            Booth::withTrashed()
+                ->withoutGlobalScope('sort_order')
+                ->whereIn('id', $boothIds)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+        }
     }
 
     /** @return list<CarbonImmutable> */

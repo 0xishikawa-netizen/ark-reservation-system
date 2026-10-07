@@ -25,6 +25,8 @@ final readonly class DailyBusinessSummary implements JsonSerializable
         public int $weekdayIso,
         public string $weekday,
         public int $paymentDateRevenue,
+        /** 完了来店に紐づく確定会計の税込合計。客単価はこの値を来店数で割る。 */
+        public int $visitGross,
         public int $treatmentDateRevenue,
         public int $directTreatmentRevenue,
         public int $allocatedTreatmentRevenue,
@@ -64,6 +66,7 @@ final readonly class DailyBusinessSummary implements JsonSerializable
             'weekday_iso' => $this->weekdayIso,
             'weekday' => $this->weekday,
             'payment_date_revenue' => $this->paymentDateRevenue,
+            'visit_gross' => $this->visitGross,
             'treatment_date_revenue' => $this->treatmentDateRevenue,
             'direct_treatment_revenue' => $this->directTreatmentRevenue,
             'allocated_treatment_revenue' => $this->allocatedTreatmentRevenue,

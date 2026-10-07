@@ -13,6 +13,7 @@ use App\Models\Membership;
 use App\Models\MembershipReservationUsage;
 use App\Models\Reservation;
 use App\Support\Audit\AuditLogger;
+use App\Support\Business\BusinessTime;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\DB;
 
@@ -27,6 +28,7 @@ final class MembershipReservationService
         private readonly MembershipLedgerService $ledger,
         private readonly MembershipPolicyResolver $policy,
         private readonly AuditLogger $auditLogger,
+        private readonly BusinessTime $businessTime,
     ) {}
 
     /**
@@ -54,9 +56,16 @@ final class MembershipReservationService
             // canceling（当期末で終了予定）は current_period_end までしか使えない。
             // subscription.deleted webhook の遅延・欠落で canceling のまま期末を越えても予約させない。
             if ($membership->status === MembershipStatus::Canceling
-                && $membership->current_period_end !== null
-                && $membership->current_period_end->toDateString() < now()->toDateString()) {
-                throw new InsufficientMembershipBalanceException(__('messages.membership.expired'));
+                && $membership->current_period_end !== null) {
+                $periodEnd = $membership->current_period_end->toDateString();
+                $today = $this->businessTime->businessDate()->toDateString();
+                $reservationDate = $this->businessTime
+                    ->businessDate($reservation->starts_at)
+                    ->toDateString();
+
+                if ($today > $periodEnd || $reservationDate > $periodEnd) {
+                    throw new InsufficientMembershipBalanceException(__('messages.membership.expired'));
+                }
             }
 
             $period = $this->ledger->currentPeriod($membership);

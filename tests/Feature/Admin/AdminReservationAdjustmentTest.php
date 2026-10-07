@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Admin;
 
+use App\Domain\Payment\Gateway\Dto\PaymentIntentResult;
+use App\Domain\Payment\Gateway\FakeStripeGateway;
 use App\Enums\Payment\PaymentKind;
 use App\Enums\Payment\PaymentStatus;
 use App\Models\Customer;
@@ -144,6 +146,15 @@ final class AdminReservationAdjustmentTest extends TestCase
             'stripe_charge_id' => 'ch_admin_adjustment',
             'paid_at' => now(),
         ]);
+        app(FakeStripeGateway::class)->setPaymentIntent(new PaymentIntentResult(
+            id: 'pi_admin_adjustment',
+            status: 'succeeded',
+            amount: 5000,
+            amountCapturable: 0,
+            amountReceived: 5000,
+            currency: 'jpy',
+            chargeId: 'ch_admin_adjustment',
+        ));
 
         return [$reservation, $payment];
     }

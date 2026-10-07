@@ -58,10 +58,9 @@
     width: 352px;
     min-width: 0;
     align-self: flex-start;
-    /* 高さは「本日の集計」に合わせず、画面内で使える最下部まで伸ばす（script 側で 100dvh 基準の calc を設定）。
-       中身が少ない時は panel-shell 側が伸びて埋め、長い時はパネル内スクロールにする。
-       極端に低い画面でも操作できるよう最小高さを持たせる。 */
-    min-height: 420px;
+    /* 高さは script 側で決める：最低は画面の下端まで、集計がそれより下なら集計の下端まで（下限 480px）。
+       中身が少ない時は panel-shell 側が伸びて埋め、長い時はパネル内スクロールにする。 */
+    min-height: 480px;
     /* 幅はどのパネル種別でも必ず同じにする（中身のnowrap要素等で広がらないようoverflow/min-widthで固定）。 */
     height: calc(100vh - 120px);
     display: flex;

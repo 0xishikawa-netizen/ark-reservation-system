@@ -157,6 +157,39 @@ class StripeWebhookTest extends TestCase
         $this->assertSame(PaymentStatus::Succeeded, $payment->refresh()->status);
     }
 
+    public function test_charge_refunded_webhooks_keep_refunded_amount_monotonic_when_duplicated_or_out_of_order(): void
+    {
+        $payment = $this->cardPayment();
+
+        $this->gateway->setPaymentIntent($this->intent($payment, 'succeeded', received: 5000, refunded: 1000));
+        $first = $this->event('evt_refund_1', 'charge.refunded', $payment);
+        $this->postEvent($first)->assertOk();
+        $this->assertSame(1000, $payment->refresh()->refunded_amount);
+        $this->assertSame(PaymentStatus::PartiallyRefunded, $payment->status);
+
+        $this->gateway->setPaymentIntent($this->intent($payment, 'succeeded', received: 5000, refunded: 3000));
+        $second = $this->event('evt_refund_2', 'charge.refunded', $payment);
+        $this->postEvent($second)->assertOk();
+        $this->postEvent($second)->assertOk();
+        $this->assertSame(3000, $payment->refresh()->refunded_amount);
+
+        // 古い Stripe スナップショットを指す後着イベントでも累計を減らさない。
+        $this->gateway->setPaymentIntent($this->intent($payment, 'succeeded', received: 5000, refunded: 2000));
+        $this->postEvent($this->event('evt_refund_old', 'charge.refunded', $payment))->assertOk();
+        $this->assertSame(3000, $payment->refresh()->refunded_amount);
+        $this->assertSame(PaymentStatus::PartiallyRefunded, $payment->status);
+
+        $this->gateway->setPaymentIntent($this->intent($payment, 'succeeded', received: 5000, refunded: 5000));
+        $this->postEvent($this->event('evt_refund_full', 'charge.refunded', $payment))->assertOk();
+        $this->assertSame(5000, $payment->refresh()->refunded_amount);
+        $this->assertSame(PaymentStatus::Refunded, $payment->status);
+
+        $this->gateway->setPaymentIntent($this->intent($payment, 'succeeded', received: 5000, refunded: 1000));
+        $this->postEvent($this->event('evt_refund_after_full_old', 'charge.refunded', $payment))->assertOk();
+        $this->assertSame(5000, $payment->refresh()->refunded_amount);
+        $this->assertSame(PaymentStatus::Refunded, $payment->status);
+    }
+
     public function test_succeeded_webhook_advances_a_guest_reservation(): void
     {
         $payment = $this->cardPayment();
@@ -278,6 +311,7 @@ class StripeWebhookTest extends TestCase
         string $status,
         int $capturable = 0,
         int $received = 0,
+        int $refunded = 0,
     ): PaymentIntentResult {
         return new PaymentIntentResult(
             id: (string) $payment->stripe_payment_intent_id,
@@ -287,6 +321,7 @@ class StripeWebhookTest extends TestCase
             amountReceived: $received,
             currency: (string) $payment->currency,
             chargeId: $status === 'succeeded' ? 'ch_fake_1' : null,
+            refundedAmount: $refunded,
         );
     }
 

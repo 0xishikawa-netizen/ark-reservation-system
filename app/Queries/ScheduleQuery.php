@@ -6,6 +6,7 @@ namespace App\Queries;
 
 use App\Domain\Reporting\DailyReportService;
 use App\Domain\Reservation\AvailabilityService;
+use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Schedule\ScheduleBlockType;
 use App\Support\Settings\Settings;
@@ -33,7 +34,7 @@ final class ScheduleQuery
      *   range: array{start: string, end: string},
      *   days: list<string>,
      *   booths: list<array{id: int, name: string, sort_order: int}>,
-     *   summary: array{total: int, completed: int, new_customers: int, repeat_customers: int, canceled: int, no_show: int, revenue: int|null}|null
+     *   summary: array{total: int, completed: int, upcoming: int, accounting_pending: int, new_customers: int, repeat_customers: int, canceled: int, no_show: int, nominated: int, online: int, future_reservation: array{count: int, rate: float|null}, categories: list<array{code: string|null, name: string|null, count: int}>, revenue: int|null, average_spend: int|null, treatment_revenue: int|null, retail_revenue: int|null, payment_methods: list<array{name: string, amount: int}>}|null
      * }
      */
     public function get(
@@ -292,18 +293,22 @@ final class ScheduleQuery
     /**
      * 予約台帳の運用件数に、Phase 11の共通日次実績を合成する。
      * スタッフ絞り込みに関わらず、その日の店舗全体を集計する。
+     * 売上・客単価・施術/物販・決済方法別は売上を見る権限がある時（$includeSales）だけ返す。
      *
-     * @return array{total: int, completed: int, new_customers: int, repeat_customers: int, canceled: int, no_show: int, revenue: int|null}
+     * @return array{total: int, completed: int, upcoming: int, accounting_pending: int, new_customers: int, repeat_customers: int, canceled: int, no_show: int, nominated: int, online: int, future_reservation: array{count: int, rate: float|null}, categories: list<array{code: string|null, name: string|null, count: int}>, revenue: int|null, average_spend: int|null, treatment_revenue: int|null, retail_revenue: int|null, payment_methods: list<array{name: string, amount: int}>}
      */
     private function dailySummary(CarbonImmutable $date, bool $includeSales): array
     {
+        $active = [
+            ReservationStatus::PendingPayment->value,
+            ReservationStatus::PendingExternalSync->value,
+            ReservationStatus::Confirmed->value,
+        ];
         $reservationCounts = DB::table('reservations')
             ->where('reservations.starts_at', '>=', $date->startOfDay())
             ->where('reservations.starts_at', '<', $date->addDay()->startOfDay())
             ->whereIn('reservations.status', [
-                ReservationStatus::PendingPayment->value,
-                ReservationStatus::PendingExternalSync->value,
-                ReservationStatus::Confirmed->value,
+                ...$active,
                 ReservationStatus::Completed->value,
                 ReservationStatus::NoShow->value,
                 ReservationStatus::Canceled->value,
@@ -311,17 +316,59 @@ final class ScheduleQuery
             ->selectRaw('COUNT(*) AS total')
             ->selectRaw('COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS canceled', [ReservationStatus::Canceled->value])
             ->selectRaw('COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS no_show', [ReservationStatus::NoShow->value])
+            // まだ来店していない（これから来る）予約。
+            ->selectRaw('COALESCE(SUM(CASE WHEN status IN (?, ?, ?) THEN 1 ELSE 0 END), 0) AS upcoming', $active)
+            // キャンセル以外の予約のうち、指名あり／管理画面以外（ネット等）から入った予約。
+            ->selectRaw('COALESCE(SUM(CASE WHEN status <> ? AND is_staff_requested = 1 THEN 1 ELSE 0 END), 0) AS nominated', [ReservationStatus::Canceled->value])
+            ->selectRaw('COALESCE(SUM(CASE WHEN status <> ? AND source <> ? THEN 1 ELSE 0 END), 0) AS online', [ReservationStatus::Canceled->value, ReservationSource::Admin->value])
             ->first();
         $report = $this->dailyReports->forDate($date->toDateString());
+
+        // コース（分析カテゴリ）別の来店数。件数がある時だけ名前のマスタを読む。
+        $hasKnownCategory = collect($report->analysisCategoryVisitCounts)->contains(
+            static fn (int $count): bool => $count > 0,
+        );
+        $categoryNames = $hasKnownCategory
+            ? DB::table('service_analysis_categories')->pluck('name', 'code')
+            : collect();
+        $categories = [];
+        foreach ($report->analysisCategoryVisitCounts as $code => $count) {
+            if ($count > 0) {
+                $categories[] = ['code' => (string) $code, 'name' => (string) ($categoryNames[$code] ?? $code), 'count' => $count];
+            }
+        }
+        if ($report->unknownAnalysisCategoryVisitCount > 0) {
+            $categories[] = ['code' => null, 'name' => null, 'count' => $report->unknownAnalysisCategoryVisitCount];
+        }
+
+        $revenue = $report->paymentDateRevenue;
 
         return [
             'total' => (int) $reservationCounts->total,
             'completed' => $report->visitCount,
+            'upcoming' => (int) $reservationCounts->upcoming,
+            'accounting_pending' => $report->accountingPendingVisitCount,
             'new_customers' => $report->firstVisitCount,
             'repeat_customers' => $report->visitCount - $report->firstVisitCount,
             'canceled' => (int) $reservationCounts->canceled,
             'no_show' => (int) $reservationCounts->no_show,
-            'revenue' => $includeSales ? $report->paymentDateRevenue : null,
+            'nominated' => (int) $reservationCounts->nominated,
+            'online' => (int) $reservationCounts->online,
+            'future_reservation' => [
+                'count' => $report->futureReservationRate->numerator,
+                'rate' => $report->futureReservationRate->value,
+            ],
+            'categories' => $categories,
+            'revenue' => $includeSales ? $revenue : null,
+            'average_spend' => $includeSales && $report->visitCount > 0 ? intdiv($report->visitGross, $report->visitCount) : null,
+            'treatment_revenue' => $includeSales ? (int) $report->salesSplit['treatment']['gross'] : null,
+            'retail_revenue' => $includeSales ? (int) $report->salesSplit['retail']['gross'] : null,
+            'payment_methods' => $includeSales
+                ? array_values(array_map(
+                    static fn (array $row): array => ['name' => $row['name'], 'amount' => $row['amount']],
+                    array_filter($report->paymentMethodTotals, static fn (array $row): bool => $row['amount'] !== 0),
+                ))
+                : [],
         ];
     }
 }

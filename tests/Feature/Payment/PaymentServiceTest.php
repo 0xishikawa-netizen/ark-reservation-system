@@ -13,6 +13,7 @@ use App\Domain\Payment\PaymentService;
 use App\Enums\Payment\PaymentStatus;
 use App\Enums\Payment\RefundStatus;
 use App\Exceptions\Payment\PaymentGatewayDeclinedException;
+use App\Exceptions\Payment\PaymentGatewayException;
 use App\Exceptions\Payment\PaymentGatewayTimeoutException;
 use App\Models\AuditLog;
 use App\Models\Payment;
@@ -238,6 +239,16 @@ class PaymentServiceTest extends TestCase
             $this->assertTrue($payment->needs_attention);
         }
 
+        try {
+            $this->service->refund($payment, 401, '保留中返金を超える追加返金', $actor);
+            $this->fail('保留中返金を含む上限を超えて返金できました。');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('amount', $exception->errors());
+        }
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertCount(1, $this->gateway->callsFor(FakeStripeGateway::REFUND));
+        $this->assertTrue($payment->refresh()->needs_attention);
+
         $refund = PaymentRefund::query()->sole();
         $completed = $this->service->retryRefund($refund);
         $calls = $this->gateway->callsFor(FakeStripeGateway::REFUND);
@@ -279,6 +290,157 @@ class PaymentServiceTest extends TestCase
         $this->assertCount(1, $this->gateway->callsFor(FakeStripeGateway::REFUND));
     }
 
+    public function test_external_full_refund_is_synced_before_ark_refund_and_blocks_stripe_call(): void
+    {
+        $actor = User::factory()->create();
+        $payment = $this->paymentWithIntent(PaymentStatus::Succeeded, amount: 5000);
+        $this->gateway->setPaymentIntent($this->intentResult(
+            $payment,
+            'succeeded',
+            amountReceived: 5000,
+            refundedAmount: 5000,
+        ));
+
+        try {
+            $this->service->refund($payment, 1, '外部返金後の再返金', $actor);
+            $this->fail('Stripeで全額返金済みの決済を再返金できました。');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('payment', $exception->errors());
+        }
+
+        $this->assertSame(PaymentStatus::Refunded, $payment->refresh()->status);
+        $this->assertSame(5000, $payment->refunded_amount);
+        $this->assertDatabaseCount('payment_refunds', 0);
+        $this->assertCount(0, $this->gateway->callsFor(FakeStripeGateway::REFUND));
+    }
+
+    public function test_external_partial_refund_before_webhook_is_synced_and_ark_can_refund_only_the_remainder(): void
+    {
+        $actor = User::factory()->create();
+        $payment = $this->paymentWithIntent(PaymentStatus::Succeeded, amount: 5000);
+        $this->gateway->setPaymentIntent($this->intentResult(
+            $payment,
+            'succeeded',
+            amountReceived: 5000,
+            refundedAmount: 1000,
+        ));
+
+        $refund = $this->service->refund($payment, 4000, '外部返金後の残額返金', $actor);
+
+        $this->assertSame(RefundStatus::Succeeded, $refund->status);
+        $this->assertSame(PaymentStatus::Refunded, $payment->refresh()->status);
+        $this->assertSame(5000, $payment->refunded_amount);
+        $this->assertSame(4000, PaymentRefund::query()->sole()->amount);
+        $this->assertCount(1, $this->gateway->callsFor(FakeStripeGateway::REFUND));
+    }
+
+    public function test_webhook_for_the_same_refund_before_completion_is_not_counted_twice(): void
+    {
+        $actor = User::factory()->create();
+        $payment = $this->paymentWithIntent(PaymentStatus::PartiallyRefunded, amount: 5000);
+        $payment->forceFill(['refunded_amount' => 2500])->save();
+        $refund = PaymentRefund::factory()->create([
+            'payment_id' => $payment->id,
+            'amount' => 2500,
+            'status' => RefundStatus::Pending,
+            'created_by' => $actor->id,
+        ]);
+        $stripeState = $this->intentResult(
+            $payment,
+            'succeeded',
+            amountReceived: 5000,
+            refundedAmount: 2500,
+        );
+        $this->gateway->setPaymentIntent($stripeState);
+        // createRefund は同じ idempotency key の完了応答、retrieve は先行 webhook と同じ累計を返す。
+        $this->gateway->queue(FakeStripeGateway::REFUND, new RefundResult(
+            id: 're_webhook_first',
+            status: 'succeeded',
+            amount: 2500,
+            currency: 'jpy',
+            paymentIntentId: $payment->stripe_payment_intent_id,
+        ));
+        $this->gateway->queue(FakeStripeGateway::RETRIEVE, $stripeState);
+
+        $completed = $this->service->retryRefund($refund);
+
+        $this->assertSame(RefundStatus::Succeeded, $completed->status);
+        $this->assertSame(2500, $payment->refresh()->refunded_amount);
+        $this->assertSame(PaymentStatus::PartiallyRefunded, $payment->status);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertSame([0], array_column(
+            $this->gateway->callsFor(FakeStripeGateway::RETRIEVE),
+            'transaction_level',
+        ));
+    }
+
+    public function test_ark_partial_then_external_partial_rejects_refund_over_synced_remainder(): void
+    {
+        $actor = User::factory()->create();
+        $payment = $this->paymentWithIntent(PaymentStatus::Succeeded, amount: 5000);
+        $this->service->refund($payment, 1000, 'ARK一部返金', $actor);
+        $this->gateway->setPaymentIntent($this->intentResult(
+            $payment,
+            'succeeded',
+            amountReceived: 5000,
+            refundedAmount: 3000,
+        ));
+
+        try {
+            $this->service->refund($payment, 2001, '残額超過返金', $actor);
+            $this->fail('外部返金を含む残額を超えて返金できました。');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('amount', $exception->errors());
+        }
+
+        $this->assertSame(3000, $payment->refresh()->refunded_amount);
+        $this->assertSame(PaymentStatus::PartiallyRefunded, $payment->status);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertCount(1, $this->gateway->callsFor(FakeStripeGateway::REFUND));
+    }
+
+    public function test_refund_does_not_create_local_record_when_stripe_sync_is_unavailable(): void
+    {
+        $actor = User::factory()->create();
+        $payment = $this->paymentWithIntent(PaymentStatus::Succeeded, amount: 5000);
+        $this->gateway->queue(
+            FakeStripeGateway::RETRIEVE,
+            new PaymentGatewayTimeoutException('timeout'),
+        );
+
+        try {
+            $this->service->refund($payment, 1000, '同期失敗時の返金', $actor);
+            $this->fail('Stripe同期失敗時に返金できました。');
+        } catch (PaymentGatewayTimeoutException) {
+            $this->assertTrue($payment->refresh()->needs_attention);
+        }
+
+        $this->assertDatabaseCount('payment_refunds', 0);
+        $this->assertCount(0, $this->gateway->callsFor(FakeStripeGateway::REFUND));
+    }
+
+    public function test_refund_does_not_create_local_record_when_stripe_result_is_mismatched(): void
+    {
+        $actor = User::factory()->create();
+        $payment = $this->paymentWithIntent(PaymentStatus::Succeeded, amount: 5000);
+        $this->gateway->queue(FakeStripeGateway::RETRIEVE, $this->intentResult(
+            $payment,
+            'succeeded',
+            id: 'pi_different',
+            amountReceived: 5000,
+        ));
+
+        try {
+            $this->service->refund($payment, 1000, '不整合時の返金', $actor);
+            $this->fail('PaymentIntent不一致時に返金できました。');
+        } catch (PaymentGatewayException) {
+            $this->assertTrue($payment->refresh()->needs_attention);
+        }
+
+        $this->assertDatabaseCount('payment_refunds', 0);
+        $this->assertCount(0, $this->gateway->callsFor(FakeStripeGateway::REFUND));
+    }
+
     public function test_two_distinct_partial_refunds_with_same_reason_have_independent_operation_ids(): void
     {
         $actor = User::factory()->create();
@@ -316,6 +478,25 @@ class PaymentServiceTest extends TestCase
         $this->assertSame(1200, $succeeded->refunded_amount);
         $this->assertCount(1, $this->gateway->callsFor(FakeStripeGateway::CANCEL));
         $this->assertCount(1, $this->gateway->callsFor(FakeStripeGateway::REFUND));
+    }
+
+    public function test_cancel_or_refund_does_nothing_after_synced_external_full_refund(): void
+    {
+        $actor = User::factory()->create();
+        $payment = $this->paymentWithIntent(PaymentStatus::Succeeded, amount: 1000);
+        $this->gateway->setPaymentIntent($this->intentResult(
+            $payment,
+            'succeeded',
+            amountReceived: 1000,
+            refundedAmount: 1000,
+        ));
+
+        $this->service->cancelOrRefund($payment, '予約取消', $actor);
+
+        $this->assertSame(PaymentStatus::Refunded, $payment->refresh()->status);
+        $this->assertSame(1000, $payment->refunded_amount);
+        $this->assertDatabaseCount('payment_refunds', 0);
+        $this->assertCount(0, $this->gateway->callsFor(FakeStripeGateway::REFUND));
     }
 
     public function test_sync_from_stripe_never_rolls_a_succeeded_payment_back(): void
@@ -371,6 +552,7 @@ class PaymentServiceTest extends TestCase
         string $status,
         ?string $id = null,
         int $amountReceived = 0,
+        int $refundedAmount = 0,
     ): PaymentIntentResult {
         return new PaymentIntentResult(
             id: $id ?? (string) ($payment->stripe_payment_intent_id ?? 'pi_fake_result'),
@@ -380,6 +562,7 @@ class PaymentServiceTest extends TestCase
             amountReceived: $amountReceived,
             currency: (string) $payment->currency,
             chargeId: $status === 'succeeded' ? 'ch_fake' : null,
+            refundedAmount: $refundedAmount,
         );
     }
 }

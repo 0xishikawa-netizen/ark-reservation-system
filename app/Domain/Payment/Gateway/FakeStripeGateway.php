@@ -184,6 +184,29 @@ final class FakeStripeGateway implements StripeGateway
             throw new LogicException('RefundResult が設定されていません。');
         }
 
+        if ($result->status === 'succeeded') {
+            $current = $this->paymentIntents[$command->paymentIntentId] ?? null;
+
+            if ($current !== null) {
+                $this->rememberPaymentIntent(new PaymentIntentResult(
+                    id: $current->id,
+                    status: $current->status,
+                    amount: $current->amount,
+                    amountCapturable: $current->amountCapturable,
+                    amountReceived: $current->amountReceived,
+                    currency: $current->currency,
+                    chargeId: $current->chargeId,
+                    clientSecret: $current->clientSecret,
+                    failureCode: $current->failureCode,
+                    failureMessage: $current->failureMessage,
+                    refundedAmount: min(
+                        $current->amount,
+                        $current->refundedAmount + $result->amount,
+                    ),
+                ));
+            }
+        }
+
         return $result;
     }
 

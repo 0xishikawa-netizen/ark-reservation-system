@@ -192,6 +192,7 @@ class ReservationTicketIntegrationTest extends TestCase
     {
         app(Settings::class)->set('ticket.no_show_policy', 'restore');
         [$reservation, $wallet] = $this->ticketReservation('no-show-restore');
+        $this->moveAfterReservationStart();
 
         $noShow = $this->reservations()->markNoShow($reservation, null);
 
@@ -205,6 +206,7 @@ class ReservationTicketIntegrationTest extends TestCase
     {
         app(Settings::class)->set('ticket.no_show_policy', 'consume');
         [$reservation, $wallet, $actor] = $this->ticketReservation('no-show-consume');
+        $this->moveAfterReservationStart();
 
         $noShow = $this->reservations()->markNoShow($reservation, $actor);
 
@@ -223,6 +225,7 @@ class ReservationTicketIntegrationTest extends TestCase
         app(Settings::class)->set('ticket.no_show_policy', 'restore');
         [$reservation, $wallet] = $this->ticketReservation('no-show-non-retroactive');
         app(Settings::class)->set('ticket.no_show_policy', 'consume');
+        $this->moveAfterReservationStart();
 
         $this->reservations()->markNoShow($reservation, null);
 
@@ -252,6 +255,7 @@ class ReservationTicketIntegrationTest extends TestCase
             $staff,
             startsAt: CarbonImmutable::parse('2026-10-01 14:00:00'),
         ));
+        $this->moveAfterReservationStart();
 
         $this->reservations()->cancel($canceled, null, null);
         $this->reservations()->markCompleted($completed, null);
@@ -432,5 +436,11 @@ class ReservationTicketIntegrationTest extends TestCase
         return TicketTransaction::query()
             ->where('type', $type->value)
             ->count();
+    }
+
+    private function moveAfterReservationStart(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-02 09:00:00'));
+        Carbon::setTestNow(Carbon::parse('2026-10-02 09:00:00'));
     }
 }

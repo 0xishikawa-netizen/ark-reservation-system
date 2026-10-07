@@ -485,6 +485,7 @@ class ReservationServiceTest extends TestCase
             $booth,
             CarbonImmutable::parse('2026-10-01 12:00:00'),
         ));
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-01 13:00:00'));
 
         $completed = $this->reservationService()->markCompleted($completed, null);
         $noShow = $this->reservationService()->markNoShow($noShow, null);
@@ -514,6 +515,20 @@ class ReservationServiceTest extends TestCase
             'action' => 'reservation.no_show',
             'entity_id' => (string) $noShow->id,
         ]);
+    }
+
+    public function test_mark_no_show_rejects_reservation_that_has_not_started(): void
+    {
+        [$customer, $service, $staff, $booth] = $this->bookableMasters();
+        $reservation = $this->reservationService()->create(
+            $this->input($customer, $service, $staff, $booth),
+        );
+
+        $this->assertValidationFailure(
+            fn () => $this->reservationService()->markNoShow($reservation, null),
+            'starts_at',
+        );
+        $this->assertSame(ReservationStatus::Confirmed, $reservation->fresh()?->status);
     }
 
     public function test_conflict_exceptions_render_as_http_409_for_json_requests(): void

@@ -237,13 +237,4 @@
         padding-bottom: 60px;
     }
 
-    /* 集計は横スクロールさせず折り返す。 */
-    .daily-summary__row {
-        flex-wrap: wrap;
-        gap: var(--ark-space-3) var(--ark-space-4);
-    }
-
-    .daily-summary__divider {
-        display: none;
-    }
 }

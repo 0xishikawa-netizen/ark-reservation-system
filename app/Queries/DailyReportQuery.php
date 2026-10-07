@@ -96,6 +96,8 @@ final class DailyReportQuery
             ->selectRaw('COALESCE(SUM(CASE WHEN v.visit_sequence = 1 AND v.future_reservation_exists_at_checkout IS NULL THEN 1 ELSE 0 END), 0) AS first_visit_reservation_unknown_count')
             // 会計なし完了の理由（無料・事前決済済み・回数券/月額利用）がある来店は会計待ちに数えない（Task 11-27）。
             ->selectRaw('COALESCE(SUM(CASE WHEN c.id IS NULL AND v.checkout_exemption_reason IS NULL THEN 1 ELSE 0 END), 0) AS accounting_pending_visit_count')
+            // 月次概要と同じ客単価の分子。決済日ではなく、来店に紐づく確定会計の税込合計を使う。
+            ->selectRaw('COALESCE(SUM(CASE WHEN c.status = ? THEN c.total_amount ELSE 0 END), 0) AS visit_gross', [CheckoutStatus::Finalized->value])
             ->get()->mapWithKeys(static fn (object $row): array => [(string) $row->business_date => [
                 'visit_count' => (int) $row->visit_count,
                 'future_reservation_count' => (int) $row->future_reservation_count,
@@ -104,6 +106,7 @@ final class DailyReportQuery
                 'first_visit_reservation_count' => (int) $row->first_visit_reservation_count,
                 'first_visit_reservation_unknown_count' => (int) $row->first_visit_reservation_unknown_count,
                 'accounting_pending_visit_count' => (int) $row->accounting_pending_visit_count,
+                'visit_gross' => (int) $row->visit_gross,
             ]])->all();
     }
 
@@ -330,7 +333,7 @@ final class DailyReportQuery
             'visits' => [
                 'visit_count' => 0, 'future_reservation_count' => 0, 'future_reservation_unknown_count' => 0,
                 'first_visit_count' => 0, 'first_visit_reservation_count' => 0,
-                'first_visit_reservation_unknown_count' => 0, 'accounting_pending_visit_count' => 0,
+                'first_visit_reservation_unknown_count' => 0, 'accounting_pending_visit_count' => 0, 'visit_gross' => 0,
             ],
             'durations' => ['long_visit_count' => 0, 'unknown_treatment_minutes_visit_count' => 0],
             'categories' => [], 'unknown_category_visits' => 0, 'payment_methods' => [], 'taxes' => [],

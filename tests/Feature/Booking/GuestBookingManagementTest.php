@@ -14,6 +14,7 @@ use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\PaymentStatus as ReservationPaymentStatus;
 use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
+use App\Exceptions\Payment\PaymentGatewayTimeoutException;
 use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\PaymentRefund;
@@ -173,6 +174,23 @@ final class GuestBookingManagementTest extends TestCase
         $this->assertSame('2026-10-02 11:00:00', $reservation->refresh()->starts_at->format('Y-m-d H:i:s'));
     }
 
+    public function test_guest_reschedule_keeps_current_staff_for_service_that_does_not_require_staff(): void
+    {
+        [$reservation, $token, $service, $staff] = $this->guestReservation(PaymentMethod::Onsite);
+        $service->forceFill(['requires_staff' => false])->save();
+
+        $this->put(route('booking.confirmation.reschedule', ['selector' => $token]), [
+            'starts_at' => '2026-10-02 11:00:00',
+            'version' => 0,
+        ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('booking.confirmation.show', ['selector' => $token]));
+
+        $reservation->refresh();
+        $this->assertSame($staff->user_id, $reservation->staff_id);
+        $this->assertSame('2026-10-02 11:00:00', $reservation->starts_at->format('Y-m-d H:i:s'));
+    }
+
     public function test_guest_can_cancel_a_past_pending_payment_and_release_its_payment_and_slots(): void
     {
         [$reservation, $token, , $staff] = $this->guestReservation(
@@ -237,7 +255,7 @@ final class GuestBookingManagementTest extends TestCase
         $this->assertSame(ReservationPaymentStatus::Failed, $reservation->payment_status);
     }
 
-    public function test_guest_cancel_uses_customer_eligibility_rules_and_null_actor_fails_refund_safely(): void
+    public function test_guest_cancel_uses_customer_eligibility_rules(): void
     {
         [$pastReservation, $pastToken] = $this->guestReservation(
             PaymentMethod::Onsite,
@@ -247,34 +265,78 @@ final class GuestBookingManagementTest extends TestCase
         $this->delete(route('booking.confirmation.cancel', ['selector' => $pastToken]))
             ->assertSessionHasErrors('starts_at');
         $this->assertSame(ReservationStatus::Confirmed, $pastReservation->refresh()->status);
+    }
 
-        [$paidReservation, $paidToken] = $this->guestReservation(
-            PaymentMethod::Single,
-            CarbonImmutable::now()->addHours(72),
-            ReservationStatus::Confirmed,
-            ReservationPaymentStatus::Paid,
+    public function test_guest_token_cancel_refunds_captured_card_payment_with_customer_user_as_actor(): void
+    {
+        [$reservation, $token, $payment] = $this->capturedGuestReservation();
+
+        $this->delete(route('booking.confirmation.cancel', ['selector' => $token]), [
+            'reason' => '予定変更',
+        ])->assertRedirect(route('booking.confirmation.show', ['selector' => $token]));
+
+        $refund = PaymentRefund::query()->sole();
+        $this->assertSame(ReservationStatus::Canceled, $reservation->refresh()->status);
+        $this->assertSame(PaymentStatus::Refunded, $payment->refresh()->status);
+        $this->assertSame(5000, $payment->refunded_amount);
+        $this->assertSame('succeeded', $refund->status->value);
+        $this->assertSame($reservation->customer_id, $refund->created_by);
+        $this->assertFalse($payment->needs_attention);
+    }
+
+    public function test_double_guest_cancel_request_does_not_create_a_second_refund(): void
+    {
+        [$reservation, $token, $payment] = $this->capturedGuestReservation();
+
+        $this->delete(route('booking.confirmation.cancel', ['selector' => $token]))
+            ->assertSessionHasNoErrors();
+        $this->delete(route('booking.confirmation.cancel', ['selector' => $token]))
+            ->assertSessionHasErrors('status');
+
+        $this->assertSame(ReservationStatus::Canceled, $reservation->refresh()->status);
+        $this->assertSame(PaymentStatus::Refunded, $payment->refresh()->status);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertCount(1, app(FakeStripeGateway::class)->callsFor(FakeStripeGateway::REFUND));
+    }
+
+    public function test_guest_cancel_refund_timeout_keeps_pending_refund_and_flags_attention(): void
+    {
+        [$reservation, $token, $payment] = $this->capturedGuestReservation();
+        app(FakeStripeGateway::class)->queue(
+            FakeStripeGateway::REFUND,
+            new PaymentGatewayTimeoutException('timeout'),
         );
-        $payment = Payment::factory()->create([
-            'customer_id' => $paidReservation->customer_id,
-            'reservation_id' => $paidReservation->id,
-            'kind' => PaymentKind::Single,
-            'status' => PaymentStatus::Succeeded,
+
+        $this->delete(route('booking.confirmation.cancel', ['selector' => $token]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(ReservationStatus::Canceled, $reservation->refresh()->status);
+        $this->assertSame(PaymentStatus::Succeeded, $payment->refresh()->status);
+        $this->assertTrue($payment->needs_attention);
+        $this->assertSame('ambiguous_timeout', $payment->failure_code);
+        $this->assertSame('pending', PaymentRefund::query()->sole()->status->value);
+    }
+
+    public function test_guest_cancel_of_already_fully_refunded_payment_creates_no_new_refund(): void
+    {
+        [$reservation, $token, $payment] = $this->capturedGuestReservation();
+        $payment->forceFill([
+            'status' => PaymentStatus::Refunded,
+            'refunded_amount' => 5000,
+        ])->save();
+        PaymentRefund::factory()->create([
+            'payment_id' => $payment->id,
             'amount' => 5000,
-            'refunded_amount' => 0,
-            'stripe_payment_intent_id' => 'pi_guest_cancel',
-            'stripe_charge_id' => 'ch_guest_cancel',
-            'paid_at' => now(),
-            'created_by' => null,
+            'status' => 'succeeded',
+            'created_by' => $reservation->customer_id,
         ]);
 
-        $this->delete(route('booking.confirmation.cancel', ['selector' => $paidToken]), [
-            'reason' => '予定変更',
-        ])->assertRedirect(route('booking.confirmation.show', ['selector' => $paidToken]));
+        $this->delete(route('booking.confirmation.cancel', ['selector' => $token]))
+            ->assertSessionHasNoErrors();
 
-        $this->assertSame(ReservationStatus::Canceled, $paidReservation->refresh()->status);
-        $this->assertTrue($payment->refresh()->needs_attention);
-        $this->assertSame('cancel_refund_failed', $payment->failure_code);
-        $this->assertSame(0, PaymentRefund::query()->count());
+        $this->assertSame(ReservationStatus::Canceled, $reservation->refresh()->status);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertCount(0, app(FakeStripeGateway::class)->callsFor(FakeStripeGateway::REFUND));
     }
 
     public function test_mismatched_selector_or_validator_cannot_access_or_mutate_another_reservation(): void
@@ -434,5 +496,39 @@ final class GuestBookingManagementTest extends TestCase
             $service,
             $staff,
         ];
+    }
+
+    /** @return array{Reservation, string, Payment} */
+    private function capturedGuestReservation(): array
+    {
+        [$reservation, $token] = $this->guestReservation(
+            PaymentMethod::Single,
+            CarbonImmutable::now()->addHours(72),
+            ReservationStatus::Confirmed,
+            ReservationPaymentStatus::Paid,
+        );
+        $payment = Payment::factory()->create([
+            'customer_id' => $reservation->customer_id,
+            'reservation_id' => $reservation->id,
+            'kind' => PaymentKind::Single,
+            'status' => PaymentStatus::Succeeded,
+            'amount' => 5000,
+            'refunded_amount' => 0,
+            'stripe_payment_intent_id' => 'pi_guest_cancel_'.$reservation->id,
+            'stripe_charge_id' => 'ch_guest_cancel_'.$reservation->id,
+            'paid_at' => now(),
+            'created_by' => null,
+        ]);
+        app(FakeStripeGateway::class)->setPaymentIntent(new PaymentIntentResult(
+            id: (string) $payment->stripe_payment_intent_id,
+            status: 'succeeded',
+            amount: 5000,
+            amountCapturable: 0,
+            amountReceived: 5000,
+            currency: 'jpy',
+            chargeId: (string) $payment->stripe_charge_id,
+        ));
+
+        return [$reservation, $token, $payment];
     }
 }

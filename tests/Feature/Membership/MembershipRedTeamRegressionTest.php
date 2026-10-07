@@ -20,9 +20,11 @@ use App\Models\MembershipPlan;
 use App\Models\MembershipUsageTransaction;
 use App\Models\Reservation;
 use App\Models\WebhookEvent;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -38,11 +40,13 @@ final class MembershipRedTeamRegressionTest extends TestCase
     {
         parent::setUp();
         Carbon::setTestNow('2026-09-15 09:00:00');
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-15 09:00:00'));
     }
 
     protected function tearDown(): void
     {
         Carbon::setTestNow();
+        CarbonImmutable::setTestNow();
         parent::tearDown();
     }
 
@@ -149,7 +153,11 @@ final class MembershipRedTeamRegressionTest extends TestCase
         ]);
         app(MembershipLedgerService::class)->grant($membership, '2026-08-01', 4);
 
-        $reservation = Reservation::factory()->create(['customer_id' => $customer->user_id]);
+        $reservation = Reservation::factory()->create([
+            'customer_id' => $customer->user_id,
+            'starts_at' => '2026-09-15 10:00:00',
+            'ends_at' => '2026-09-15 11:00:00',
+        ]);
 
         $this->expectException(InsufficientMembershipBalanceException::class);
         app(MembershipReservationService::class)->reserve($reservation);
@@ -169,10 +177,99 @@ final class MembershipRedTeamRegressionTest extends TestCase
         ]);
         app(MembershipLedgerService::class)->grant($membership, '2026-09-01', 4);
 
-        $reservation = Reservation::factory()->create(['customer_id' => $customer->user_id]);
+        $reservation = Reservation::factory()->create([
+            'customer_id' => $customer->user_id,
+            'starts_at' => '2026-09-20 10:00:00',
+            'ends_at' => '2026-09-20 11:00:00',
+        ]);
         $usage = app(MembershipReservationService::class)->reserve($reservation);
 
         $this->assertSame($membership->id, $usage->membership_id);
+    }
+
+    #[DataProvider('cancelingPeriodBoundaryCases')]
+    public function test_f07_canceling_membership_uses_jst_today_and_reservation_business_date(
+        string $nowJst,
+        string $reservationStartsAtJst,
+        string $periodEnd,
+        bool $allowed,
+        string $storedStartsAtUtc,
+    ): void {
+        $now = Carbon::parse($nowJst, 'Asia/Tokyo')->utc();
+        Carbon::setTestNow($now);
+        CarbonImmutable::setTestNow(CarbonImmutable::instance($now));
+        $customer = Customer::factory()->create();
+        $plan = MembershipPlan::factory()->create(['usage_count_per_period' => 4]);
+        $membership = Membership::factory()->create([
+            'customer_id' => $customer->user_id,
+            'membership_plan_id' => $plan->id,
+            'status' => MembershipStatus::Canceling->value,
+            'cancel_at_period_end' => true,
+            'current_period_start' => '2026-01-01',
+            'current_period_end' => $periodEnd,
+        ]);
+        app(MembershipLedgerService::class)->grant($membership, '2026-01-01', 4);
+
+        $startsAt = Carbon::parse($reservationStartsAtJst, 'Asia/Tokyo')->utc();
+        $reservation = Reservation::factory()->create([
+            'customer_id' => $customer->user_id,
+            'starts_at' => $startsAt,
+            'ends_at' => $startsAt->copy()->addHour(),
+        ]);
+        $this->assertDatabaseHas('reservations', [
+            'id' => $reservation->id,
+            'starts_at' => $storedStartsAtUtc,
+        ]);
+
+        if ($allowed) {
+            $usage = app(MembershipReservationService::class)->reserve($reservation);
+            $this->assertSame($membership->id, $usage->membership_id);
+
+            return;
+        }
+
+        try {
+            app(MembershipReservationService::class)->reserve($reservation);
+            $this->fail('解約予定の期末後に利用権予約ができました。');
+        } catch (InsufficientMembershipBalanceException) {
+            $this->assertDatabaseMissing('membership_reservation_usages', [
+                'reservation_id' => $reservation->id,
+            ]);
+        }
+    }
+
+    /** @return array<string, array{string, string, string, bool, string}> */
+    public static function cancelingPeriodBoundaryCases(): array
+    {
+        return [
+            'today before end and reservation before end' => [
+                '2026-09-15 09:00:00', '2026-09-20 10:00:00', '2026-09-30', true, '2026-09-20 01:00:00',
+            ],
+            'reservation on end date is allowed' => [
+                '2026-09-15 09:00:00', '2026-09-30 10:00:00', '2026-09-30', true, '2026-09-30 01:00:00',
+            ],
+            'reservation after end date is rejected' => [
+                '2026-09-15 09:00:00', '2026-10-01 10:00:00', '2026-09-30', false, '2026-10-01 01:00:00',
+            ],
+            'today on end date is allowed' => [
+                '2026-09-30 09:00:00', '2026-09-30 10:00:00', '2026-09-30', true, '2026-09-30 01:00:00',
+            ],
+            'today after end date is rejected' => [
+                '2026-10-01 09:00:00', '2026-09-30 10:00:00', '2026-09-30', false, '2026-09-30 01:00:00',
+            ],
+            'month boundary is rejected' => [
+                '2026-10-15 09:00:00', '2026-11-01 10:00:00', '2026-10-31', false, '2026-11-01 01:00:00',
+            ],
+            'year boundary is rejected' => [
+                '2026-12-15 09:00:00', '2027-01-01 10:00:00', '2026-12-31', false, '2027-01-01 01:00:00',
+            ],
+            'JST midnight belongs to next business date' => [
+                '2026-09-15 09:00:00', '2026-10-01 00:30:00', '2026-09-30', false, '2026-09-30 15:30:00',
+            ],
+            'JST late night on end date is allowed' => [
+                '2026-09-15 09:00:00', '2026-09-30 23:30:00', '2026-09-30', true, '2026-09-30 14:30:00',
+            ],
+        ];
     }
 
     // ---- F-10: 曖昧な cancel/resume/cancel-now は needs_attention を立てる ----

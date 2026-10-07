@@ -122,7 +122,11 @@ final class BookingConfirmationController extends Controller
             ? (int) $validated['staff_id']
             : null;
 
-        if ($staffId === null) {
+        if ($staffId === null && ! $reservation->service()->firstOrFail()->requires_staff) {
+            $staffId = $reservation->staff_id === null
+                ? null
+                : (int) $reservation->staff_id;
+        } elseif ($staffId === null) {
             $candidate = collect($availabilityService->openStartTimes(
                 (int) $reservation->service_id,
                 null,

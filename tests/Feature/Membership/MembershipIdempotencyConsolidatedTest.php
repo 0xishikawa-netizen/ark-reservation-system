@@ -164,6 +164,7 @@ final class MembershipIdempotencyConsolidatedTest extends TestCase
         );
 
         app(Settings::class)->set('membership.no_show_policy', MembershipNoShowPolicy::Restore->value);
+        Carbon::setTestNow('2026-10-02 09:00:00');
         app(ReservationService::class)->markNoShow($reservation, $customer->user);
 
         $this->assertSame(1, $this->usageCount($membership, MembershipUsageType::Release));
@@ -180,6 +181,7 @@ final class MembershipIdempotencyConsolidatedTest extends TestCase
         );
 
         app(Settings::class)->set('membership.no_show_policy', MembershipNoShowPolicy::Consume->value);
+        Carbon::setTestNow('2026-10-02 09:00:00');
         app(ReservationService::class)->markNoShow($reservation, $customer->user);
 
         $this->assertSame(1, $this->usageCount($membership, MembershipUsageType::Release));

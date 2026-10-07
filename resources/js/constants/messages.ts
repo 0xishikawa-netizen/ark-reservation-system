@@ -84,6 +84,27 @@ export const MESSAGES = {
     },
     /** ブッキングボードの予定 */
     schedule: {
+        dailySummary: {
+            reservation: '予約',
+            upcoming: 'これから',
+            completed: '来店完了',
+            accountingPending: '会計待ち',
+            newCustomer: '新規',
+            repeatCustomer: 'リピーター',
+            futureReservation: '次回予約',
+            nominated: '指名',
+            online: 'ネット予約',
+            canceled: 'キャンセル',
+            noShow: '無断キャンセル',
+            byCourse: 'コース別',
+            uncategorized: '未分類',
+            revenue: '売上',
+            averageSpend: '客単価',
+            treatment: '施術等',
+            retail: '物販',
+            todayTitle: '本日の集計',
+            dateTitle: '{date}の集計',
+        },
         pastConfirmTitle: '過去の日時に登録しますか？',
         pastConfirmBody: '{when} は現在より前の日時です。このまま登録してよいか確認してください。',
         choiceReservationDesc: '顧客・メニューを選んで予約を登録します',
@@ -301,6 +322,13 @@ export const MESSAGES = {
     /** システム */
     system: {
         noFailedJobs: '失敗ジョブはありません。',
+        backupOk: 'OK',
+        backupWarning: '注意',
+        backupUnmeasured: '未計測',
+        backupNewestAt: '取得日時',
+        backupSize: 'サイズ',
+        backupAge: '経過',
+        backupHours: '時間',
     },
     /** 集計 */
     reporting: {

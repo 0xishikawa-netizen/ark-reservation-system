@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Reservation;
 
+use App\Domain\Payment\Gateway\Dto\PaymentIntentResult;
 use App\Domain\Payment\Gateway\FakeStripeGateway;
 use App\Domain\Reservation\ReservationService;
 use App\Enums\Payment\PaymentKind;
@@ -192,6 +193,48 @@ final class ReservationCancellationRefundTest extends TestCase
         $this->assertSame($customer->user_id, PaymentRefund::query()->sole()->created_by);
     }
 
+    public function test_cancellation_refund_syncs_external_partial_refund_and_clamps_to_remaining_amount(): void
+    {
+        [$reservation, $payment, $customer] = $this->capturedReservation(72, 5000);
+        $this->gateway()->setPaymentIntent(new PaymentIntentResult(
+            id: (string) $payment->stripe_payment_intent_id,
+            status: 'succeeded',
+            amount: 5000,
+            amountCapturable: 0,
+            amountReceived: 5000,
+            currency: 'jpy',
+            chargeId: (string) $payment->stripe_charge_id,
+            refundedAmount: 1000,
+        ));
+
+        app(ReservationService::class)->cancel($reservation, '外部一部返金後', $customer->user);
+
+        $this->assertSame(4000, PaymentRefund::query()->sole()->amount);
+        $this->assertSame(5000, $payment->refresh()->refunded_amount);
+        $this->assertSame(PaymentStatus::Refunded, $payment->status);
+    }
+
+    public function test_admin_with_customer_profile_can_cancel_started_reservation(): void
+    {
+        $manager = $this->roleUser('manager');
+        Customer::factory()->create(['user_id' => $manager->id]);
+        $reservationCustomer = Customer::factory()->create();
+        $reservation = Reservation::factory()->create([
+            'customer_id' => $reservationCustomer->user_id,
+            'starts_at' => now()->subHour(),
+            'ends_at' => now(),
+            'payment_method' => PaymentMethod::Onsite,
+            'payment_status' => ReservationPaymentStatus::Unpaid,
+            'status' => ReservationStatus::Confirmed,
+        ]);
+
+        $this->actingAs($manager)
+            ->patch("/admin/reservations/{$reservation->id}/cancel", ['reason' => '店舗判断'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(ReservationStatus::Canceled, $reservation->refresh()->status);
+    }
+
     /** @return array{Reservation, Payment, Customer} */
     private function capturedReservation(int $hoursUntilStart, int $amount): array
     {
@@ -217,6 +260,15 @@ final class ReservationCancellationRefundTest extends TestCase
             'paid_at' => now(),
             'created_by' => $customer->user_id,
         ]);
+        $this->gateway()->setPaymentIntent(new PaymentIntentResult(
+            id: (string) $payment->stripe_payment_intent_id,
+            status: 'succeeded',
+            amount: $amount,
+            amountCapturable: 0,
+            amountReceived: $amount,
+            currency: 'jpy',
+            chargeId: (string) $payment->stripe_charge_id,
+        ));
 
         return [$reservation, $payment, $customer];
     }

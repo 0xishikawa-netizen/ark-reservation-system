@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use LogicException;
+use Throwable;
 
 final class PaymentService
 {
@@ -253,8 +254,11 @@ final class PaymentService
             throw new LogicException('返金実行者の user ID が不正です。');
         }
 
-        $refund = DB::transaction(function () use ($payment, $amount, $reason, $actorId): PaymentRefund {
-            $locked = $this->lockPayment($payment);
+        // 外部返金を含む Stripe の現在値を TX1 の前に同期し、取得失敗・不整合時は返金しない。
+        $syncedPayment = $this->syncFromStripe($payment);
+
+        $refund = DB::transaction(function () use ($syncedPayment, $amount, $reason, $actorId): PaymentRefund {
+            $locked = $this->lockPayment($syncedPayment);
 
             if (! in_array($locked->status, [
                 PaymentStatus::Succeeded,
@@ -265,13 +269,18 @@ final class PaymentService
                 ]);
             }
 
-            // pending も予約額として数え、並行する返金がどちらも Stripe へ進むことを防ぐ。
-            $reservedAmount = (int) PaymentRefund::query()
+            $succeededAmount = (int) PaymentRefund::query()
                 ->where('payment_id', $locked->getKey())
-                ->whereIn('status', [RefundStatus::Pending->value, RefundStatus::Succeeded->value])
+                ->where('status', RefundStatus::Succeeded->value)
                 ->sum('amount');
+            // pending も予約額として数え、並行する返金がどちらも Stripe へ進むことを防ぐ。
+            $pendingAmount = (int) PaymentRefund::query()
+                ->where('payment_id', $locked->getKey())
+                ->where('status', RefundStatus::Pending->value)
+                ->sum('amount');
+            $alreadyRefunded = max((int) $locked->refunded_amount, $succeededAmount);
 
-            if ($reservedAmount + $amount > (int) $locked->amount) {
+            if ($alreadyRefunded + $pendingAmount + $amount > (int) $locked->amount) {
                 throw ValidationException::withMessages([
                     'amount' => __('messages.payment.refund_exceeds_amount'),
                 ]);
@@ -354,10 +363,11 @@ final class PaymentService
         }
 
         if (in_array($persisted->status, [PaymentStatus::Succeeded, PaymentStatus::PartiallyRefunded], true)) {
-            $remaining = (int) $persisted->amount - (int) $persisted->refunded_amount;
+            $synced = $this->syncFromStripe($persisted);
+            $remaining = $this->remainingRefundableAmount($synced);
 
             if ($remaining > 0) {
-                $this->refund($persisted, $remaining, $reason, $actor);
+                $this->refund($synced, $remaining, $reason, $actor);
             }
 
             return;
@@ -370,6 +380,24 @@ final class PaymentService
         throw ValidationException::withMessages([
             'payment' => __('messages.payment.cannot_void_or_refund'),
         ]);
+    }
+
+    public function remainingRefundableAmount(Payment $payment): int
+    {
+        $persisted = $this->persistedPayment($payment);
+        $succeededAmount = (int) $persisted->refunds()
+            ->where('status', RefundStatus::Succeeded->value)
+            ->sum('amount');
+        $pendingAmount = (int) $persisted->refunds()
+            ->where('status', RefundStatus::Pending->value)
+            ->sum('amount');
+
+        return max(
+            0,
+            (int) $persisted->amount
+                - max((int) $persisted->refunded_amount, $succeededAmount)
+                - $pendingAmount,
+        );
     }
 
     public function syncFromStripe(Payment $payment): Payment
@@ -447,7 +475,12 @@ final class PaymentService
                 $changes['refunded_amount'] = min($result->refundedAmount, (int) $locked->amount);
             }
 
-            if ($locked->failure_code === self::AMBIGUOUS_TIMEOUT_CODE) {
+            $hasPendingRefund = PaymentRefund::query()
+                ->where('payment_id', $locked->getKey())
+                ->where('status', RefundStatus::Pending->value)
+                ->exists();
+
+            if ($locked->failure_code === self::AMBIGUOUS_TIMEOUT_CODE && ! $hasPendingRefund) {
                 $changes['needs_attention'] = false;
                 $changes['failure_code'] = null;
                 $changes['failure_message'] = null;
@@ -591,7 +624,7 @@ final class PaymentService
             throw new PaymentGatewayException('Stripe返金結果の整合性を確認できませんでした。');
         }
 
-        return DB::transaction(function () use ($refund, $payment, $result): PaymentRefund {
+        $completed = DB::transaction(function () use ($refund, $payment, $result): PaymentRefund {
             $lockedPayment = $this->lockPayment($payment);
             $lockedRefund = PaymentRefund::query()
                 ->whereKey($refund->getKey())
@@ -613,10 +646,17 @@ final class PaymentService
                 'failure_message' => null,
             ])->save();
 
-            $refundedAmount = (int) PaymentRefund::query()
+            $succeededAmount = (int) PaymentRefund::query()
                 ->where('payment_id', $lockedPayment->getKey())
                 ->where('status', RefundStatus::Succeeded->value)
                 ->sum('amount');
+            $refundedAmount = min(
+                (int) $lockedPayment->amount,
+                max(
+                    (int) $lockedPayment->refunded_amount,
+                    $succeededAmount,
+                ),
+            );
             $target = $refundedAmount >= (int) $lockedPayment->amount
                 ? PaymentStatus::Refunded
                 : PaymentStatus::PartiallyRefunded;
@@ -651,6 +691,15 @@ final class PaymentService
 
             return $lockedRefund->refresh();
         });
+
+        try {
+            // Stripe の累計返金額は TX2 の commit 後に取り込み、外部返金分を安全に補完する。
+            $this->syncFromStripe($payment);
+        } catch (Throwable) {
+            // ローカル値は過少のままでも減少しない。次回返金前の必須同期で再照合する。
+        }
+
+        return $completed;
     }
 
     private function markAmbiguousTimeout(Payment $payment): void

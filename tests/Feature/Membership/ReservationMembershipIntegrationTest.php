@@ -190,6 +190,8 @@ final class ReservationMembershipIntegrationTest extends TestCase
         $r = $this->svc()->create($this->input($c, $s, $st, PaymentMethod::Membership));
         // 予約後にポリシー変更しても遡及しない。
         app(Settings::class)->set('membership.no_show_policy', 'restore');
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-02 09:00:00'));
+        Carbon::setTestNow(Carbon::parse('2026-10-02 09:00:00'));
         $this->svc()->markNoShow($r, null);
 
         $this->assertSame(3, app(MembershipLedgerService::class)->available($membership));

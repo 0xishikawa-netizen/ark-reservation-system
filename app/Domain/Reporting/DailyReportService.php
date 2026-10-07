@@ -65,6 +65,7 @@ final class DailyReportService
             weekdayIso: $businessDate->dayOfWeekIso,
             weekday: self::WEEKDAYS[$businessDate->dayOfWeekIso],
             paymentDateRevenue: $paymentDateRevenue,
+            visitGross: $visits['visit_gross'],
             treatmentDateRevenue: $treatmentDateRevenue,
             directTreatmentRevenue: $facts['direct_treatment_revenue'],
             allocatedTreatmentRevenue: $facts['allocated_treatment_revenue'],
@@ -100,6 +101,7 @@ final class DailyReportService
                 'first_visit_reservation_count' => 0,
                 'first_visit_reservation_unknown_count' => 0,
                 'accounting_pending_visit_count' => 0,
+                'visit_gross' => 0,
             ],
             'durations' => [
                 'long_visit_count' => 0,

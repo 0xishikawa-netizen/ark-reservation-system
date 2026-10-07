@@ -208,7 +208,7 @@ final class ReservationAdjustmentServiceTest extends TestCase
         PaymentStatus $status,
         int $refunded = 0,
     ): Payment {
-        return Payment::factory()->create([
+        $payment = Payment::factory()->create([
             'customer_id' => $reservation->customer_id,
             'reservation_id' => $reservation->id,
             'kind' => PaymentKind::Single,
@@ -222,6 +222,21 @@ final class ReservationAdjustmentServiceTest extends TestCase
                 ? now()
                 : null,
         ]);
+        $stripeStatus = $status === PaymentStatus::Pending
+            ? 'requires_payment_method'
+            : 'succeeded';
+        $this->gateway->setPaymentIntent(new PaymentIntentResult(
+            id: (string) $payment->stripe_payment_intent_id,
+            status: $stripeStatus,
+            amount: $amount,
+            amountCapturable: 0,
+            amountReceived: $stripeStatus === 'succeeded' ? $amount : 0,
+            currency: (string) $payment->currency,
+            chargeId: $stripeStatus === 'succeeded' ? (string) $payment->stripe_charge_id : null,
+            refundedAmount: $refunded,
+        ));
+
+        return $payment;
     }
 
     private function intent(Payment $payment, string $status): PaymentIntentResult

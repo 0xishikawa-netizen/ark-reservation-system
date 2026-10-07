@@ -163,8 +163,12 @@ final class StoreFlowVerificationTest extends TestCase
         $this->assertFactIntegrity();
 
         // 別の予約：キャンセルと無断キャンセル。来店・売上には入らず、予約分析にだけ出る。
-        app(ReservationService::class)->cancel($this->book('17:00'), '検証キャンセル', null);
-        app(ReservationService::class)->markNoShow($this->book('18:00'), null);
+        $canceled = $this->book('17:00');
+        $noShow = $this->book('18:00');
+        app(ReservationService::class)->cancel($canceled, '検証キャンセル', null);
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-15 19:00:00', 'UTC'));
+        app(ReservationService::class)->markNoShow($noShow, null);
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-09-14 23:00:00', 'UTC'));
         // 来店なしの物販 2,200（来店数は増えない）。
         $this->storeSale($admin, 2);
 

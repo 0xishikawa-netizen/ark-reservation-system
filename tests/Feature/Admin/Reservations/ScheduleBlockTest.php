@@ -185,6 +185,57 @@ final class ScheduleBlockTest extends TestCase
         $this->assertDatabaseCount('reservations', 0);
     }
 
+    public function test_booth_block_cannot_be_created_over_an_existing_booth_reservation(): void
+    {
+        $booth = Booth::factory()->create(['is_active' => true]);
+        $service = Service::factory()->create(['duration_min' => 60, 'requires_staff' => false, 'is_active' => true]);
+        Reservation::factory()->create([
+            'customer_id' => Customer::factory()->create()->user_id,
+            'service_id' => $service->id,
+            'staff_id' => null,
+            'booth_id' => $booth->id,
+            'starts_at' => '2026-10-01 12:00:00',
+            'ends_at' => '2026-10-01 13:00:00',
+            'status' => ReservationStatus::Confirmed,
+        ]);
+
+        $this->actingAs($this->admin())
+            ->postJson('/admin/schedule/blocks', [
+                'booth_id' => $booth->id,
+                'work_date' => '2026-10-01',
+                'start_at' => '12:30',
+                'end_at' => '13:00',
+                'type' => 'CLEANING',
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseCount('staff_schedule_blocks', 0);
+    }
+
+    public function test_reservation_cannot_be_created_over_an_existing_booth_block(): void
+    {
+        $booth = Booth::factory()->create(['is_active' => true]);
+        $service = Service::factory()->create(['duration_min' => 60, 'requires_staff' => false, 'is_active' => true]);
+        StaffScheduleBlock::factory()->create([
+            'staff_id' => null,
+            'booth_id' => $booth->id,
+            'work_date' => '2026-10-01',
+            'start_at' => '12:00:00',
+            'end_at' => '13:00:00',
+        ]);
+
+        $this->actingAs($this->admin())
+            ->postJson('/admin/reservations', [
+                'customer_id' => Customer::factory()->create()->user_id,
+                'service_id' => $service->id,
+                'booth_id' => $booth->id,
+                'starts_at' => '2026-10-01 12:30:00',
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseCount('reservations', 0);
+    }
+
     public function test_two_blocks_cannot_overlap_for_the_same_staff(): void
     {
         $staff = $this->staffWithShift();

@@ -225,6 +225,7 @@ final class AdminReservationManagementTest extends TestCase
         $canceled = $this->createThroughService($customer, $service, $staff, $booth, $manager, '10:00:00');
         $completed = $this->createThroughService($customer, $service, $staff, $booth, $manager, '12:00:00');
         $noShow = $this->createThroughService($customer, $service, $staff, $booth, $manager, '14:00:00');
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-02 09:00:00'));
 
         $this->actingAs($manager)
             ->patch("/admin/reservations/{$canceled->id}/cancel", ['reason' => '店舗都合'])

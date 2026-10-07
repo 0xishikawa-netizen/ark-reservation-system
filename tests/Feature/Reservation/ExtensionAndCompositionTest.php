@@ -134,6 +134,25 @@ final class ExtensionAndCompositionTest extends TestCase
         $this->assertSame('15:00', $reservation->fresh()->ends_at->format('H:i'));
     }
 
+    public function test_extension_is_refused_when_the_segment_service_is_inactive(): void
+    {
+        $reservation = $this->book($this->staffA, '14:00');
+        $this->training->forceFill(['is_active' => false])->save();
+
+        $this->assertValidationKey(
+            fn () => app(ReservationService::class)->extend(
+                (int) $reservation->id,
+                30,
+                (int) $this->training->id,
+                (int) $reservation->version,
+                null,
+            ),
+            'service_id',
+        );
+        $this->assertSame('15:00', $reservation->fresh()->ends_at->format('H:i'));
+        $this->assertSame(0, $reservation->segments()->count());
+    }
+
     public function test_actual_composition_within_the_reserved_time_follows_qualification_rules(): void
     {
         $reservation = $this->book($this->staffA, '14:00', 5);

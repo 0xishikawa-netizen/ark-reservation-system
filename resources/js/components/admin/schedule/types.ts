@@ -124,11 +124,27 @@ export interface BoothOption {
 export interface DailySummary {
     total: number;
     completed: number;
+    /** まだ来店していない（これから来る）予約。 */
+    upcoming: number;
+    /** 来店済みで会計がまだの件数。 */
+    accounting_pending: number;
     new_customers: number;
     repeat_customers: number;
     canceled: number;
     no_show: number;
+    nominated: number;
+    /** 管理画面以外（ネット予約・外部サービス）から入った予約。 */
+    online: number;
+    /** 来店完了のうち次回予約を取った件数と割合（来店0件なら rate は null）。 */
+    future_reservation: { count: number; rate: number | null };
+    /** コース（分析カテゴリ）別の来店数。code/name が null は未分類。 */
+    categories: { code: string | null; name: string | null; count: number }[];
+    /** 以下は売上を見る権限がある時だけ値が入る（無い時は null / 空）。 */
     revenue: number | null;
+    average_spend: number | null;
+    treatment_revenue: number | null;
+    retail_revenue: number | null;
+    payment_methods: { name: string; amount: number }[];
 }
 
 export type DisplayRow =

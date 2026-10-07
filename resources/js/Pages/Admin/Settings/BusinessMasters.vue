@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { DateField, EmptyValue, MoneyField, MonthField, PageHeader, SectionCard, StatusChip, TimeField } from '@/components/ark';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
@@ -29,6 +29,8 @@ const ratePercent = computed<number | null>({
     set: (value) => { rateForm.rate_bps = Math.round((value ?? 0) * 100); },
 });
 const paymentForm = useForm({ code: '', name: '', is_enabled: true, display_order: 0, external_provider: null as string | null });
+/** 決済方法の変更（ダイアログ）用。追加フォームと入力を共有しない。 */
+const paymentEditForm = useForm({ code: '', name: '', is_enabled: true, display_order: 0, external_provider: null as string | null });
 const calendarForm = useForm({ business_date: '', status: 'closed' as 'closed' | 'special_hours' | 'open', opens_at: null as string | null, closes_at: null as string | null, note: null as string | null });
 const closedWeekdaysForm = useForm({ weekdays: [...(props.closedWeekdays ?? [])] });
 const weekdayOptions = [
@@ -46,32 +48,73 @@ const defaultTargetForm = useForm({ target_amount: props.salesTargets.default_am
 const monthlyTargetForm = useForm({ target_month: '', target_amount: null as number | null });
 const employmentForm = useForm({ code: '', name: '', is_active: true, sort_order: 0 });
 const saveNewMaster = (form: typeof masterForm, path: string): void => form.post(path, { preserveScroll: true, onSuccess: () => form.reset() });
-const toggleMaster = (item: Master, path: string): void => router.put(`${path}/${item.id}`, { ...item, is_active: !item.is_active }, { preserveScroll: true });
-const togglePayment = (item: PaymentMethod): void => router.put(`/admin/settings/business-masters/payment-methods/${item.id}`, { ...item, is_enabled: !item.is_enabled }, { preserveScroll: true });
-const editRate = (rate: TaxRate): void => {
-    editingRateId.value = rate.id;
-    rateForm.tax_category_id = rate.tax_category_id;
-    rateForm.rate_bps = rate.rate_bps;
-    rateForm.effective_from = rate.effective_from;
-    rateForm.effective_to = rate.effective_to;
+const pendingToggleKeys = reactive(new Set<string>());
+const toggleKey = (path: string, id: number): string => `${path}:${id}`;
+const isTogglePending = (path: string, id: number): boolean => pendingToggleKeys.has(toggleKey(path, id));
+const toggleMaster = (item: Master, path: string, active: boolean | null): void => {
+    const key = toggleKey(path, item.id);
+    if (active === null || active === item.is_active || pendingToggleKeys.has(key)) return;
+    pendingToggleKeys.add(key);
+    router.put(`${path}/${item.id}`, { ...item, is_active: active }, {
+        preserveScroll: true,
+        onFinish: () => pendingToggleKeys.delete(key),
+    });
 };
+const paymentPath = '/admin/settings/business-masters/payment-methods';
+const togglePayment = (item: PaymentMethod, enabled: boolean | null): void => {
+    const key = toggleKey(paymentPath, item.id);
+    if (enabled === null || enabled === item.is_enabled || pendingToggleKeys.has(key)) return;
+    pendingToggleKeys.add(key);
+    router.put(`${paymentPath}/${item.id}`, { ...item, is_enabled: enabled }, {
+        preserveScroll: true,
+        onFinish: () => pendingToggleKeys.delete(key),
+    });
+};
+/** 日付（YYYY-MM-DD やタイムスタンプ）を YYYY/MM/DD で表示する。 */
+const displayDate = (value: string | null): string => (value ? value.slice(0, 10).replaceAll('-', '/') : '');
+const ratePercentLabel = (bps: number): string => `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`;
+// 税率の追加・変更はダイアログで行う（一覧の下のフォームだと、どの行を編集中か分かりにくいため）。
+const rateDialogOpen = ref(false);
+const openRateDialog = (category: TaxCategory, rate: TaxRate | null = null): void => {
+    rateForm.clearErrors();
+    editingRateId.value = rate?.id ?? null;
+    rateForm.tax_category_id = category.id;
+    rateForm.rate_bps = rate?.rate_bps ?? 1000;
+    rateForm.effective_from = rate ? rate.effective_from.slice(0, 10) : '';
+    rateForm.effective_to = rate?.effective_to ? rate.effective_to.slice(0, 10) : null;
+    rateDialogOpen.value = true;
+};
+const closeRateDialog = (): void => {
+    rateDialogOpen.value = false;
+    editingRateId.value = null;
+    rateForm.reset();
+};
+const rateDialogCategoryName = computed(() => props.taxCategories.find((c) => c.id === rateForm.tax_category_id)?.name ?? '');
 const saveRate = (): void => {
-    const options = { preserveScroll: true, onSuccess: (): void => { editingRateId.value = null; rateForm.reset(); } };
+    const options = { preserveScroll: true, onSuccess: (): void => closeRateDialog() };
     if (editingRateId.value === null) rateForm.post('/admin/settings/business-masters/tax-rates', options);
     else rateForm.put(`/admin/settings/business-masters/tax-rates/${editingRateId.value}`, options);
 };
-const editPayment = (item: PaymentMethod): void => {
-    editingPaymentId.value = item.id;
-    paymentForm.code = item.code;
-    paymentForm.name = item.name;
-    paymentForm.is_enabled = item.is_enabled;
-    paymentForm.display_order = item.display_order;
-    paymentForm.external_provider = item.external_provider;
+const paymentDialogOpen = ref(false);
+const closePaymentDialog = (): void => {
+    paymentDialogOpen.value = false;
+    editingPaymentId.value = null;
+    paymentEditForm.reset();
 };
-const savePayment = (): void => {
-    const options = { preserveScroll: true, onSuccess: (): void => { editingPaymentId.value = null; paymentForm.reset(); } };
-    if (editingPaymentId.value === null) paymentForm.post('/admin/settings/business-masters/payment-methods', options);
-    else paymentForm.put(`/admin/settings/business-masters/payment-methods/${editingPaymentId.value}`, options);
+const editPayment = (item: PaymentMethod): void => {
+    paymentEditForm.clearErrors();
+    editingPaymentId.value = item.id;
+    paymentEditForm.code = item.code;
+    paymentEditForm.name = item.name;
+    paymentEditForm.is_enabled = item.is_enabled;
+    paymentEditForm.display_order = item.display_order;
+    paymentEditForm.external_provider = item.external_provider;
+    paymentDialogOpen.value = true;
+};
+const addPayment = (): void => paymentForm.post('/admin/settings/business-masters/payment-methods', { preserveScroll: true, onSuccess: () => paymentForm.reset() });
+const updatePayment = (): void => {
+    if (editingPaymentId.value === null) return;
+    paymentEditForm.put(`/admin/settings/business-masters/payment-methods/${editingPaymentId.value}`, { preserveScroll: true, onSuccess: () => closePaymentDialog() });
 };
 const karteForms = {
     'acquisition-channels': useForm({ code: '', name: '', is_active: true, sort_order: 100 }),
@@ -111,12 +154,11 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
         <v-window-item value="analysis">
             <SectionCard title="分析カテゴリ" subtitle="メニューを集計（M・T・A など）でまとめるための分類です。">
                 <v-table class="bm-table">
-                    <thead><tr><th>コード</th><th>名称</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <thead><tr><th>コード</th><th>名称</th><th>有効</th></tr></thead>
                     <tbody>
                         <tr v-for="item in analysisCategories" :key="item.id">
                             <td>{{ item.code }}</td><td>{{ item.name }}</td>
-                            <td><StatusChip :status="item.is_active ? 'active' : 'canceled'" :label="item.is_active ? '有効' : '無効'" /></td>
-                            <td class="text-end"><v-btn size="small" variant="tonal" @click="toggleMaster(item, '/admin/settings/business-masters/analysis-categories')">{{ item.is_active ? '無効にする' : '有効にする' }}</v-btn></td>
+                            <td><v-switch :model-value="item.is_active" color="primary" hide-details density="compact" :aria-label="`${item.name}の有効状態`" :disabled="isTogglePending('/admin/settings/business-masters/analysis-categories', item.id)" @update:model-value="toggleMaster(item, '/admin/settings/business-masters/analysis-categories', $event)" /></td>
                         </tr>
                     </tbody>
                 </v-table>
@@ -136,34 +178,40 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
         <v-window-item value="tax">
             <SectionCard title="税区分と税率" subtitle="税区分ごとに、いつから何%かを登録します。会計の税額はこの税率で計算します。">
                 <v-table class="bm-table">
-                    <thead><tr><th>税区分</th><th>税率（適用期間）</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <thead><tr><th>税区分</th><th>税率と適用期間</th><th>有効</th><th class="text-end">操作</th></tr></thead>
                     <tbody>
                         <tr v-for="category in taxCategories" :key="category.id">
                             <td><strong>{{ category.name }}</strong><div class="text-caption text-medium-emphasis">{{ category.code }}</div></td>
                             <td>
                                 <div v-for="rate in category.rates" :key="rate.id" class="bm-rate">
-                                    <span>{{ (rate.rate_bps / 100).toFixed(rate.rate_bps % 100 === 0 ? 0 : 2) }}%</span>
-                                    <span class="text-medium-emphasis">{{ rate.effective_from }} 〜 {{ rate.effective_to || '期限なし' }}</span>
-                                    <v-btn size="x-small" variant="text" color="primary" @click="editRate(rate)">編集</v-btn>
+                                    <span class="bm-rate__value">{{ ratePercentLabel(rate.rate_bps) }}</span>
+                                    <span class="text-medium-emphasis">{{ displayDate(rate.effective_from) }} 〜 {{ rate.effective_to ? displayDate(rate.effective_to) : '期限なし' }}</span>
+                                    <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-pencil-outline" @click="openRateDialog(category, rate)">編集</v-btn>
                                 </div>
                                 <span v-if="category.rates.length === 0" class="text-error text-body-2">{{ MESSAGES.settings.taxRateMissing }}</span>
                             </td>
-                            <td><StatusChip :status="category.is_active ? 'active' : 'canceled'" :label="category.is_active ? '有効' : '無効'" /></td>
-                            <td class="text-end"><v-btn size="small" variant="tonal" @click="toggleMaster(category, '/admin/settings/business-masters/tax-categories')">{{ category.is_active ? '無効にする' : '有効にする' }}</v-btn></td>
+                            <td><v-switch :model-value="category.is_active" color="primary" hide-details density="compact" :aria-label="`${category.name}の有効状態`" :disabled="isTogglePending('/admin/settings/business-masters/tax-categories', category.id)" @update:model-value="toggleMaster(category, '/admin/settings/business-masters/tax-categories', $event)" /></td>
+                            <td class="text-end"><v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-plus" @click="openRateDialog(category)">税率を追加</v-btn></td>
                         </tr>
                     </tbody>
                 </v-table>
-                <div class="bm-add">
-                    <p class="bm-add__title">{{ editingRateId === null ? '税率を追加' : '税率を変更' }}</p>
-                    <v-form class="bm-form" @submit.prevent="saveRate">
-                        <v-select v-model="rateForm.tax_category_id" :items="taxCategories" item-title="name" item-value="id" label="税区分" hide-details="auto" class="bm-field" :error-messages="rateForm.errors.tax_category_id" />
-                        <v-text-field v-model.number="ratePercent" label="税率" suffix="%" type="number" step="0.01" min="0" hide-details="auto" class="bm-field bm-field--xs" :error-messages="rateForm.errors.rate_bps" />
-                        <DateField v-model="rateForm.effective_from" label="開始日" :clearable="false" />
-                        <DateField :model-value="rateForm.effective_to ?? ''" label="終了日（任意・当日含まず）" @update:model-value="rateForm.effective_to = $event || null" />
-                        <v-btn type="submit" color="primary" :prepend-icon="editingRateId === null ? 'mdi-plus' : 'mdi-content-save-outline'" class="bm-submit" :loading="rateForm.processing">{{ editingRateId === null ? '追加' : '更新' }}</v-btn>
-                        <v-btn v-if="editingRateId !== null" variant="text" class="bm-submit" @click="editingRateId = null; rateForm.reset()">やめる</v-btn>
-                    </v-form>
-                </div>
+                <!-- 税率の追加・変更ダイアログ -->
+                <v-dialog v-model="rateDialogOpen" max-width="440" @update:model-value="(open) => { if (!open) closeRateDialog(); }">
+                    <v-card>
+                        <v-card-title class="text-subtitle-1 font-weight-bold">{{ editingRateId === null ? '税率を追加' : '税率を変更' }}（{{ rateDialogCategoryName }}）</v-card-title>
+                        <v-card-text class="bm-dialog">
+                            <v-select v-model="rateForm.tax_category_id" :items="taxCategories" item-title="name" item-value="id" label="税区分" disabled hide-details="auto" :error-messages="rateForm.errors.tax_category_id" />
+                            <v-text-field v-model.number="ratePercent" label="税率" suffix="%" type="number" step="0.01" min="0" hide-details="auto" :error-messages="rateForm.errors.rate_bps" />
+                            <DateField v-model="rateForm.effective_from" label="開始日" :clearable="false" block hide-details="auto" :error-messages="rateForm.errors.effective_from" />
+                            <DateField :model-value="rateForm.effective_to ?? ''" label="終了日（任意・当日含まず）" block hide-details="auto" :error-messages="rateForm.errors.effective_to" @update:model-value="rateForm.effective_to = $event || null" />
+                        </v-card-text>
+                        <v-card-actions>
+                            <v-spacer />
+                            <v-btn variant="text" :disabled="rateForm.processing" @click="closeRateDialog">キャンセル</v-btn>
+                            <v-btn color="primary" variant="flat" prepend-icon="mdi-content-save-outline" :loading="rateForm.processing" @click="saveRate">保存</v-btn>
+                        </v-card-actions>
+                    </v-card>
+                </v-dialog>
                 <div class="bm-add">
                     <p class="bm-add__title">税区分を追加</p>
                     <v-form class="bm-form" @submit.prevent="taxCategoryForm.post('/admin/settings/business-masters/tax-categories', { preserveScroll: true, onSuccess: () => taxCategoryForm.reset() })">
@@ -180,31 +228,42 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
         <v-window-item value="payment">
             <SectionCard title="決済方法" subtitle="会計の支払方法と、月計・Excel の列に使います。">
                 <v-table class="bm-table">
-                    <thead><tr><th>表示順</th><th>コード</th><th>名称</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <thead><tr><th>表示順</th><th>コード</th><th>名称</th><th>有効</th><th class="text-end">操作</th></tr></thead>
                     <tbody>
                         <tr v-for="item in paymentMethods" :key="item.id">
                             <td>{{ item.display_order }}</td><td>{{ item.code }}</td><td>{{ item.name }}</td>
-                            <td><StatusChip :status="item.is_enabled ? 'active' : 'canceled'" :label="item.is_enabled ? '有効' : '無効'" /></td>
-                            <td class="text-end">
-                                <div class="bm-actions">
-                                    <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-pencil-outline" @click="editPayment(item)">編集</v-btn>
-                                    <v-btn size="small" variant="tonal" @click="togglePayment(item)">{{ item.is_enabled ? '無効にする' : '有効にする' }}</v-btn>
-                                </div>
-                            </td>
+                            <td><v-switch :model-value="item.is_enabled" color="primary" hide-details density="compact" :aria-label="`${item.name}の有効状態`" :disabled="isTogglePending(paymentPath, item.id)" @update:model-value="togglePayment(item, $event)" /></td>
+                            <td class="text-end"><v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-pencil-outline" @click="editPayment(item)">編集</v-btn></td>
                         </tr>
                     </tbody>
                 </v-table>
                 <div class="bm-add">
-                    <p class="bm-add__title">{{ editingPaymentId === null ? '決済方法を追加' : '決済方法を変更' }}</p>
-                    <v-form class="bm-form" @submit.prevent="savePayment">
+                    <p class="bm-add__title">決済方法を追加</p>
+                    <v-form class="bm-form" @submit.prevent="addPayment">
                         <v-text-field v-model="paymentForm.code" label="コード" hide-details="auto" class="bm-field bm-field--s" :error-messages="paymentForm.errors.code" />
                         <v-text-field v-model="paymentForm.name" label="名称" hide-details="auto" class="bm-field" :error-messages="paymentForm.errors.name" />
                         <v-text-field v-model.number="paymentForm.display_order" label="表示順" type="number" hide-details="auto" class="bm-field bm-field--xs" />
                         <v-text-field v-model="paymentForm.external_provider" label="外部連携（任意）" hide-details="auto" class="bm-field bm-field--s" />
-                        <v-btn type="submit" color="primary" :prepend-icon="editingPaymentId === null ? 'mdi-plus' : 'mdi-content-save-outline'" class="bm-submit" :loading="paymentForm.processing">{{ editingPaymentId === null ? '追加' : '更新' }}</v-btn>
-                        <v-btn v-if="editingPaymentId !== null" variant="text" class="bm-submit" @click="editingPaymentId = null; paymentForm.reset()">やめる</v-btn>
+                        <v-btn type="submit" color="primary" prepend-icon="mdi-plus" class="bm-submit" :loading="paymentForm.processing">追加</v-btn>
                     </v-form>
                 </div>
+                <!-- 決済方法の変更ダイアログ -->
+                <v-dialog v-model="paymentDialogOpen" max-width="440" @update:model-value="(open) => { if (!open) closePaymentDialog(); }">
+                    <v-card>
+                        <v-card-title class="text-subtitle-1 font-weight-bold">決済方法を変更</v-card-title>
+                        <v-card-text class="bm-dialog">
+                            <v-text-field v-model="paymentEditForm.code" label="コード" hide-details="auto" :error-messages="paymentEditForm.errors.code" />
+                            <v-text-field v-model="paymentEditForm.name" label="名称" hide-details="auto" :error-messages="paymentEditForm.errors.name" />
+                            <v-text-field v-model.number="paymentEditForm.display_order" label="表示順" type="number" hide-details="auto" :error-messages="paymentEditForm.errors.display_order" />
+                            <v-text-field v-model="paymentEditForm.external_provider" label="外部連携（任意）" hide-details="auto" :error-messages="paymentEditForm.errors.external_provider" />
+                        </v-card-text>
+                        <v-card-actions>
+                            <v-spacer />
+                            <v-btn variant="text" :disabled="paymentEditForm.processing" @click="closePaymentDialog">キャンセル</v-btn>
+                            <v-btn color="primary" variant="flat" prepend-icon="mdi-content-save-outline" :loading="paymentEditForm.processing" @click="updatePayment">保存</v-btn>
+                        </v-card-actions>
+                    </v-card>
+                </v-dialog>
             </SectionCard>
         </v-window-item>
 
@@ -286,12 +345,11 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
         <v-window-item value="employment">
             <SectionCard title="雇用形態" subtitle="稼働率（社員・アルバイト）の集計に使います。">
                 <v-table class="bm-table">
-                    <thead><tr><th>コード</th><th>名称</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <thead><tr><th>コード</th><th>名称</th><th>有効</th></tr></thead>
                     <tbody>
                         <tr v-for="item in employmentTypes" :key="item.id">
                             <td>{{ item.code }}</td><td>{{ item.name }}</td>
-                            <td><StatusChip :status="item.is_active ? 'active' : 'canceled'" :label="item.is_active ? '有効' : '無効'" /></td>
-                            <td class="text-end"><v-btn size="small" variant="tonal" @click="toggleMaster(item, '/admin/settings/business-masters/employment-types')">{{ item.is_active ? '無効にする' : '有効にする' }}</v-btn></td>
+                            <td><v-switch :model-value="item.is_active" color="primary" hide-details density="compact" :aria-label="`${item.name}の有効状態`" :disabled="isTogglePending('/admin/settings/business-masters/employment-types', item.id)" @update:model-value="toggleMaster(item, '/admin/settings/business-masters/employment-types', $event)" /></td>
                         </tr>
                     </tbody>
                 </v-table>
@@ -311,16 +369,15 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
         <v-window-item v-for="panel in ['karte', 'qualification']" :key="panel" :value="panel">
             <SectionCard v-for="kind in (panel === 'qualification' ? ['qualifications'] : ['acquisition-channels', 'visit-purposes']) as KarteKind[]" :key="kind" :title="kind === 'acquisition-channels' ? MESSAGES.customer.acquisitionChannel : kind === 'qualifications' ? MESSAGES.bookingResources.qualificationMaster : MESSAGES.customer.karteVisitPurposeMaster" class="mb-4">
                 <v-table class="bm-table">
-                    <thead><tr><th>コード</th><th>名称</th><th>状態</th><th class="text-end">操作</th></tr></thead>
+                    <thead><tr><th>コード</th><th>名称</th><th>有効</th><th class="text-end">並び順</th></tr></thead>
                     <tbody>
                         <tr v-for="(item, index) in karteLists(kind)" :key="item.id">
                             <td>{{ item.code }}</td><td>{{ item.name }}</td>
-                            <td><StatusChip :status="item.is_active ? 'active' : 'canceled'" :label="item.is_active ? '有効' : '無効'" /></td>
+                            <td><v-switch :model-value="item.is_active" color="primary" hide-details density="compact" :aria-label="`${item.name}の有効状態`" :disabled="isTogglePending(`${karteBase}/${kind}`, item.id)" @update:model-value="toggleMaster(item, `${karteBase}/${kind}`, $event)" /></td>
                             <td class="text-end">
                                 <div class="bm-actions">
                                     <v-btn size="small" variant="text" icon="mdi-arrow-up" :disabled="index === 0" :aria-label="MESSAGES.customer.karteMoveUp" @click="moveKarte(kind, item, -1)" />
                                     <v-btn size="small" variant="text" icon="mdi-arrow-down" :disabled="index === karteLists(kind).length - 1" :aria-label="MESSAGES.customer.karteMoveDown" @click="moveKarte(kind, item, 1)" />
-                                    <v-btn size="small" variant="tonal" @click="toggleMaster(item, `${karteBase}/${kind}`)">{{ item.is_active ? '無効にする' : '有効にする' }}</v-btn>
                                 </div>
                             </td>
                         </tr>
@@ -356,8 +413,21 @@ const money = (value: number): string => new Intl.NumberFormat('ja-JP').format(v
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--ark-space-2);
+    gap: var(--ark-space-3);
+    padding: 4px 0;
     font-size: 0.875rem;
+}
+
+.bm-rate__value {
+    min-width: 3em;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.bm-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ark-space-3);
 }
 
 .bm-add {
