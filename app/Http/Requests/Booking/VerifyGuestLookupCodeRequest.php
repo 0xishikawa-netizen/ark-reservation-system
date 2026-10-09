@@ -28,7 +28,7 @@ final class VerifyGuestLookupCodeRequest extends FormRequest
     {
         return [
             'phone.regex' => __('messages.otp.invalid_phone'),
-            'code.digits' => '認証コードは6桁で入力してください。',
+            'code.digits' => __('messages.otp.six_digits'),
         ];
     }
 }

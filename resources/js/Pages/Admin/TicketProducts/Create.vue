@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { MoneyField } from '@/components/ark';
 import { Head, useForm } from '@inertiajs/vue3';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -20,15 +21,15 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Head title="回数券商品作成" />
+    <Head :title="MESSAGES.mastersUi.ticketProducts.createTitle" />
 
     <div class="ark-form-page">
-    <v-card title="回数券商品作成">
+    <v-card :title="MESSAGES.mastersUi.ticketProducts.createTitle">
         <v-card-text>
             <v-form @submit.prevent="submit">
                 <v-text-field
                     v-model="form.name"
-                    label="商品名"
+                    :label="MESSAGES.mastersUi.ticketProducts.productName"
                     :error-messages="form.errors.name"
                     maxlength="100"
                     required
@@ -36,7 +37,7 @@ const submit = (): void => {
                 <div class="d-flex ga-4 flex-wrap">
                     <v-text-field
                         v-model.number="form.total_count"
-                        label="回数"
+                        :label="MESSAGES.mastersUi.ticketProducts.count"
                         type="number"
                         min="1"
                         max="999"
@@ -45,7 +46,7 @@ const submit = (): void => {
                     />
                     <MoneyField
                         v-model="form.price"
-                        label="価格"
+                        :label="MESSAGES.mastersUi.ticketProducts.price"
                         :error-messages="form.errors.price"
                         required
                     />
@@ -53,7 +54,7 @@ const submit = (): void => {
                 <div class="d-flex ga-4 flex-wrap">
                     <v-text-field
                         v-model.number="form.validity_days"
-                        label="有効期間（日）"
+                        :label="MESSAGES.mastersUi.ticketProducts.validityDays"
                         type="number"
                         min="1"
                         max="3650"
@@ -62,7 +63,7 @@ const submit = (): void => {
                     />
                     <v-text-field
                         v-model.number="form.sort_order"
-                        label="表示順"
+                        :label="MESSAGES.mastersUi.ticketProducts.sortOrder"
                         type="number"
                         :error-messages="form.errors.sort_order"
                         required
@@ -70,15 +71,15 @@ const submit = (): void => {
                 </div>
                 <v-switch
                     v-model="form.is_active"
-                    label="有効"
+                    :label="MESSAGES.mastersUi.ticketProducts.active"
                     color="primary"
                     :error-messages="form.errors.is_active"
                 />
                 <div class="d-flex ga-3">
                     <v-btn type="submit" color="primary" :loading="form.processing">
-                        作成
+                        {{ MESSAGES.mastersUi.ticketProducts.create }}
                     </v-btn>
-                    <v-btn variant="text" href="/admin/ticket-products">キャンセル</v-btn>
+                    <v-btn variant="text" href="/admin/ticket-products">{{ MESSAGES.mastersUi.ticketProducts.cancel }}</v-btn>
                 </div>
             </v-form>
         </v-card-text>

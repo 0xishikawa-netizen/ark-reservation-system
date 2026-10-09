@@ -30,15 +30,15 @@ final class GuestReservationConfirmed extends Notification
         $isPendingPayment = $this->reservation->status === ReservationStatus::PendingPayment;
 
         return (new MailMessage)
-            ->subject($isPendingPayment ? '予約枠を確保しました' : 'ご予約を承りました')
-            ->greeting('ご予約ありがとうございます。')
+            ->subject($isPendingPayment ? __('messages.guest_reservation_mail.subject_pending') : __('messages.guest_reservation_mail.subject_confirmed'))
+            ->greeting(__('messages.guest_reservation_mail.greeting'))
             ->line($isPendingPayment
-                ? '現在は仮予約です。確認ページからお支払いを完了してください。'
-                : '以下の内容でご予約を承りました。')
-            ->line('日時：'.$this->reservation->starts_at->format('Y年n月j日 H:i'))
-            ->line('メニュー：'.$this->reservation->service->name)
-            ->line('担当：'.($this->reservation->staff?->display_name ?? 'お任せ'))
-            ->action('予約内容を確認する', $this->confirmationUrl)
-            ->line('予約の変更・キャンセルも確認ページから行えます。');
+                ? __('messages.guest_reservation_mail.pending_line')
+                : __('messages.guest_reservation_mail.confirmed_line'))
+            ->line(__('messages.guest_reservation_mail.date', ['date' => $this->reservation->starts_at->format(__('messages.guest_reservation_mail.date_format'))]))
+            ->line(__('messages.guest_reservation_mail.service', ['service' => $this->reservation->service->name]))
+            ->line(__('messages.guest_reservation_mail.staff', ['staff' => $this->reservation->staff?->display_name ?? __('messages.guest_reservation_mail.staff_unassigned')]))
+            ->action(__('messages.guest_reservation_mail.action'), $this->confirmationUrl)
+            ->line(__('messages.guest_reservation_mail.change_hint'));
     }
 }

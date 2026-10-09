@@ -56,7 +56,7 @@ class RefundPaymentRequest extends FormRequest
             if ((int) $this->input('amount') > $remaining) {
                 $validator->errors()->add(
                     'amount',
-                    "返金可能額は {$remaining} 円です。",
+                    __('messages.payment.refundable_amount', ['amount' => $remaining]),
                 );
             }
         });

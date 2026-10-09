@@ -6,10 +6,10 @@
 ## Current execution status
 
 - **Current Phase**: Phase 11 — Reporting / Business Automation（実装・原本書式互換・ローカル実操作確認は完了、旧資料との実数値照合のみ外部資料待ち）
-- **Current Task**: なし。Task 11-33 品質向上（全体レビュー指摘の修正と回帰テスト強化）DONE（2026-10-07、`docs/tasks/phase-11.md` Task 11-33 節・`docs/review/2026-10-07-full-code-review.md` §5）。（前回までの完了分：Task 11-27〜11-32 DONE（2026-09-27、店舗運用フロー：来店・会計導線、メニュー×ブース・資格、延長・インターバル、ボードUX、月次レポートのタブ再編、結合確認。`docs/BOOKING_RESOURCES.md` `docs/PHASE11_OPERATIONAL_VERIFICATION.md`）
+- **Current Task**: なし。Task 11-34 文言・定数の集約と共通化 DONE（2026-10-09）。（その前：Task 11-33 品質向上（全体レビュー指摘の修正と回帰テスト強化）DONE（2026-10-07、`docs/tasks/phase-11.md` Task 11-33 節・`docs/review/2026-10-07-full-code-review.md` §5）。（前回までの完了分：Task 11-27〜11-32 DONE（2026-09-27、店舗運用フロー：来店・会計導線、メニュー×ブース・資格、延長・インターバル、ボードUX、月次レポートのタブ再編、結合確認。`docs/BOOKING_RESOURCES.md` `docs/PHASE11_OPERATIONAL_VERIFICATION.md`）
 - **Task status**: Task 11-11 DONE。Task 11-13 BLOCKED（旧Excel / Google Sheetsの実数値照合のみ）。Task 11-14 DONE。Task 11-15 DONE。Task 11-16 DONE。Task 11-17 DONE（2026-09-26）。Task 11-18 DONE（2026-09-26、Reports・ブッキングボード・設定メニューのUI/UX統一。`docs/REPORTS_UI.md`）。Task 11-19 DONE（2026-09-27、来店・会計入力）。Task 11-20 DONE（支払配分・税抜・物販）。Task 11-21 DONE（顧客カルテ・顧客統計）。Task 11-22 DONE（スタッフ別売上・指名売上）。Task 11-23 DONE（時間帯別稼働率の表示拡張）。Task 11-24 DONE（4月始まり事業年度）。Task 11-25 DONE（コース別売上・目標）。Task 11-26 DONE（過去データ取込mapping）。Task 11-13は2026-09-27に再開・再検証し、ARK稼働前期間の旧値↔ARK実数値照合だけBLOCKED。2026-09-27にユーザーが11-19〜11-26と11-13再開を一括承認（1 Taskずつ順に実施）。
 - **Task specification**: `docs/tasks/phase-11.md`
-- Phase 11 全体の一括実装は許可しない。現在承認済みの実装Taskはない（Task 11-33 は 2026-10-07 DONE）。次回以降は実物帳票サンプルとの比較結果を踏まえて新Taskを承認してから着手する（Cloud引継ぎ: `docs/handoff/2026-09-26-cloud-handoff.md`）。Task 11-13の実原本との実数値照合は資料受領後に再承認・再開する。ローカル実操作・自動検証の証跡は`docs/PHASE11_OPERATIONAL_VERIFICATION.md`および`docs/EXCEL_EXPORT.md`。
+- Phase 11 全体の一括実装は許可しない。現在承認済みの実装Taskはない（Task 11-34 は 2026-10-09 DONE）。次回以降は実物帳票サンプルとの比較結果を踏まえて新Taskを承認してから着手する（Cloud引継ぎ: `docs/handoff/2026-09-26-cloud-handoff.md`）。Task 11-13の実原本との実数値照合は資料受領後に再承認・再開する。ローカル実操作・自動検証の証跡は`docs/PHASE11_OPERATIONAL_VERIFICATION.md`および`docs/EXCEL_EXPORT.md`。
 
 ## Context
 

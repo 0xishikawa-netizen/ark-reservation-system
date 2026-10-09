@@ -4,6 +4,10 @@ import { computed, ref } from 'vue';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateOnly, formatDateTime } from '@/utils/dateFormat';
+import { formatYenCurrency } from '@/utils/money';
+import { signed } from '@/utils/numberFormat';
 
 defineOptions({ layout: AdminLayout });
 
@@ -74,41 +78,25 @@ const adjustBusinessError = computed(
 );
 
 const historyHeaders = [
-    { title: '日時', key: 'created_at' },
+    { title: MESSAGES.mastersUi.customerMembership.dateTime, key: 'created_at' },
     { title: 'Membership', key: 'membership_id' },
-    { title: '種別', key: 'type_label' },
-    { title: '増減', key: 'delta' },
-    { title: '期', key: 'period_start' },
-    { title: '予約ID', key: 'reservation_id' },
-    { title: '理由', key: 'reason' },
+    { title: MESSAGES.mastersUi.customerMembership.type, key: 'type_label' },
+    { title: MESSAGES.mastersUi.customerMembership.delta, key: 'delta' },
+    { title: MESSAGES.mastersUi.customerMembership.period, key: 'period_start' },
+    { title: MESSAGES.mastersUi.customerMembership.reservationId, key: 'reservation_id' },
+    { title: MESSAGES.mastersUi.customerMembership.reason, key: 'reason' },
 ] as const;
 
 function formatDate(value: string | null): string {
     if (!value) return MESSAGES.common.notSet;
 
-    return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' })
-        .format(new Date(`${value}T00:00:00`));
+    return formatDateOnly(value, 'dateMedium');
 }
 
-function formatDateTime(value: string | null): string {
+function formatDateTimeOrNotRecorded(value: string | null): string {
     if (!value) return MESSAGES.common.notRecorded;
 
-    return new Intl.DateTimeFormat('ja-JP', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value.replace(' ', 'T')));
-}
-
-function formatPrice(price: number): string {
-    return new Intl.NumberFormat('ja-JP', {
-        style: 'currency',
-        currency: 'JPY',
-        maximumFractionDigits: 0,
-    }).format(price);
-}
-
-function signed(delta: number): string {
-    return delta > 0 ? `+${delta}` : String(delta);
+    return formatDateTime(value, 'medium');
 }
 
 function openAdjust(): void {
@@ -145,19 +133,19 @@ function syncMembership(): void {
 </script>
 
 <template>
-    <Head :title="`${customer.name}の会員情報`" />
+    <Head :title="fillMessage(MESSAGES.mastersUi.customerMembership.head, { name: customer.name })" />
 
-    <PageHeader title="顧客会員情報" :subtitle="customer.name">
+    <PageHeader :title="MESSAGES.mastersUi.customerMembership.title" :subtitle="customer.name">
         <template #actions>
-            <v-btn variant="text" :href="`/admin/customers/${customer.user_id}`">顧客詳細へ戻る</v-btn>
+            <v-btn variant="text" :href="`/admin/customers/${customer.user_id}`">{{ MESSAGES.mastersUi.customerMembership.backToCustomer }}</v-btn>
         </template>
     </PageHeader>
 
     <EmptyState
         v-if="membership === null"
         icon="mdi-account-credit-card-outline"
-        title="この顧客には利用権がありません"
-        description="利用権を契約すると、こちらに契約内容と利用状況が表示されます。"
+        :title="MESSAGES.mastersUi.customerMembership.emptyTitle"
+        :description="MESSAGES.mastersUi.customerMembership.emptyDescription"
     />
 
     <template v-else>
@@ -171,37 +159,37 @@ function syncMembership(): void {
                     <StatusChip :status="membership.status" :label="membership.status_label" />
                 </template>
                 <div class="d-flex ga-6 flex-wrap mb-5">
-                    <div><div class="text-caption">利用可能</div><div class="text-h5 text-primary">{{ membership.available }}回</div></div>
-                    <div><div class="text-caption">予約中</div><div class="text-h6">{{ membership.held }}回</div></div>
-                    <div><div class="text-caption">合計</div><div class="text-h6">{{ membership.total }}回</div></div>
+                    <div><div class="text-caption">{{ MESSAGES.mastersUi.customerMembership.available }}</div><div class="text-h5 text-primary">{{ fillMessage(MESSAGES.mastersUi.customerMembership.countValue, { count: String(membership.available) }) }}</div></div>
+                    <div><div class="text-caption">{{ MESSAGES.mastersUi.customerMembership.held }}</div><div class="text-h6">{{ fillMessage(MESSAGES.mastersUi.customerMembership.countValue, { count: String(membership.held) }) }}</div></div>
+                    <div><div class="text-caption">{{ MESSAGES.mastersUi.customerMembership.total }}</div><div class="text-h6">{{ fillMessage(MESSAGES.mastersUi.customerMembership.countValue, { count: String(membership.total) }) }}</div></div>
                 </div>
 
                 <v-row>
                     <v-col cols="12" md="6">
                         <v-list lines="two" density="compact">
-                            <v-list-item title="月額" :subtitle="formatPrice(membership.plan.price)" />
-                            <v-list-item title="付与回数" :subtitle="`${membership.plan.usage_count_per_period}回 / 月`" />
+                            <v-list-item :title="MESSAGES.mastersUi.customerMembership.monthlyPrice" :subtitle="formatYenCurrency(membership.plan.price)" />
+                            <v-list-item :title="MESSAGES.mastersUi.customerMembership.grantedCount" :subtitle="fillMessage(MESSAGES.mastersUi.customerMembership.grantedCountValue, { count: String(membership.plan.usage_count_per_period) })" />
                             <v-list-item
-                                title="当期"
+                                :title="MESSAGES.mastersUi.customerMembership.currentPeriod"
                                 :subtitle="`${formatDate(membership.current_period_start)} 〜 ${formatDate(membership.current_period_end)}`"
                             />
-                            <v-list-item title="開始日時" :subtitle="formatDateTime(membership.started_at)" />
-                            <v-list-item title="解約日時" :subtitle="formatDateTime(membership.canceled_at)" />
+                            <v-list-item :title="MESSAGES.mastersUi.customerMembership.startedAt" :subtitle="formatDateTimeOrNotRecorded(membership.started_at)" />
+                            <v-list-item :title="MESSAGES.mastersUi.customerMembership.canceledAt" :subtitle="formatDateTimeOrNotRecorded(membership.canceled_at)" />
                         </v-list>
                     </v-col>
                     <v-col cols="12" md="6">
                         <v-list lines="two" density="compact">
                             <v-list-item
-                                title="期末解約"
-                                :subtitle="membership.cancel_at_period_end ? '予約済み' : 'なし'"
+                                :title="MESSAGES.mastersUi.customerMembership.cancelAtPeriodEnd"
+                                :subtitle="membership.cancel_at_period_end ? MESSAGES.mastersUi.customerMembership.scheduled : MESSAGES.mastersUi.customerMembership.none"
                             />
-                            <v-list-item title="猶予期限" :subtitle="formatDateTime(membership.grace_until)" />
-                            <v-list-item title="最終同期" :subtitle="formatDateTime(membership.last_synced_at)" />
+                            <v-list-item :title="MESSAGES.mastersUi.customerMembership.graceUntil" :subtitle="formatDateTimeOrNotRecorded(membership.grace_until)" />
+                            <v-list-item :title="MESSAGES.mastersUi.customerMembership.lastSyncedAt" :subtitle="formatDateTimeOrNotRecorded(membership.last_synced_at)" />
                             <v-list-item
-                                title="要確認"
-                                :subtitle="membership.needs_attention ? '要対応' : 'なし'"
+                                :title="MESSAGES.mastersUi.customerMembership.needsCheck"
+                                :subtitle="membership.needs_attention ? MESSAGES.mastersUi.customerMembership.needsAttention : MESSAGES.mastersUi.customerMembership.none"
                             />
-                            <v-list-item title="Stripe 価格ID" :subtitle="membership.plan.stripe_price_id" />
+                            <v-list-item :title="MESSAGES.mastersUi.customerMembership.stripePriceId" :subtitle="membership.plan.stripe_price_id" />
                         </v-list>
                     </v-col>
                 </v-row>
@@ -212,7 +200,7 @@ function syncMembership(): void {
                     :disabled="membership.status === 'canceled'"
                     @click="openAdjust"
                 >
-                    残数を調整（ADJUST）
+                    {{ MESSAGES.mastersUi.customerMembership.adjustBalance }}
                 </v-btn>
                 <v-btn
                     color="error"
@@ -220,30 +208,30 @@ function syncMembership(): void {
                     :disabled="membership.status === 'canceled'"
                     @click="cancelDialog = true"
                 >
-                    即時解約
+                    {{ MESSAGES.mastersUi.customerMembership.cancelNow }}
                 </v-btn>
                 <v-spacer />
                 <v-btn color="primary" :loading="syncForm.processing" @click="syncMembership">
-                    Stripe と同期
+                    {{ MESSAGES.mastersUi.customerMembership.syncStripe }}
                 </v-btn>
             </v-card-actions>
             </SectionCard>
 
-            <SectionCard class="ark-table-section" title="利用台帳履歴">
+            <SectionCard class="ark-table-section" :title="MESSAGES.mastersUi.customerMembership.history">
             <v-data-table
                 :headers="historyHeaders"
                 :items="history"
                 item-value="id"
-                no-data-text="利用履歴はありません。"
+                :no-data-text="MESSAGES.membership.noUsageHistory"
             >
                 <template #no-data>
                     <EmptyState
                         icon="mdi-history"
-                        title="利用履歴はありません"
-                        description="利用権の付与や予約、調整を行うと、こちらに履歴が記録されます。"
+                        :title="MESSAGES.mastersUi.customerMembership.emptyHistoryTitle"
+                        :description="MESSAGES.mastersUi.customerMembership.emptyHistoryDescription"
                     />
                 </template>
-                <template #item.created_at="{ item }">{{ formatDateTime(item.created_at) }}</template>
+                <template #item.created_at="{ item }">{{ formatDateTimeOrNotRecorded(item.created_at) }}</template>
                 <template #item.membership_id="{ item }">#{{ item.membership_id }}</template>
                 <template #item.delta="{ item }">{{ signed(item.delta) }}</template>
                 <template #item.period_start="{ item }">{{ formatDate(item.period_start) }}</template>
@@ -257,21 +245,21 @@ function syncMembership(): void {
     </template>
 
     <v-dialog v-model="adjustDialog" max-width="560">
-        <v-card title="利用権残数を調整">
+        <v-card :title="MESSAGES.mastersUi.customerMembership.adjustTitle">
             <v-card-text>
                 <v-alert type="warning" variant="tonal" class="mb-4">
                     {{ MESSAGES.common.reauthAudited }}
                 </v-alert>
                 <v-text-field
                     v-model.number="adjustForm.delta"
-                    label="調整数（減らす場合は負数）"
+                    :label="MESSAGES.mastersUi.customerMembership.adjustCount"
                     type="number"
                     :error-messages="adjustForm.errors.delta"
                     required
                 />
                 <v-textarea
                     v-model="adjustForm.reason"
-                    label="理由"
+                    :label="MESSAGES.mastersUi.customerMembership.reason"
                     maxlength="255"
                     counter
                     :error-messages="adjustForm.errors.reason"
@@ -282,22 +270,22 @@ function syncMembership(): void {
                 </v-alert>
             </v-card-text>
             <v-card-actions class="pa-4">
-                <v-btn variant="text" @click="adjustDialog = false">戻る</v-btn>
+                <v-btn variant="text" @click="adjustDialog = false">{{ MESSAGES.mastersUi.customerMembership.back }}</v-btn>
                 <v-spacer />
-                <v-btn color="primary" :loading="adjustForm.processing" @click="submitAdjust">調整する</v-btn>
+                <v-btn color="primary" :loading="adjustForm.processing" @click="submitAdjust">{{ MESSAGES.mastersUi.customerMembership.adjustSubmit }}</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
 
     <v-dialog v-model="cancelDialog" max-width="560">
-        <v-card title="利用権を即時解約しますか？">
+        <v-card :title="MESSAGES.mastersUi.customerMembership.cancelTitle">
             <v-card-text>
                 <v-alert type="error" variant="tonal" class="mb-4">
                     {{ MESSAGES.membership.cancelNowWarning }}
                 </v-alert>
                 <v-textarea
                     v-model="cancelForm.reason"
-                    label="理由"
+                    :label="MESSAGES.mastersUi.customerMembership.reason"
                     maxlength="255"
                     counter
                     :error-messages="cancelForm.errors.reason"
@@ -305,9 +293,9 @@ function syncMembership(): void {
                 />
             </v-card-text>
             <v-card-actions class="pa-4">
-                <v-btn variant="text" @click="cancelDialog = false">戻る</v-btn>
+                <v-btn variant="text" @click="cancelDialog = false">{{ MESSAGES.mastersUi.customerMembership.back }}</v-btn>
                 <v-spacer />
-                <v-btn color="error" :loading="cancelForm.processing" @click="submitCancel">即時解約する</v-btn>
+                <v-btn color="error" :loading="cancelForm.processing" @click="submitCancel">{{ MESSAGES.mastersUi.customerMembership.cancelSubmit }}</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>

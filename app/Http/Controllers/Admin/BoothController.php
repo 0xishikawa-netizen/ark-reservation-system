@@ -96,7 +96,7 @@ class BoothController extends Controller
 
         return back()->with(
             'success',
-            $validated['active'] ? 'ブースを有効化しました。' : 'ブースを無効化しました。',
+            $validated['active'] ? __('messages.booth.activated') : __('messages.booth.deactivated'),
         );
     }
 }

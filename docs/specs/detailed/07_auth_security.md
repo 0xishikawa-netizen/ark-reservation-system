@@ -132,5 +132,5 @@ flowchart LR
 
 - SQL：Eloquent / クエリビルダのバインドのみ（`selectRaw` の値もバインド）。
 - XSS：Vue の自動エスケープ。ユーザー入力に `v-html` を使わない（現状 0 件）。
-- 画面メッセージ：サーバー `lang/ja/messages.php`、画面 `resources/js/constants/messages.ts` に集約（未移行の直書きはレビュー L-4）。
+- 画面メッセージ：サーバー `lang/ja/messages.php`、画面 `resources/js/constants/messages.ts`（＋領域別 `constants/messages/*.ts`）に集約済み（Task 11-34）。差し込みは `fillMessage()` を使い、値に `$&` 等が含まれても表示が崩れない。
 - Stripe の生エラーメッセージを顧客に出さない（安全なコードと固定文言に置き換える）。

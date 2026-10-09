@@ -7,6 +7,19 @@ import { DateField, StatusChip } from '@/components/ark';
 import { applyReservationPrefill, type ReservationDraft } from '@/composables/reservationDraft';
 import { isPastDateTime } from '@/utils/pastDateTime';
 import { MESSAGES, unavailableDesiredTimeMessage } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatMonthDayWeekday, timeLabel, todayIso } from '@/utils/dateFormat';
+
+/** 空き枠を取得できなかった理由を表示する時間。 */
+const REASON_TOAST_TIMEOUT_MS = 8000;
+/** 条件変更後に空き時間を再取得するまでの待機時間。 */
+const AVAILABILITY_DEBOUNCE_MS = 150;
+/** 1時間あたりの分数。 */
+const MINUTES_PER_HOUR = 60;
+/** 1日あたりの時間数。 */
+const HOURS_PER_DAY = 24;
+/** 2桁の時刻表示幅。 */
+const TIME_PART_WIDTH = 2;
 
 interface CustomerOption {
     user_id: number;
@@ -108,12 +121,6 @@ applyReservationPrefill(props.draft, {
 /** 顧客は「パネル上部の常時表示の検索欄」で選ぶ。ここでは選ばれた顧客の表示名だけ持つ。 */
 const customerItems = ref<CustomerOption[]>([]);
 
-function todayIso(): string {
-    const now = new Date();
-
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
-
 const selectedServiceId = ref<number | null>(props.draft.service_id);
 const selectedStaffId = ref<number | null>(props.draft.staff_id);
 const selectedBoothId = ref<number | null>(props.draft.booth_id);
@@ -130,15 +137,15 @@ const availabilityLoaded = ref(false);
 const desiredStartsAt = ref<string | null>(props.draft.starts_at);
 
 const GENDER_PREFERENCES = [
-    { value: 'male', label: '男性希望' },
-    { value: 'female', label: '女性希望' },
+    { value: 'male', label: MESSAGES.boardUi.newReservationPanel.malePreference },
+    { value: 'female', label: MESSAGES.boardUi.newReservationPanel.femalePreference },
 ];
 
 const BUFFER_OPTIONS = [
-    { value: 0, label: 'なし' },
-    { value: 5, label: '5分' },
-    { value: 10, label: '10分' },
-    { value: 15, label: '15分' },
+    { value: 0, label: MESSAGES.boardUi.newReservationPanel.noBuffer },
+    { value: 5, label: MESSAGES.boardUi.newReservationPanel.fiveMinutes },
+    { value: 10, label: MESSAGES.boardUi.newReservationPanel.tenMinutes },
+    { value: 15, label: MESSAGES.boardUi.newReservationPanel.fifteenMinutes },
 ];
 
 const form = useForm({
@@ -249,17 +256,6 @@ const selectedBoothName = computed<string | null>(
     () => props.booths.find((b) => b.id === selectedBoothId.value)?.name ?? null,
 );
 
-function fmtDay(iso: string): string {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-        return '';
-    }
-
-    const [y, m, d] = iso.split('-').map(Number);
-    const weekday = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(new Date(y, m - 1, d));
-
-    return `${m}/${d}（${weekday}）`;
-}
-
 const staffItems = computed<StaffOption[]>(() => {
     if (selectedService.value === null) {
         return props.staff;
@@ -270,7 +266,7 @@ const staffItems = computed<StaffOption[]>(() => {
 
 const staffSelectItems = computed(() => {
     const items = [
-        { title: '指名なし（自動割当）', value: null as number | null },
+        { title: MESSAGES.boardUi.newReservationPanel.noNomination, value: null as number | null },
         ...staffItems.value.map((s) => ({ title: s.display_name, value: s.user_id as number | null })),
     ];
     // 空き枠クリック等で、このメニューを担当できない（施術可否・資格なし）スタッフが選ばれている時も、
@@ -639,7 +635,7 @@ watch(
             return;
         }
 
-        availabilityTimer = setTimeout(() => void loadAvailability(), 150);
+        availabilityTimer = setTimeout(() => void loadAvailability(), AVAILABILITY_DEBOUNCE_MS);
     },
 );
 
@@ -653,9 +649,9 @@ const selectedEndLabel = computed<string | null>(() => {
     }
 
     const [h, m] = form.starts_at.slice(11, 16).split(':').map(Number);
-    const total = h * 60 + m + selectedService.value.duration_min;
+    const total = h * MINUTES_PER_HOUR + m + selectedService.value.duration_min;
 
-    return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+    return `${String(Math.floor(total / MINUTES_PER_HOUR) % HOURS_PER_DAY).padStart(TIME_PART_WIDTH, '0')}:${String(total % MINUTES_PER_HOUR).padStart(TIME_PART_WIDTH, '0')}`;
 });
 
 // 空き枠クリックで開いた場合、または draft に前回選んだ時刻が残っている場合、
@@ -666,10 +662,6 @@ onMounted(() => {
         void loadAvailability();
     }
 });
-
-function timeLabel(value: string): string {
-    return value.slice(11, 16);
-}
 
 /** 空き枠クリックで指定された時刻が、このメニュー・担当では取れなかった時の表示用。 */
 const unavailableDesiredTime = computed<string | null>(() => {
@@ -779,7 +771,7 @@ function submit(): void {
 
 <template>
     <PanelShell
-        title="新規予約"
+        :title="MESSAGES.boardUi.newReservationPanel.title"
         icon="mdi-calendar-plus-outline"
         :show-back="canGoBack"
         @close="emit('close')"
@@ -792,11 +784,11 @@ function submit(): void {
                 </p>
                 <template v-else>
                     <div class="nrp__when-cell">
-                        <span class="nrp__when-label">日付</span>
-                        <span class="nrp__when-value">{{ fmtDay(date) }}</span>
+                        <span class="nrp__when-label">{{ MESSAGES.boardUi.newReservationPanel.date }}</span>
+                        <span class="nrp__when-value">{{ formatMonthDayWeekday(date) }}</span>
                     </div>
                     <div class="nrp__when-cell nrp__when-cell--time">
-                        <span class="nrp__when-label">開始時間</span>
+                        <span class="nrp__when-label">{{ MESSAGES.boardUi.newReservationPanel.startTime }}</span>
                         <span v-if="form.starts_at" class="nrp__when-value nrp__when-value--time">
                             {{ timeLabel(form.starts_at) }}<template v-if="selectedEndLabel"><span class="nrp__when-sep">〜</span>{{ selectedEndLabel }}</template>
                         </span>
@@ -805,11 +797,11 @@ function submit(): void {
                             --:-- 〜 --:--
                             <v-tooltip v-if="selectedServiceId === null" activator="parent" location="bottom">{{ MESSAGES.reservation.pickMenuToFixTime }}</v-tooltip>
                         </span>
-                        <small v-if="form.starts_at && selectedEndLabel && form.buffer_min > 0" class="nrp__buffer-note" data-testid="nrp-buffer-note">{{ MESSAGES.visitCompletion.bufferAfter.replace('{min}', String(form.buffer_min)) }}</small>
+                        <small v-if="form.starts_at && selectedEndLabel && form.buffer_min > 0" class="nrp__buffer-note" data-testid="nrp-buffer-note">{{ fillMessage(MESSAGES.visitCompletion.bufferAfter, { min: String(form.buffer_min) }) }}</small>
                     </div>
                 </template>
                 <div v-if="selectedStaffName" class="nrp__when-cell nrp__when-cell--staff">
-                    <span class="nrp__when-label">担当</span>
+                    <span class="nrp__when-label">{{ MESSAGES.boardUi.newReservationPanel.staff }}</span>
                     <span class="nrp__when-value">{{ selectedStaffName }}</span>
                 </div>
             </div>
@@ -827,14 +819,14 @@ function submit(): void {
 
             <div class="nrp__step" :class="{ 'nrp__step--done': customerDone }">
                 <span class="nrp__step-no"><v-icon v-if="customerDone" icon="mdi-check" size="13" /><template v-else>{{ stepNo('customer') }}</template></span>
-                <span class="nrp__step-title">お客様</span>
+                <span class="nrp__step-title">{{ MESSAGES.boardUi.newReservationPanel.customer }}</span>
             </div>
 
             <!-- ① お客様：既存（上の検索で選ぶ）／新規（その場で仮登録）をトグルで切り替える。 -->
             <div class="nrp__block">
-                <div class="nrp__toggle" role="radiogroup" aria-label="お客様の種類">
-                    <button type="button" class="nrp__toggle-btn" :class="{ 'nrp__toggle-btn--active': customerMode === 'existing' }" role="radio" :aria-checked="customerMode === 'existing'" data-testid="nrp-mode-existing" @click="setCustomerMode('existing')">既存のお客様</button>
-                    <button type="button" class="nrp__toggle-btn" :class="{ 'nrp__toggle-btn--active': customerMode === 'new' }" role="radio" :aria-checked="customerMode === 'new'" data-testid="nrp-mode-new" @click="setCustomerMode('new')">新規のお客様</button>
+                <div class="nrp__toggle" role="radiogroup" :aria-label="MESSAGES.boardUi.newReservationPanel.customerType">
+                    <button type="button" class="nrp__toggle-btn" :class="{ 'nrp__toggle-btn--active': customerMode === 'existing' }" role="radio" :aria-checked="customerMode === 'existing'" data-testid="nrp-mode-existing" @click="setCustomerMode('existing')">{{ MESSAGES.boardUi.newReservationPanel.existingCustomer }}</button>
+                    <button type="button" class="nrp__toggle-btn" :class="{ 'nrp__toggle-btn--active': customerMode === 'new' }" role="radio" :aria-checked="customerMode === 'new'" data-testid="nrp-mode-new" @click="setCustomerMode('new')">{{ MESSAGES.boardUi.newReservationPanel.newCustomer }}</button>
                 </div>
 
                 <template v-if="selectedCustomer">
@@ -845,15 +837,15 @@ function submit(): void {
                         </span>
                     </div>
                     <!-- 顧客（詳細へ）／履歴／今後の予約。予約の入力内容は残したまま、履歴は下に開く。 -->
-                    <div class="nrp__tabs" role="tablist" aria-label="お客様の情報">
+                    <div class="nrp__tabs" role="tablist" :aria-label="MESSAGES.boardUi.newReservationPanel.customerInformation">
                         <button type="button" class="nrp__tab" data-testid="nrp-open-customer" @click="openCustomerPage(selectedCustomer.user_id)">
-                            <v-icon icon="mdi-account-outline" size="16" /><span>顧客</span>
+                            <v-icon icon="mdi-account-outline" size="16" /><span>{{ MESSAGES.boardUi.newReservationPanel.customerTab }}</span>
                         </button>
                         <button type="button" class="nrp__tab" :class="{ 'nrp__tab--active': customerSection === 'history' }" role="tab" :aria-selected="customerSection === 'history'" data-testid="nrp-tab-history" @click="toggleCustomerSection('history')">
-                            <v-icon icon="mdi-history" size="16" /><span>履歴</span>
+                            <v-icon icon="mdi-history" size="16" /><span>{{ MESSAGES.boardUi.newReservationPanel.history }}</span>
                         </button>
                         <button type="button" class="nrp__tab" :class="{ 'nrp__tab--active': customerSection === 'upcoming' }" role="tab" :aria-selected="customerSection === 'upcoming'" data-testid="nrp-tab-upcoming" @click="toggleCustomerSection('upcoming')">
-                            <v-icon icon="mdi-calendar-clock-outline" size="16" /><span>今後の予約</span>
+                            <v-icon icon="mdi-calendar-clock-outline" size="16" /><span>{{ MESSAGES.boardUi.newReservationPanel.upcoming }}</span>
                         </button>
                     </div>
                 </template>
@@ -869,13 +861,13 @@ function submit(): void {
             <!-- 新規のお客様：名前だけ入力して仮登録し、お客様欄に反映する（詳細は後から顧客詳細で）。 -->
             <v-dialog v-model="provisionalOpen" max-width="360">
                 <v-card>
-                    <v-card-title class="text-subtitle-2 font-weight-bold">新規のお客様</v-card-title>
+                    <v-card-title class="text-subtitle-2 font-weight-bold">{{ MESSAGES.boardUi.newReservationPanel.newCustomer }}</v-card-title>
                     <v-card-text>
                         <div class="nrp__dialog-fields">
                             <v-text-field
                                 v-model="provisional.kana"
-                                label="カナ"
-                                placeholder="例：ヤマダ タロウ"
+                                :label="MESSAGES.boardUi.newReservationPanel.kana"
+                                :placeholder="MESSAGES.boardUi.newReservationPanel.kanaExample"
                                 density="compact"
                                 variant="outlined"
                                 hide-details
@@ -884,8 +876,8 @@ function submit(): void {
                             />
                             <v-text-field
                                 v-model="provisional.phone"
-                                label="電話番号"
-                                placeholder="例：09012345678"
+                                :label="MESSAGES.boardUi.newReservationPanel.phone"
+                                :placeholder="MESSAGES.boardUi.newReservationPanel.phoneExample"
                                 inputmode="tel"
                                 density="compact"
                                 variant="outlined"
@@ -897,8 +889,8 @@ function submit(): void {
                     </v-card-text>
                     <v-card-actions>
                         <v-spacer />
-                        <v-btn variant="text" size="small" :disabled="provisionalSaving" @click="provisionalOpen = false">やめる</v-btn>
-                        <v-btn color="primary" variant="flat" size="small" :loading="provisionalSaving" @click="submitProvisional">登録して選択</v-btn>
+                        <v-btn variant="text" size="small" :disabled="provisionalSaving" @click="provisionalOpen = false">{{ MESSAGES.boardUi.newReservationPanel.stop }}</v-btn>
+                        <v-btn color="primary" variant="flat" size="small" :loading="provisionalSaving" @click="submitProvisional">{{ MESSAGES.boardUi.newReservationPanel.registerAndSelect }}</v-btn>
                     </v-card-actions>
                 </v-card>
             </v-dialog>
@@ -906,14 +898,14 @@ function submit(): void {
             <!-- ② メニュー -->
             <div class="nrp__step" :class="{ 'nrp__step--done': selectedServiceId !== null }">
                 <span class="nrp__step-no"><v-icon v-if="selectedServiceId !== null" icon="mdi-check" size="13" /><template v-else>{{ stepNo('menu') }}</template></span>
-                <span class="nrp__step-title">メニュー</span>
+                <span class="nrp__step-title">{{ MESSAGES.boardUi.newReservationPanel.menu }}</span>
             </div>
             <div class="nrp__block">
                 <button
                     type="button"
                     class="nrp__field-btn"
                     aria-haspopup="dialog"
-                    :aria-label="`メニュー：${selectedService ? selectedService.name : '未選択'}`"
+                    :aria-label="fillMessage(MESSAGES.boardUi.newReservationPanel.menuAria, { name: selectedService ? selectedService.name : MESSAGES.boardUi.newReservationPanel.unselected })"
                     @click="menuPickerOpen = true"
                 >
                     <span class="nrp__field-value">
@@ -925,10 +917,10 @@ function submit(): void {
                         />
                         <span class="nrp__field-text">
                             <span :class="{ 'nrp__field-placeholder': !selectedService }">
-                                {{ selectedService ? selectedService.name : '選択してください' }}
+                                {{ selectedService ? selectedService.name : MESSAGES.boardUi.newReservationPanel.selectPlease }}
                             </span>
                             <span v-if="selectedService" class="nrp__field-meta">
-                                {{ selectedService.duration_min }}分 ・ {{ selectedService.price.toLocaleString() }}円
+                                {{ fillMessage(MESSAGES.boardUi.newReservationPanel.serviceSummary, { duration: String(selectedService.duration_min), price: selectedService.price.toLocaleString() }) }}
                             </span>
                         </span>
                     </span>
@@ -947,19 +939,19 @@ function submit(): void {
 
             <div v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__step" :class="{ 'nrp__step--done': form.starts_at !== null }">
                 <span class="nrp__step-no"><v-icon v-if="form.starts_at !== null" icon="mdi-check" size="13" /><template v-else>{{ stepNo('time') }}</template></span>
-                <span class="nrp__step-title">日時</span>
+                <span class="nrp__step-title">{{ MESSAGES.boardUi.newReservationPanel.dateTime }}</span>
             </div>
 
             <!-- ③ 日付（予約の操作順：顧客→メニュー→日時→担当→ブース→インターバル→備考。Task 11-30） -->
             <div v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__block">
-                <span class="nrp__block-label">日付</span>
+                <span class="nrp__block-label">{{ MESSAGES.boardUi.newReservationPanel.date }}</span>
                 <DateField block v-model="date" label="" density="compact" :clearable="false" />
             </div>
 
             <!-- ④ 開始時間 -->
             <div v-if="!dateTimeLocked && !awaitingBoardSlotSelection" class="nrp__block">
                 <span class="nrp__block-label">
-                    開始時間
+                    {{ MESSAGES.boardUi.newReservationPanel.startTime }}
                     <span v-if="loadingSlots" class="nrp__block-note">{{ MESSAGES.common.loading }}</span>
                 </span>
 
@@ -984,12 +976,12 @@ function submit(): void {
 
             <div class="nrp__step" :class="{ 'nrp__step--done': staffDone }">
                 <span class="nrp__step-no"><v-icon v-if="staffDone" icon="mdi-check" size="13" /><template v-else>{{ stepNo('staff') }}</template></span>
-                <span class="nrp__step-title">担当・ブース</span>
+                <span class="nrp__step-title">{{ MESSAGES.boardUi.newReservationPanel.staffAndBooth }}</span>
             </div>
 
             <!-- ⑤ 担当スタッフ・指名 -->
             <div class="nrp__block">
-                <span class="nrp__block-label">担当スタッフ</span>
+                <span class="nrp__block-label">{{ MESSAGES.boardUi.newReservationPanel.staffLabel }}</span>
                 <v-select
                     v-model="selectedStaffId"
                     :items="staffSelectItems"
@@ -1003,7 +995,7 @@ function submit(): void {
                     persistent-hint
                 />
                 <!-- 指名／男性希望／女性希望。性別希望は担当を決めていなくても付けられる（押し直すと外れる）。 -->
-                <div class="nrp__prefs" role="group" aria-label="担当の希望">
+                <div class="nrp__prefs" role="group" :aria-label="MESSAGES.boardUi.newReservationPanel.staffPreference">
                     <button
                         type="button"
                         class="nrp__pref nrp__pref--nomination"
@@ -1012,7 +1004,7 @@ function submit(): void {
                         :aria-pressed="form.is_staff_requested"
                         data-testid="nrp-pref-nomination"
                         @click="toggleNomination"
-                    >指名</button>
+                    >{{ MESSAGES.boardUi.newReservationPanel.nomination }}</button>
                     <button
                         v-for="g in GENDER_PREFERENCES"
                         :key="g.value"
@@ -1028,7 +1020,7 @@ function submit(): void {
 
             <!-- ⑥ ブース（自動・変更可） -->
             <div class="nrp__block">
-                <span class="nrp__block-label">ブース</span>
+                <span class="nrp__block-label">{{ MESSAGES.boardUi.newReservationPanel.booth }}</span>
                 <!-- 空いているブースを自動で提案し、別の空きブースへ変更もできる（Task 11-28）。
                      未選択のまま予約すると、メニューで使えるブースのうち空いている1つを確定する。 -->
                 <v-select
@@ -1048,14 +1040,14 @@ function submit(): void {
 
             <div class="nrp__step" >
                 <span class="nrp__step-no">{{ stepNo('options') }}</span>
-                <span class="nrp__step-title">オプション</span>
-                <span class="nrp__step-opt">任意</span>
+                <span class="nrp__step-title">{{ MESSAGES.boardUi.newReservationPanel.options }}</span>
+                <span class="nrp__step-opt">{{ MESSAGES.boardUi.newReservationPanel.optional }}</span>
             </div>
 
             <!-- ⑦ インターバル（予約の後ろに確保） -->
             <div class="nrp__block">
-                <span class="nrp__block-label">インターバル</span>
-                <div class="nrp__buffers" role="radiogroup" aria-label="インターバル">
+                <span class="nrp__block-label">{{ MESSAGES.boardUi.newReservationPanel.interval }}</span>
+                <div class="nrp__buffers" role="radiogroup" :aria-label="MESSAGES.boardUi.newReservationPanel.interval">
                     <button
                         v-for="opt in BUFFER_OPTIONS"
                         :key="opt.value"
@@ -1073,10 +1065,10 @@ function submit(): void {
 
             <!-- ⑧ 予約備考 -->
             <div class="nrp__block">
-                <span class="nrp__block-label">予約備考</span>
+                <span class="nrp__block-label">{{ MESSAGES.boardUi.newReservationPanel.reservationNote }}</span>
                 <v-textarea
                     v-model="form.notes"
-                    placeholder="例：初回カウンセリングあり"
+                    :placeholder="MESSAGES.boardUi.newReservationPanel.noteExample"
                     rows="2"
                     auto-grow
                     variant="outlined"
@@ -1097,8 +1089,8 @@ function submit(): void {
             <div v-if="customerSection !== null && selectedCustomer" class="nrp__history" data-testid="nrp-rows">
                 <h3 class="nrp__history-title">
                     <v-icon :icon="customerSection === 'history' ? 'mdi-history' : 'mdi-calendar-clock-outline'" size="16" />
-                    {{ customerSection === 'history' ? '来店履歴' : '今後の予約' }}
-                    <button type="button" class="nrp__history-close" aria-label="閉じる" @click="customerSection = null"><v-icon icon="mdi-close" size="14" /></button>
+                    {{ customerSection === 'history' ? MESSAGES.boardUi.newReservationPanel.visitHistory : MESSAGES.boardUi.newReservationPanel.upcoming }}
+                    <button type="button" class="nrp__history-close" :aria-label="MESSAGES.boardUi.newReservationPanel.close" @click="customerSection = null"><v-icon icon="mdi-close" size="14" /></button>
                 </h3>
                 <p v-if="customerRowsLoading" class="nrp__muted">{{ MESSAGES.common.loading }}</p>
                 <template v-else>
@@ -1111,9 +1103,9 @@ function submit(): void {
                             <StatusChip :status="row.status" :label="row.status_label" size="x-small" />
                         </span>
                         <span class="nrp__row-service">{{ row.service_name }}</span>
-                        <span class="nrp__row-staff">{{ row.staff_name ?? '担当なし' }}</span>
+                        <span class="nrp__row-staff">{{ row.staff_name ?? MESSAGES.boardUi.schedule.unassignedStaff }}</span>
                     </div>
-                    <p v-if="customerSection === 'history' && customerRows.total > customerRows.history.length" class="nrp__muted">全 {{ customerRows.total }} 件のうち新しい順に表示</p>
+                    <p v-if="customerSection === 'history' && customerRows.total > customerRows.history.length" class="nrp__muted">{{ fillMessage(MESSAGES.boardUi.newReservationPanel.recentFirst, { count: String(customerRows.total) }) }}</p>
                 </template>
             </div>
 
@@ -1124,10 +1116,10 @@ function submit(): void {
             <div v-if="form.starts_at && selectedService" class="nrp__summary" data-testid="nrp-summary">
                 <strong>{{ timeLabel(form.starts_at) }}〜{{ selectedEndLabel }}</strong>
                 <span>{{ selectedService.name }}</span>
-                <span v-if="selectedStaffName">{{ selectedStaffName }}<template v-if="form.is_staff_requested">（指名）</template></span>
-                <span v-if="form.staff_gender_preference">{{ form.staff_gender_preference === 'male' ? '男性希望' : '女性希望' }}</span>
+                <span v-if="selectedStaffName">{{ selectedStaffName }}<template v-if="form.is_staff_requested">{{ MESSAGES.boardUi.newReservationPanel.nominationInParens }}</template></span>
+                <span v-if="form.staff_gender_preference">{{ form.staff_gender_preference === 'male' ? MESSAGES.boardUi.newReservationPanel.malePreference : MESSAGES.boardUi.newReservationPanel.femalePreference }}</span>
                 <span>{{ selectedBoothName ?? MESSAGES.bookingResources.boothAuto }}</span>
-                <span v-if="form.buffer_min > 0" class="nrp__summary-muted">{{ MESSAGES.visitCompletion.bufferAfter.replace('{min}', String(form.buffer_min)) }}</span>
+                <span v-if="form.buffer_min > 0" class="nrp__summary-muted">{{ fillMessage(MESSAGES.visitCompletion.bufferAfter, { min: String(form.buffer_min) }) }}</span>
             </div>
             <v-btn
                 color="primary"
@@ -1138,28 +1130,28 @@ function submit(): void {
                 :loading="form.processing"
                 @click="requestSubmit"
             >
-                予約を作成
+                {{ MESSAGES.boardUi.newReservationPanel.create }}
             </v-btn>
         </template>
         <!-- 取れなかった理由のトースト。画面下に出して、パネルを見ていなくても気づけるようにする。 -->
-        <v-snackbar v-model="reasonToast" color="warning" location="bottom" timeout="8000" multi-line>
+        <v-snackbar v-model="reasonToast" color="warning" location="bottom" :timeout="REASON_TOAST_TIMEOUT_MS" multi-line>
             <strong>{{ unavailableDesiredTime !== null ? unavailableDesiredTimeMessage(unavailableDesiredTime) : '' }}</strong>
             <ul class="nrp__toast-reasons">
                 <li v-for="reason in unavailableReasons" :key="reason">{{ reason }}</li>
             </ul>
             <template #actions>
-                <v-btn variant="text" @click="reasonToast = false">閉じる</v-btn>
+                <v-btn variant="text" @click="reasonToast = false">{{ MESSAGES.boardUi.newReservationPanel.close }}</v-btn>
             </template>
         </v-snackbar>
         <!-- 過去の日時に入れる時だけ確認する（入力ミス防止）。 -->
         <v-dialog v-model="pastConfirmOpen" max-width="400">
             <v-card>
                 <v-card-title class="text-subtitle-1 font-weight-bold">{{ MESSAGES.schedule.pastConfirmTitle }}</v-card-title>
-                <v-card-text>{{ MESSAGES.schedule.pastConfirmBody.replace('{when}', pastConfirmLabel) }}</v-card-text>
+                <v-card-text>{{ fillMessage(MESSAGES.schedule.pastConfirmBody, { when: pastConfirmLabel }) }}</v-card-text>
                 <v-card-actions>
                     <v-spacer />
-                    <v-btn variant="text" @click="pastConfirmOpen = false">やめる</v-btn>
-                    <v-btn color="primary" variant="flat" data-testid="past-confirm" @click="pastConfirmOpen = false; submit()">この日時で登録する</v-btn>
+                    <v-btn variant="text" @click="pastConfirmOpen = false">{{ MESSAGES.boardUi.newReservationPanel.stop }}</v-btn>
+                    <v-btn color="primary" variant="flat" data-testid="past-confirm" @click="pastConfirmOpen = false; submit()">{{ MESSAGES.boardUi.newReservationPanel.registerThisDateTime }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>

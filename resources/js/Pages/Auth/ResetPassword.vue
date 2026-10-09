@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useForm } from "@inertiajs/vue3";
 import AuthCard from "@/components/auth/AuthCard.vue";
+import { MESSAGES } from "@/constants/messages";
 
 const props = defineProps<{
     token: string;
@@ -23,13 +24,13 @@ const submit = (): void => {
 
 <template>
     <AuthCard
-        title="新しいパスワード"
-        subtitle="新しいパスワードを設定してください。"
+        :title="MESSAGES.customerUi.auth.resetPassword.title"
+        :subtitle="MESSAGES.customerUi.auth.resetPassword.subtitle"
     >
         <v-form @submit.prevent="submit">
             <v-text-field
                 v-model="form.email"
-                label="メールアドレス"
+                :label="MESSAGES.customerUi.auth.email"
                 type="email"
                 autocomplete="email"
                 :error-messages="form.errors.email"
@@ -37,7 +38,7 @@ const submit = (): void => {
             />
             <v-text-field
                 v-model="form.password"
-                label="新しいパスワード"
+                :label="MESSAGES.customerUi.auth.resetPassword.title"
                 type="password"
                 autocomplete="new-password"
                 :error-messages="form.errors.password"
@@ -45,7 +46,7 @@ const submit = (): void => {
             />
             <v-text-field
                 v-model="form.password_confirmation"
-                label="新しいパスワード（確認）"
+                :label="MESSAGES.customerUi.auth.resetPassword.confirmation"
                 type="password"
                 autocomplete="new-password"
                 required
@@ -58,7 +59,7 @@ const submit = (): void => {
                 block
                 :loading="form.processing"
             >
-                パスワードを再設定
+                {{ MESSAGES.customerUi.auth.resetPassword.submit }}
             </v-btn>
         </v-form>
     </AuthCard>

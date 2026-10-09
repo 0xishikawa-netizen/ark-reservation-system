@@ -37,12 +37,12 @@ final class VisitFactService
 
         return DB::transaction(function () use ($customer, $reservation, $attributes, $startedAt, $actor): Visit {
             if ($reservation !== null && (int) $reservation->customer_id !== (int) $customer->getKey()) {
-                throw ValidationException::withMessages(['reservation_id' => '予約と来店顧客が一致しません。']);
+                throw ValidationException::withMessages(['reservation_id' => __('messages.visit.reservation_customer_mismatch')]);
             }
 
             $derivedBusinessDate = $this->businessTime->businessDate($startedAt)->toDateString();
             if ($startedAt !== null && isset($attributes['business_date']) && $attributes['business_date'] !== $derivedBusinessDate) {
-                throw ValidationException::withMessages(['business_date' => '営業日が来店開始日時の日本時間日付と一致しません。']);
+                throw ValidationException::withMessages(['business_date' => __('messages.visit.business_date_mismatch')]);
             }
 
             $visit = Visit::query()->create([
@@ -64,7 +64,7 @@ final class VisitFactService
         return DB::transaction(function () use ($visit, $service, $attributes, $actor): VisitTreatment {
             $lockedVisit = Visit::query()->whereKey($visit->getKey())->lockForUpdate()->firstOrFail();
             if ($lockedVisit->status !== VisitStatus::Draft) {
-                throw ValidationException::withMessages(['visit' => '完了済み来店へ施術を追加できません。']);
+                throw ValidationException::withMessages(['visit' => __('messages.visit.completed_treatment_locked')]);
             }
 
             $service?->loadMissing('analysisCategory');
@@ -83,7 +83,7 @@ final class VisitFactService
                 ? VisitTreatment::query()->firstOrCreate(['operation_key' => $operationKey], $values)
                 : VisitTreatment::query()->create($values);
             if ((int) $treatment->visit_id !== (int) $lockedVisit->getKey()) {
-                throw ValidationException::withMessages(['operation_key' => '操作キーが別の来店で使用されています。']);
+                throw ValidationException::withMessages(['operation_key' => __('messages.visit.operation_key_conflict')]);
             }
             if ($treatment->wasRecentlyCreated) {
                 $this->audit->log('visit_treatment.created', $treatment, '施術実績を追加', $actor);
@@ -99,10 +99,10 @@ final class VisitFactService
         return DB::transaction(function () use ($treatment, $staff, $attributes, $actor): VisitTreatmentStaff {
             $locked = VisitTreatment::query()->whereKey($treatment->getKey())->lockForUpdate()->firstOrFail();
             if ($locked->status !== VisitTreatmentStatus::Draft) {
-                throw ValidationException::withMessages(['treatment' => '確定済み施術の担当者は変更できません。']);
+                throw ValidationException::withMessages(['treatment' => __('messages.visit.completed_staff_locked')]);
             }
             if (! isset($attributes['actual_minutes']) || (int) $attributes['actual_minutes'] < 1) {
-                throw ValidationException::withMessages(['actual_minutes' => '実担当時間は1分以上で指定してください。']);
+                throw ValidationException::withMessages(['actual_minutes' => __('messages.visit.actual_minutes_positive')]);
             }
 
             $assignment = VisitTreatmentStaff::query()->updateOrCreate(
@@ -123,7 +123,7 @@ final class VisitFactService
                 return $locked;
             }
             if ($locked->status !== VisitTreatmentStatus::Draft || $locked->actual_minutes === null) {
-                throw ValidationException::withMessages(['treatment' => '実施時間が未確定の施術は完了できません。']);
+                throw ValidationException::withMessages(['treatment' => __('messages.visit.actual_minutes_required')]);
             }
 
             $assignments = VisitTreatmentStaff::query()
@@ -133,7 +133,7 @@ final class VisitFactService
             $staffMinutes = (int) $assignments->sum('actual_minutes');
             if (($assignments->isEmpty() && $requiresStaff)
                 || ($assignments->isNotEmpty() && $staffMinutes !== (int) $locked->actual_minutes)) {
-                throw ValidationException::withMessages(['actual_minutes' => 'スタッフ実担当時間の合計が施術時間と一致しません。']);
+                throw ValidationException::withMessages(['actual_minutes' => __('messages.visit.staff_minutes_mismatch')]);
             }
 
             $locked->forceFill(['status' => VisitTreatmentStatus::Completed])->save();

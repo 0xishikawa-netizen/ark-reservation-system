@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineProps<{
     status?: string | null;
@@ -16,14 +17,14 @@ const submit = (): void => {
 </script>
 
 <template>
-    <AuthCard title="パスワード再設定" subtitle="再設定用リンクをメールでお送りします。">
+    <AuthCard :title="MESSAGES.customerUi.auth.forgotPassword.title" :subtitle="MESSAGES.customerUi.auth.forgotPassword.subtitle">
         <v-alert v-if="status" type="success" variant="tonal" density="comfortable" class="mb-4">
             {{ status }}
         </v-alert>
         <v-form @submit.prevent="submit">
             <v-text-field
                 v-model="form.email"
-                label="メールアドレス"
+                :label="MESSAGES.customerUi.auth.email"
                 type="email"
                 autocomplete="email"
                 :error-messages="form.errors.email"
@@ -38,12 +39,12 @@ const submit = (): void => {
                 block
                 :loading="form.processing"
             >
-                再設定リンクを送信
+                {{ MESSAGES.customerUi.auth.forgotPassword.submit }}
             </v-btn>
         </v-form>
 
         <template #footer>
-            <a href="/login" class="text-body-2">ログインへ戻る</a>
+            <a href="/login" class="text-body-2">{{ MESSAGES.customerUi.auth.forgotPassword.backToLogin }}</a>
         </template>
     </AuthCard>
 </template>

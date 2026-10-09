@@ -5,8 +5,12 @@ import { EmptyValue, MonthField, PageHeader, SectionCard } from '@/components/ar
 import { formatReportDate, MonthlyReportTabs, ReportDailyToolbar, ReportFilterBar, ReportFilterField, ReportSelect, ReportTable, ReportValue, useDailyFilter } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { changeAndReload } from '@/composables/reportNavigation';
 
 defineOptions({ layout: AdminLayout });
+
+/** 日別表で左端の固定列（日付・スタッフ）以外に並ぶ値の列数 */
+const DAILY_VALUE_COLUMN_COUNT = 11;
 
 interface Option { id: number; name: string; code?: string }
 interface Row {
@@ -27,6 +31,7 @@ type DailyGrouping = 'date' | 'staff';
 
 const props = defineProps<{ report: Report; dataEndpoint: string }>();
 const labels = MESSAGES.reporting;
+const M = MESSAGES.reportsUi.staffUtilization;
 const report = ref<Report>(props.report);
 const month = ref(props.report.month_key);
 const staffId = ref<number | null>(null);
@@ -74,7 +79,7 @@ const leadColumns = computed<LeadColumn[]>(() => {
     if (singleStaff.value) return ['date'];
     return dailyGrouping.value === 'staff' ? ['staff', 'date'] : ['date', 'staff'];
 });
-const dailyColumnCount = computed(() => leadColumns.value.length + 11);
+const dailyColumnCount = computed(() => leadColumns.value.length + DAILY_VALUE_COLUMN_COUNT);
 /** まとまりの見出し列は先頭行だけ表示し、それ以外の列は毎行表示する。 */
 const showLead = (index: number, groupStart: boolean): boolean => index > 0 || leadColumns.value.length === 1 || groupStart;
 
@@ -99,9 +104,7 @@ async function loadReport(): Promise<void> {
 }
 
 function changeMonth(value: string): void {
-    if (value === month.value) return;
-    month.value = value;
-    void loadReport();
+    changeAndReload(month, value, loadReport);
 }
 
 function changeType(value: number | null): void {
@@ -137,7 +140,7 @@ function changeStaff(value: number | null): void {
             <ReportSelect :model-value="staffId" :items="staffItems" :label="labels.staffName" data-testid="staff-filter" @update:model-value="changeStaff" />
         </ReportFilterField>
         <template #meta>
-            {{ labels.staffUnknownPrimary }}: <ReportValue :value="report.unknown_primary_visit_count" />件 / {{ labels.annualAsOf }} {{ report.as_of_date }}
+            {{ labels.staffUnknownPrimary }}: <ReportValue :value="report.unknown_primary_visit_count" />{{ M.countUnit }} / {{ labels.annualAsOf }} {{ report.as_of_date }}
         </template>
     </ReportFilterBar>
 

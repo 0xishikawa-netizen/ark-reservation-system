@@ -7,8 +7,19 @@ import { allocateByWeight, splitInclusive } from '@/components/checkout/amounts'
 import { ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
+
+/** メニュー未選択・未取得時に使う施術時間の既定（分） */
+const DEFAULT_TREATMENT_MINUTES = 60;
+/** 営業時間が渡されない時の開始時刻の選択範囲 */
+const DEFAULT_OPENS_AT = '00:00';
+const DEFAULT_CLOSES_AT = '23:55';
+/** 開始時刻の選択刻み（分） */
+const TIME_STEP_MINUTES = 5;
+/** 取消理由の最大文字数（サーバーの入力チェックと合わせる） */
+const VOID_REASON_MAX_LENGTH = 255;
 
 type ItemType = 'service' | 'product' | 'ticket' | 'membership' | 'other';
 interface Priced { id: number; name: string; price: number; tax_category_id: number | null }
@@ -54,6 +65,7 @@ const props = defineProps<{
 }>();
 
 const labels = MESSAGES.checkout;
+const M = MESSAGES.reportsUi.checkoutEntry;
 const visitEditable = computed(() => props.mode === 'visit' && (props.visit?.editable ?? false));
 const checkoutEditable = computed(() => props.checkout === null || props.checkout.editable);
 
@@ -87,8 +99,8 @@ const treatmentItems = computed(() => treatments.value.map((row, index) => ({
 })));
 /** 開始時刻の選択肢はこの日の営業時間に合わせる。 */
 const hours = computed(() => ({
-    opens_at: props.businessHours?.opens_at ?? '00:00',
-    closes_at: props.businessHours?.closes_at ?? '23:55',
+    opens_at: props.businessHours?.opens_at ?? DEFAULT_OPENS_AT,
+    closes_at: props.businessHours?.closes_at ?? DEFAULT_CLOSES_AT,
 }));
 /** 施術のブースは、そのメニューで使えるブースだけ（未設定のメニューは全ブース）。選択済みの対象外ブースは残して注記する。 */
 function boothItemsFor(row: TreatmentRow): Option[] {
@@ -109,10 +121,10 @@ function addTreatment(): void {
     const service = props.services[0];
     treatments.value.push({
         service_id: service?.id ?? null,
-        actual_minutes: service?.duration_min ?? 60,
+        actual_minutes: service?.duration_min ?? DEFAULT_TREATMENT_MINUTES,
         started_at: props.visit?.reservation_starts_at ?? null,
         booth_id: treatments.value[treatments.value.length - 1]?.booth_id ?? null,
-        staff: primaryStaffId.value ? [{ staff_id: primaryStaffId.value, actual_minutes: service?.duration_min ?? 60, started_at: null }] : [],
+        staff: primaryStaffId.value ? [{ staff_id: primaryStaffId.value, actual_minutes: service?.duration_min ?? DEFAULT_TREATMENT_MINUTES, started_at: null }] : [],
     });
     touch();
 }
@@ -155,7 +167,7 @@ function addLine(type: ItemType): void {
 function masterItems(type: ItemType): { title: string; value: number; props: { subtitle: string } }[] {
     const list = type === 'service' ? props.services : type === 'product' ? props.products
         : type === 'ticket' ? props.ticketProducts : type === 'membership' ? props.membershipPlans : [];
-    return list.map((m) => ({ title: m.name, value: m.id, props: { subtitle: `${m.price.toLocaleString()}円` } }));
+    return list.map((m) => ({ title: m.name, value: m.id, props: { subtitle: fillMessage(M.priceYen, { price: m.price.toLocaleString() }) } }));
 }
 
 function masterId(line: LineRow): number | null {
@@ -328,7 +340,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
         <dl v-if="visit?.reservation" class="hero__facts" data-testid="reservation-summary">
             <div class="fact">
                 <dt>{{ MESSAGES.visitCompletion.reservationSummary }}</dt>
-                <dd class="fact__time">{{ visit.reservation.starts_at }}〜{{ visit.reservation.ends_at }}</dd>
+                <dd class="fact__time">{{ fillMessage(M.timeRange, { start: visit.reservation.starts_at, end: visit.reservation.ends_at }) }}</dd>
             </div>
             <div v-if="visit.reservation.service_name" class="fact fact--wide">
                 <dt>{{ labels.service }}</dt>
@@ -382,7 +394,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                     </header>
                     <div class="tcard__grid">
                         <v-select :model-value="row.service_id" :items="serviceItems" :label="labels.service" :readonly="!visitEditable" hide-details class="tcard__menu" @update:model-value="(v: number | null) => onTreatmentService(row, v)" />
-                        <TimeField :model-value="row.started_at ?? ''" :label="labels.startTime" :min-time="hours.opens_at" :max-time="hours.closes_at" :step-minutes="5"
+                        <TimeField :model-value="row.started_at ?? ''" :label="labels.startTime" :min-time="hours.opens_at" :max-time="hours.closes_at" :step-minutes="TIME_STEP_MINUTES"
                             :readonly="!visitEditable" clearable @update:model-value="(v: string) => { row.started_at = v || null; touch(); }" />
                         <v-text-field v-model.number="row.actual_minutes" type="number" min="1" :label="labels.minutes" :suffix="labels.minutesUnit" :readonly="!visitEditable" hide-details @update:model-value="touch" />
                         <v-select v-if="(booths ?? []).length > 0" v-model="row.booth_id" :items="boothItemsFor(row)" item-title="name" item-value="id" :label="labels.booth"
@@ -394,7 +406,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                         <p class="staffbox__title"><v-icon icon="mdi-account-group-outline" size="16" />{{ labels.treatmentStaff }}</p>
                         <div v-for="(staffRow, staffIndex) in row.staff" :key="staffIndex" class="staffbox__row">
                             <v-select v-model="staffRow.staff_id" :items="staffItems" :label="labels.staff" :readonly="!visitEditable" hide-details bg-color="surface" @update:model-value="touch" />
-                            <TimeField :model-value="staffRow.started_at ?? ''" :label="labels.startTime" :min-time="hours.opens_at" :max-time="hours.closes_at" :step-minutes="5"
+                            <TimeField :model-value="staffRow.started_at ?? ''" :label="labels.startTime" :min-time="hours.opens_at" :max-time="hours.closes_at" :step-minutes="TIME_STEP_MINUTES"
                                 :readonly="!visitEditable" clearable bg-color="surface" @update:model-value="(v: string) => { staffRow.started_at = v || null; touch(); }" />
                             <v-text-field v-model.number="staffRow.actual_minutes" type="number" min="1" :label="labels.staffMinutes" :suffix="labels.minutesUnit" :readonly="!visitEditable" hide-details bg-color="surface" @update:model-value="touch" />
                             <v-btn v-if="visitEditable" icon="mdi-close" variant="text" size="small" :aria-label="labels.remove" @click="row.staff.splice(staffIndex, 1); touch()" />
@@ -412,7 +424,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                 <!-- 実施施術の合計と予約の時間。超える時は予約の延長（競合確認つき）が必要。 -->
                 <div v-if="reservedMinutes !== null" class="meter" :class="{ 'meter--over': treatmentTotal > reservedMinutes }">
                     <div class="meter__label">
-                        <span data-testid="composition-total">{{ MESSAGES.checkout.compositionTotal.replace('{total}', String(treatmentTotal)).replace('{reserved}', String(reservedMinutes)) }}</span>
+                        <span data-testid="composition-total">{{ fillMessage(MESSAGES.checkout.compositionTotal, { total: String(treatmentTotal), reserved: String(reservedMinutes) }) }}</span>
                     </div>
                     <div class="meter__track"><div class="meter__bar" :style="{ width: `${meterPercent}%` }" /></div>
                     <p v-if="treatmentTotal > reservedMinutes" class="warn" role="alert">{{ MESSAGES.checkout.compositionExceeds }}</p>
@@ -535,7 +547,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
                     </p>
                 </div>
 
-                <p v-if="!checkoutEditable" class="muted">{{ labels.readOnly }}<template v-if="checkout?.void_reason">（{{ checkout.void_reason }}）</template></p>
+                <p v-if="!checkoutEditable" class="muted">{{ labels.readOnly }}<template v-if="checkout?.void_reason">{{ fillMessage(MESSAGES.reportsUi.shared.parenthesized, { value: checkout.void_reason ?? '' }) }}</template></p>
                 <p v-if="dirty" class="unsaved"><v-icon icon="mdi-circle-medium" size="16" />{{ labels.unsaved }}</p>
                 <div v-if="validationErrors.length > 0" class="errors" role="alert" data-testid="entry-errors">
                     <p>{{ MESSAGES.checkout.validationFailed }}</p>
@@ -557,7 +569,7 @@ if (props.mode === 'visit' && props.checkout === null && props.visit?.editable &
             <v-card-title>{{ labels.void }}</v-card-title>
             <v-card-text>
                 <p class="mb-3">{{ labels.voidConfirm }}</p>
-                <v-text-field v-model="voidReason" :label="labels.voidReason" hide-details maxlength="255" />
+                <v-text-field v-model="voidReason" :label="labels.voidReason" hide-details :maxlength="VOID_REASON_MAX_LENGTH" />
             </v-card-text>
             <v-card-actions>
                 <v-spacer />

@@ -3,6 +3,11 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateOnly, formatDateTime } from '@/utils/dateFormat';
+import { formatYenCurrency } from '@/utils/money';
+import { signed } from '@/utils/numberFormat';
+import { loadStripeJsReusingScript } from '@/composables/stripeJs';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -72,7 +77,6 @@ const props = defineProps<{
     stripeKey: string;
 }>();
 
-const STRIPE_JS = 'https://js.stripe.com/v3';
 const paymentDialog = ref(false);
 const cancelDialog = ref(false);
 const selectedPlan = ref<MembershipPlan | null>(null);
@@ -116,64 +120,26 @@ const statusColor = computed(() => {
 });
 
 const paymentMethodLabel = computed(() => {
-    if (!props.paymentMethod?.last_four) return '未登録';
+    if (!props.paymentMethod?.last_four) return MESSAGES.customerUi.membership.notRegistered;
 
     const brand = props.paymentMethod.brand?.toUpperCase() || 'CARD';
 
     return `${brand} •••• ${props.paymentMethod.last_four}`;
 });
 
-function formatPrice(price: number): string {
-    return new Intl.NumberFormat('ja-JP', {
-        style: 'currency',
-        currency: 'JPY',
-        maximumFractionDigits: 0,
-    }).format(price);
-}
-
 function formatDate(value: string | null): string {
     if (!value) return MESSAGES.common.notSet;
 
-    return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' })
-        .format(new Date(`${value}T00:00:00`));
-}
-
-function formatDateTime(value: string): string {
-    return new Intl.DateTimeFormat('ja-JP', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-    }).format(new Date(value.replace(' ', 'T')));
+    return formatDateOnly(value, 'dateMedium');
 }
 
 function intervalLabel(interval: string): string {
-    return interval === 'month' ? '月ごと' : interval;
+    return interval === 'month' ? MESSAGES.customerUi.membership.monthly : interval;
 }
 
-function signed(delta: number): string {
-    return delta > 0 ? `+${delta}` : String(delta);
+function reservationRef(reservationId: number | null): string {
+    return reservationId === null ? MESSAGES.common.notLinked : `#${reservationId}`;
 }
-
-const loadStripeJs = (): Promise<void> => new Promise((resolve, reject) => {
-    if (stripeWindow.Stripe) {
-        resolve();
-
-        return;
-    }
-
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${STRIPE_JS}"]`);
-    if (existing) {
-        existing.addEventListener('load', () => resolve(), { once: true });
-        existing.addEventListener('error', () => reject(new Error('stripe-js-load-failed')), { once: true });
-
-        return;
-    }
-
-    const script = document.createElement('script');
-    script.src = STRIPE_JS;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('stripe-js-load-failed'));
-    document.head.appendChild(script);
-});
 
 async function mountPaymentElement(): Promise<void> {
     paymentElement?.unmount();
@@ -186,7 +152,7 @@ async function mountPaymentElement(): Promise<void> {
     try {
         if (!props.stripeKey) throw new Error('stripe-key-missing');
 
-        await loadStripeJs();
+        await loadStripeJsReusingScript();
         stripe = stripeWindow.Stripe ? stripeWindow.Stripe(props.stripeKey) : null;
         if (!stripe) throw new Error('stripe-init-failed');
 
@@ -291,12 +257,12 @@ onBeforeUnmount(() => paymentElement?.unmount());
 </script>
 
 <template>
-    <Head title="会員" />
+    <Head :title="MESSAGES.customerUi.membership.title" />
 
     <header class="ark-page-header mb-6">
-        <h1 class="text-h5 text-sm-h4">会員</h1>
+        <h1 class="text-h5 text-sm-h4">{{ MESSAGES.customerUi.membership.title }}</h1>
         <p class="text-body-2 text-medium-emphasis mt-1 mb-0">
-            月ごとの利用権とご利用状況を確認できます。
+            {{ MESSAGES.customerUi.membership.subtitle }}
         </p>
     </header>
 
@@ -307,32 +273,32 @@ onBeforeUnmount(() => paymentElement?.unmount());
         <div v-else class="plan-grid">
             <v-card v-for="plan in plans" :key="plan.id" class="plan-card" variant="outlined">
                 <v-card-item class="plan-card__header">
-                    <div class="text-overline text-primary mb-1">月額プラン</div>
+                    <div class="text-overline text-primary mb-1">{{ MESSAGES.customerUi.membership.planLabel }}</div>
                     <v-card-title class="pa-0 text-h6">{{ plan.name }}</v-card-title>
                 </v-card-item>
                 <v-card-text class="plan-card__body">
                     <div class="plan-card__usage">
-                        <span class="text-body-1">毎月</span>
+                        <span class="text-body-1">{{ MESSAGES.customerUi.membership.everyMonth }}</span>
                         <strong>{{ plan.usage_count_per_period }}</strong>
-                        <span class="text-body-1">回</span>
+                        <span class="text-body-1">{{ MESSAGES.customerUi.membership.timesUnit }}</span>
                     </div>
                     <div class="plan-card__price">
-                        <span>{{ formatPrice(plan.price) }}</span>
-                        <small>/ 月</small>
+                        <span>{{ formatYenCurrency(plan.price) }}</span>
+                        <small>{{ MESSAGES.customerUi.membership.perMonth }}</small>
                     </div>
                     <div class="plan-card__per-visit text-body-2 text-medium-emphasis">
-                        1回あたり約
+                        {{ MESSAGES.customerUi.membership.perVisitPrefix }}
                         {{ plan.usage_count_per_period > 0
-                            ? formatPrice(Math.round(plan.price / plan.usage_count_per_period))
+                            ? formatYenCurrency(Math.round(plan.price / plan.usage_count_per_period))
                             : MESSAGES.common.notCalculated }}
                     </div>
                     <v-divider class="my-4" />
                     <div class="text-body-2 text-medium-emphasis">
-                        {{ intervalLabel(plan.billing_interval) }}更新
+                        {{ fillMessage(MESSAGES.customerUi.membership.renewal, { interval: intervalLabel(plan.billing_interval) }) }}
                     </div>
                 </v-card-text>
                 <v-card-actions class="plan-card__actions">
-                    <v-btn block color="primary" size="large" @click="openSubscribe(plan)">申し込む</v-btn>
+                    <v-btn block color="primary" size="large" @click="openSubscribe(plan)">{{ MESSAGES.customerUi.membership.subscribe }}</v-btn>
                 </v-card-actions>
             </v-card>
         </div>
@@ -348,7 +314,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
 
     <template v-else>
         <v-alert v-if="membership.status === 'grace'" type="warning" variant="tonal" class="membership-alert mb-4">
-            お支払いの確認中です。ご利用は継続できます（{{ formatDate(membership.grace_until) }} まで）。
+            {{ fillMessage(MESSAGES.customerUi.membership.graceNotice, { date: formatDate(membership.grace_until) }) }}
         </v-alert>
         <v-alert v-else-if="membership.status === 'paused'" type="error" variant="tonal" class="membership-alert mb-4">
             {{ MESSAGES.membership.suspended }}
@@ -356,7 +322,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
         <v-alert v-else-if="membership.status === 'pending'" type="info" variant="tonal" class="membership-alert mb-4">
             <div class="mb-2">{{ MESSAGES.membership.unpaidApplication }}</div>
             <v-btn size="small" color="primary" variant="flat" @click="router.visit('/mypage/membership/confirm')">
-                お支払いを完了する
+                {{ MESSAGES.customerUi.membership.completePayment }}
             </v-btn>
         </v-alert>
 
@@ -364,7 +330,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
             <v-card-item class="membership-summary__header">
                 <div class="d-flex align-center justify-space-between ga-3 flex-wrap">
                     <div>
-                        <div class="text-caption text-medium-emphasis mb-1">現在のプラン</div>
+                        <div class="text-caption text-medium-emphasis mb-1">{{ MESSAGES.customerUi.membership.currentPlan }}</div>
                         <v-card-title class="pa-0 text-h6">{{ membership.plan.name }}</v-card-title>
                     </div>
                     <v-chip :color="statusColor" size="small" variant="tonal">
@@ -376,26 +342,26 @@ onBeforeUnmount(() => paymentElement?.unmount());
             <v-card-text class="membership-summary__body">
                 <div class="membership-counts">
                     <div class="membership-count membership-count--available">
-                        <div class="text-caption text-medium-emphasis">利用可能</div>
-                        <div class="membership-count__value text-primary">{{ membership.available }}<small>回</small></div>
+                        <div class="text-caption text-medium-emphasis">{{ MESSAGES.customerUi.membership.available }}</div>
+                        <div class="membership-count__value text-primary">{{ membership.available }}<small>{{ MESSAGES.customerUi.membership.timesUnit }}</small></div>
                     </div>
                     <div class="membership-count">
-                        <div class="text-caption text-medium-emphasis">予約中</div>
-                        <div class="membership-count__value">{{ membership.held }}<small>回</small></div>
+                        <div class="text-caption text-medium-emphasis">{{ MESSAGES.customerUi.membership.held }}</div>
+                        <div class="membership-count__value">{{ membership.held }}<small>{{ MESSAGES.customerUi.membership.timesUnit }}</small></div>
                     </div>
                     <div class="membership-count">
-                        <div class="text-caption text-medium-emphasis">合計</div>
-                        <div class="membership-count__value">{{ membership.total }}<small>回</small></div>
+                        <div class="text-caption text-medium-emphasis">{{ MESSAGES.customerUi.membership.total }}</div>
+                        <div class="membership-count__value">{{ membership.total }}<small>{{ MESSAGES.customerUi.membership.timesUnit }}</small></div>
                     </div>
                 </div>
                 <v-list lines="two" density="comfortable" class="membership-details">
                     <v-list-item
-                        title="当期"
-                        :subtitle="`${formatDate(membership.current_period_start)} 〜 ${formatDate(membership.current_period_end)}`"
+                        :title="MESSAGES.customerUi.membership.currentPeriod"
+                        :subtitle="fillMessage(MESSAGES.customerUi.membership.periodRange, { start: formatDate(membership.current_period_start), end: formatDate(membership.current_period_end) })"
                     />
-                    <v-list-item title="次回更新日" :subtitle="formatDate(membership.next_renewal)" />
-                    <v-list-item title="月額" :subtitle="formatPrice(membership.plan.price)" />
-                    <v-list-item title="支払い方法" :subtitle="paymentMethodLabel" />
+                    <v-list-item :title="MESSAGES.customerUi.membership.nextRenewal" :subtitle="formatDate(membership.next_renewal)" />
+                    <v-list-item :title="MESSAGES.customerUi.membership.monthlyPrice" :subtitle="formatYenCurrency(membership.plan.price)" />
+                    <v-list-item :title="MESSAGES.customerUi.membership.paymentMethod" :subtitle="paymentMethodLabel" />
                 </v-list>
 
                 <v-alert
@@ -404,13 +370,13 @@ onBeforeUnmount(() => paymentElement?.unmount());
                     variant="tonal"
                     class="membership-alert mt-4"
                 >
-                    当期末（{{ formatDate(membership.next_renewal) }}）で終了予定です。期末までは利用できます。
+                    {{ fillMessage(MESSAGES.customerUi.membership.endsAtPeriodEnd, { date: formatDate(membership.next_renewal) }) }}
                 </v-alert>
             </v-card-text>
             <v-divider />
             <v-card-actions class="membership-actions flex-wrap ga-2">
                 <v-btn variant="outlined" color="primary" @click="openPaymentUpdate">
-                    支払い方法を更新
+                    {{ MESSAGES.customerUi.membership.updatePaymentMethod }}
                 </v-btn>
                 <v-spacer />
                 <v-btn
@@ -419,7 +385,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
                     :loading="resumeForm.processing"
                     @click="resume"
                 >
-                    解約を取り消す
+                    {{ MESSAGES.customerUi.membership.resume }}
                 </v-btn>
                 <v-btn
                     v-else-if="membership.status !== 'pending'"
@@ -427,7 +393,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
                     variant="outlined"
                     @click="cancelDialog = true"
                 >
-                    次回更新で解約する
+                    {{ MESSAGES.customerUi.membership.cancelAtRenewal }}
                 </v-btn>
             </v-card-actions>
         </v-card>
@@ -435,7 +401,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
         <section aria-labelledby="membership-history-heading">
             <v-card class="history-card">
                 <v-card-item class="history-card__header">
-                    <v-card-title id="membership-history-heading" class="pa-0 text-h6">利用履歴</v-card-title>
+                    <v-card-title id="membership-history-heading" class="pa-0 text-h6">{{ MESSAGES.customerUi.membership.history }}</v-card-title>
                 </v-card-item>
                 <v-divider />
                 <v-card-text v-if="history.length === 0" class="pa-4 pa-sm-5">
@@ -446,15 +412,15 @@ onBeforeUnmount(() => paymentElement?.unmount());
                 <template v-else>
                     <v-table class="history-table d-none d-sm-block">
                         <thead>
-                            <tr><th>日時</th><th>種別</th><th>増減</th><th>期</th><th>予約</th></tr>
+                            <tr><th>{{ MESSAGES.customerUi.membership.colDateTime }}</th><th>{{ MESSAGES.customerUi.membership.colType }}</th><th>{{ MESSAGES.customerUi.membership.colDelta }}</th><th>{{ MESSAGES.customerUi.membership.colPeriod }}</th><th>{{ MESSAGES.customerUi.membership.colReservation }}</th></tr>
                         </thead>
                         <tbody>
                             <tr v-for="item in history" :key="item.id">
-                                <td>{{ formatDateTime(item.created_at) }}</td>
+                                <td>{{ formatDateTime(item.created_at, 'short') }}</td>
                                 <td>{{ item.type }}</td>
                                 <td :class="item.delta > 0 ? 'text-success' : 'text-error'">{{ signed(item.delta) }}</td>
                                 <td>{{ formatDate(item.period_start) }}</td>
-                                <td>{{ item.reservation_id === null ? MESSAGES.common.notLinked : `#${item.reservation_id}` }}</td>
+                                <td>{{ reservationRef(item.reservation_id) }}</td>
                             </tr>
                         </tbody>
                     </v-table>
@@ -465,8 +431,8 @@ onBeforeUnmount(() => paymentElement?.unmount());
                                 <span :class="item.delta > 0 ? 'text-success' : 'text-error'">{{ signed(item.delta) }}</span>
                             </template>
                             <template #subtitle>
-                                {{ formatDateTime(item.created_at) }}<br>
-                                期：{{ formatDate(item.period_start) }} / 予約：{{ item.reservation_id === null ? MESSAGES.common.notLinked : `#${item.reservation_id}` }}
+                                {{ formatDateTime(item.created_at, 'short') }}<br>
+                                {{ fillMessage(MESSAGES.customerUi.membership.historyMeta, { period: formatDate(item.period_start), reservation: reservationRef(item.reservation_id) }) }}
                             </template>
                         </v-list-item>
                     </v-list>
@@ -478,7 +444,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
     <v-dialog v-model="paymentDialog" max-width="600" persistent>
         <v-card
             class="membership-dialog"
-            :title="paymentPurpose === 'subscribe' ? `${selectedPlan?.name ?? ''}に申し込む` : '支払い方法を更新'"
+            :title="paymentPurpose === 'subscribe' ? fillMessage(MESSAGES.customerUi.membership.subscribeTo, { name: selectedPlan?.name ?? '' }) : MESSAGES.customerUi.membership.updatePaymentMethod"
         >
             <v-card-text class="membership-dialog__body">
                 <v-alert v-if="paymentError" type="error" variant="tonal" class="mb-4">
@@ -506,7 +472,7 @@ onBeforeUnmount(() => paymentElement?.unmount());
                     :disabled="submittingPayment || subscribeForm.processing || paymentMethodForm.processing"
                     @click="closePaymentDialog"
                 >
-                    閉じる
+                    {{ MESSAGES.customerUi.membership.close }}
                 </v-btn>
                 <v-spacer />
                 <v-btn
@@ -515,22 +481,22 @@ onBeforeUnmount(() => paymentElement?.unmount());
                     :disabled="loadingPaymentElement || !stripe"
                     @click="submitPaymentMethod"
                 >
-                    {{ paymentPurpose === 'subscribe' ? '申し込む' : '更新する' }}
+                    {{ paymentPurpose === 'subscribe' ? MESSAGES.customerUi.membership.subscribe : MESSAGES.customerUi.membership.update }}
                 </v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
 
     <v-dialog v-model="cancelDialog" max-width="500">
-        <v-card class="membership-dialog" title="次回更新で解約しますか？">
+        <v-card class="membership-dialog" :title="MESSAGES.customerUi.membership.cancelTitle">
             <v-card-text class="membership-dialog__body">
                 {{ MESSAGES.membership.cancelAtPeriodEndHint }}
             </v-card-text>
             <v-card-actions class="membership-dialog__actions">
-                <v-btn variant="text" @click="cancelDialog = false">戻る</v-btn>
+                <v-btn variant="text" @click="cancelDialog = false">{{ MESSAGES.customerUi.membership.back }}</v-btn>
                 <v-spacer />
                 <v-btn color="error" :loading="cancelForm.processing" @click="requestCancel">
-                    解約を予約する
+                    {{ MESSAGES.customerUi.membership.cancelSubmit }}
                 </v-btn>
             </v-card-actions>
         </v-card>

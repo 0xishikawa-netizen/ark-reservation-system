@@ -5,6 +5,7 @@ import { PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import { statusColor } from '@/design/tokens';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -51,6 +52,8 @@ interface SystemStatusProps {
 
 const props = defineProps<SystemStatusProps>();
 
+const M = MESSAGES.reportsUi.systemStatus;
+
 const stripeChipColor = computed<string>(() => {
     if (props.stripe_mode === 'test') {
         return 'green';
@@ -67,19 +70,19 @@ const stripeLabel = computed<string>(() => {
     const labels: Record<StripeMode, string> = {
         test: 'Test',
         live: 'Live',
-        placeholder: 'プレースホルダー',
-        missing: '未設定',
+        placeholder: M.stripePlaceholder,
+        missing: MESSAGES.common.notSet,
     };
 
     return labels[props.stripe_mode];
 });
 
 const qaLabel = computed<string>(() =>
-    props.real_stripe_test_mode_qa === 'incomplete' ? '未完了' : '完了',
+    props.real_stripe_test_mode_qa === 'incomplete' ? M.qaIncomplete : M.qaComplete,
 );
 
 const membershipReadinessLabel = computed<string>(() =>
-    props.membership_production_readiness === 'not_ready' ? '不可' : '可',
+    props.membership_production_readiness === 'not_ready' ? M.notReady : M.ready,
 );
 
 const backupSize = (bytes: number): string => {
@@ -90,11 +93,11 @@ const backupSize = (bytes: number): string => {
 </script>
 
 <template>
-    <Head title="システム状態" />
+    <Head :title="M.title" />
 
     <PageHeader
-        title="システム状態"
-        subtitle="運用に必要な接続・ジョブ・容量・バックアップの状態を確認します。"
+        :title="M.title"
+        :subtitle="M.subtitle"
     />
 
     <v-alert
@@ -104,55 +107,54 @@ const backupSize = (bytes: number): string => {
         prominent
         class="mb-6"
     >
-        実 Stripe テストモード結合 QA: {{ qaLabel }} ／ 会員機能の本番投入:
-        {{ membershipReadinessLabel }}
+        {{ fillMessage(M.readinessBanner, { qa: qaLabel, membership: membershipReadinessLabel }) }}
     </v-alert>
 
     <v-row>
         <v-col cols="12" md="6">
-            <SectionCard title="Stripe モード" variant="outlined" height="100%">
+            <SectionCard :title="M.stripeMode" variant="outlined" height="100%">
                 <template #append>
                     <StatusChip
                         :status="stripe_mode === 'test' ? 'active' : stripe_mode === 'live' ? 'failed' : 'canceled'"
-                        :label="stripe_mode === 'test' ? 'OK' : stripe_mode === 'live' ? '注意' : '未計測'"
+                        :label="stripe_mode === 'test' ? MESSAGES.system.backupOk : stripe_mode === 'live' ? MESSAGES.system.backupWarning : MESSAGES.system.backupUnmeasured"
                     />
                 </template>
                 <div class="text-body-1 font-weight-medium" :class="`text-${stripeChipColor}`">
                     {{ stripeLabel }}
                 </div>
                 <div v-if="stripe_mode === 'live'" class="text-error font-weight-bold mt-2">
-                    ローカル/検証で Live は使用禁止
+                    {{ M.liveForbidden }}
                 </div>
             </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <SectionCard title="予約・外部連携" variant="outlined" height="100%">
+            <SectionCard :title="M.reservationIntegration" variant="outlined" height="100%">
                 <template #append>
-                    <StatusChip status="active" label="OK" />
+                    <StatusChip status="active" :label="MESSAGES.system.backupOk" />
                 </template>
                     <div class="mb-3">
-                        <div class="text-caption text-medium-emphasis">予約権限 (authority)</div>
+                        <div class="text-caption text-medium-emphasis">{{ M.reservationAuthority }}</div>
                         <div>{{ reservation_authority }}</div>
                     </div>
                     <div>
-                        <div class="text-caption text-medium-emphasis">外部ゲートウェイ</div>
+                        <div class="text-caption text-medium-emphasis">{{ M.externalGateway }}</div>
                         <div>{{ external_gateway }}</div>
                     </div>
             </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <SectionCard title="失敗ジョブ" variant="outlined" height="100%">
+            <SectionCard :title="M.failedJobs" variant="outlined" height="100%">
                 <template #append>
                     <StatusChip
                         :status="failed_jobs.count === 0 ? 'active' : 'failed'"
-                        :label="failed_jobs.count === 0 ? 'OK' : '注意'"
+                        :label="failed_jobs.count === 0 ? MESSAGES.system.backupOk : MESSAGES.system.backupWarning"
                     />
                 </template>
-                    <div class="text-h5 mb-2">{{ failed_jobs.count }} 件</div>
+                    <div class="text-h5 mb-2">{{ fillMessage(M.count, { count: String(failed_jobs.count) }) }}</div>
                     <div class="text-body-2 text-medium-emphasis">
-                        最古の失敗日時: {{ failed_jobs.oldest_failed_at ?? 'なし' }}
+                        {{ fillMessage(M.oldestFailedAt, { at: failed_jobs.oldest_failed_at ?? M.none }) }}
                     </div>
                     <v-btn
                         href="/admin/system/failed-jobs"
@@ -160,57 +162,57 @@ const backupSize = (bytes: number): string => {
                         color="primary"
                         class="mt-3 px-0"
                     >
-                        失敗ジョブを確認
+                        {{ M.viewFailedJobs }}
                     </v-btn>
             </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <SectionCard title="仮予約 滞留" variant="outlined" height="100%">
+            <SectionCard :title="M.stalePending" variant="outlined" height="100%">
                 <template #append>
                     <StatusChip
                         :status="stale_pending_reservations === 0 ? 'active' : 'grace'"
-                        :label="stale_pending_reservations === 0 ? 'OK' : '注意'"
+                        :label="stale_pending_reservations === 0 ? MESSAGES.system.backupOk : MESSAGES.system.backupWarning"
                     />
                 </template>
                 <div class="text-h5">
-                    {{ stale_pending_reservations }} 件
+                    {{ fillMessage(M.count, { count: String(stale_pending_reservations) }) }}
                 </div>
             </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <SectionCard title="DB 使用量" variant="outlined" height="100%">
+            <SectionCard :title="M.dbSize" variant="outlined" height="100%">
                 <template #append>
                     <StatusChip
                         :status="db_size.over_threshold ? 'failed' : db_size.latest_mb === null ? 'canceled' : 'active'"
-                        :label="db_size.over_threshold ? '注意' : db_size.latest_mb === null ? '未計測' : 'OK'"
+                        :label="db_size.over_threshold ? MESSAGES.system.backupWarning : db_size.latest_mb === null ? MESSAGES.system.backupUnmeasured : MESSAGES.system.backupOk"
                     />
                 </template>
                     <div class="text-h6">
-                        <template v-if="db_size.latest_mb === null">未計測</template>
+                        <template v-if="db_size.latest_mb === null">{{ MESSAGES.system.backupUnmeasured }}</template>
                         <template v-else>{{ db_size.latest_mb }} MB</template>
                         <span class="text-body-1 text-medium-emphasis">
-                            / 閾値 {{ db_size.alert_mb }} MB
+                            {{ fillMessage(M.threshold, { mb: String(db_size.alert_mb) }) }}
                         </span>
                     </div>
                     <div v-if="db_size.captured_on" class="text-body-2 text-medium-emphasis mt-2">
-                        計測日: {{ db_size.captured_on }}
+                        {{ fillMessage(M.capturedOn, { date: db_size.captured_on ?? '' }) }}
                     </div>
             </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <SectionCard title="同期突合" variant="outlined" height="100%">
+            <SectionCard :title="M.reconcile" variant="outlined" height="100%">
                 <template #append>
-                    <StatusChip status="canceled" label="未計測" />
+                    <StatusChip status="canceled" :label="MESSAGES.system.backupUnmeasured" />
                 </template>
                 {{ reconcile.note }}
             </SectionCard>
         </v-col>
 
         <v-col cols="12" md="6">
-            <SectionCard title="最終バックアップ" variant="outlined" height="100%">
+            <SectionCard :title="M.lastBackup" variant="outlined" height="100%">
                 <template #append>
                     <StatusChip
                         :status="!last_backup.measured ? 'canceled' : last_backup.healthy ? 'active' : 'failed'"

@@ -132,7 +132,7 @@ final class MembershipReservationService
                     delta: -1,
                     dedupeKey: "mbr-expire:{$reservation->id}",
                     periodStart: $reservedPeriod,
-                    reason: '期またぎ解放の期限切れ相殺',
+                    reason: __('messages.membership.cross_period_expiration_offset'),
                     reservationId: (int) $reservation->id,
                 );
             }

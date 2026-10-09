@@ -4,8 +4,14 @@ import { ref } from 'vue';
 import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip, MasterDeleteButton, TrashedMasterList } from '@/components/ark';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { formatYenCurrency } from '@/utils/money';
+import { useMasterActiveToggle } from '@/composables/masterActive';
 
 defineOptions({ layout: AdminLayout });
+
+// 一覧APIで「有効のみ」を表す値。
+const ACTIVE_FILTER_VALUE = 1;
 
 interface ServiceListItem {
     id: number;
@@ -38,16 +44,16 @@ const props = defineProps<{
 }>();
 
 const headers = [
-    { title: 'メニュー名', key: 'name' },
-    { title: 'カテゴリ', key: 'category' },
-    { title: '集計分類', key: 'analysis_category_name' },
-    { title: '税区分', key: 'tax_category_name' },
-    { title: '所要時間', key: 'duration_min' },
-    { title: '価格', key: 'price' },
-    { title: '表示順', key: 'sort_order' },
-    { title: 'オンライン予約', key: 'is_online_bookable', sortable: false },
-    { title: '有効', key: 'is_active', sortable: false },
-    { title: '施術スタッフ', key: 'staff_names', sortable: false },
+    { title: MESSAGES.mastersUi.services.name, key: 'name' },
+    { title: MESSAGES.mastersUi.services.category, key: 'category' },
+    { title: MESSAGES.mastersUi.services.analysisCategory, key: 'analysis_category_name' },
+    { title: MESSAGES.mastersUi.services.taxCategory, key: 'tax_category_name' },
+    { title: MESSAGES.mastersUi.services.duration, key: 'duration_min' },
+    { title: MESSAGES.mastersUi.services.price, key: 'price' },
+    { title: MESSAGES.mastersUi.services.sortOrder, key: 'sort_order' },
+    { title: MESSAGES.mastersUi.services.onlineBooking, key: 'is_online_bookable', sortable: false },
+    { title: MESSAGES.mastersUi.services.active, key: 'is_active', sortable: false },
+    { title: MESSAGES.mastersUi.services.treatmentStaff, key: 'staff_names', sortable: false },
     { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
@@ -61,7 +67,7 @@ const applyFilters = (): void => {
         {
             search: search.value || undefined,
             category: category.value || undefined,
-            only_active: onlyActive.value ? 1 : undefined,
+            only_active: onlyActive.value ? ACTIVE_FILTER_VALUE : undefined,
         },
         {
             preserveState: true,
@@ -70,34 +76,23 @@ const applyFilters = (): void => {
     );
 };
 
-const toggleActive = (service: ServiceListItem): void => {
-    router.patch(
-        `/admin/services/${service.id}/active`,
-        { active: !service.is_active },
-        { preserveScroll: true },
-    );
-};
+// 有効/無効の切替（送信中は同じ行を押せない。M-6）
+const { isPending: isActivePending, toggle: toggleActive } = useMasterActiveToggle('/admin/services');
 
-const formatPrice = (price: number): string =>
-    new Intl.NumberFormat('ja-JP', {
-        style: 'currency',
-        currency: 'JPY',
-        maximumFractionDigits: 0,
-    }).format(price);
 </script>
 
 <template>
-    <Head title="メニュー" />
+    <Head :title="MESSAGES.mastersUi.services.title" />
 
-    <PageHeader title="メニュー" subtitle="予約メニューの公開状態と担当スタッフを管理します。">
+    <PageHeader :title="MESSAGES.mastersUi.services.title" :subtitle="MESSAGES.mastersUi.services.subtitle">
         <template #actions>
             <v-btn color="primary" href="/admin/services/create">
-                メニューを追加
+                {{ MESSAGES.mastersUi.services.add }}
             </v-btn>
         </template>
     </PageHeader>
 
-    <SectionCard title="メニュー一覧" class="ark-table-section">
+    <SectionCard :title="MESSAGES.mastersUi.services.list" class="ark-table-section">
         <div class="ark-table-section__filters">
             <v-form
                 class="d-flex align-center ga-4 flex-wrap"
@@ -107,7 +102,7 @@ const formatPrice = (price: number): string =>
                 <v-select
                     v-model="category"
                     :items="categoryOptions ?? []"
-                    label="カテゴリで絞り込み"
+                    :label="MESSAGES.mastersUi.services.categoryFilter"
                     clearable
                     hide-details
                     autocomplete="off"
@@ -117,7 +112,7 @@ const formatPrice = (price: number): string =>
                 <v-autocomplete
                     v-model="search"
                     :items="nameOptions ?? []"
-                    label="メニュー名で絞り込み（選択または入力）"
+                    :label="MESSAGES.mastersUi.services.nameFilter"
                     clearable
                     hide-details
                     autocomplete="off"
@@ -126,7 +121,7 @@ const formatPrice = (price: number): string =>
                 />
                 <v-switch
                     v-model="onlyActive"
-                    label="公開中のメニューのみ"
+                    :label="MESSAGES.mastersUi.services.publishedOnly"
                     color="primary"
                     hide-details
                     @update:model-value="applyFilters"
@@ -141,13 +136,13 @@ const formatPrice = (price: number): string =>
             :items="services"
             :sort-by="[{ key: 'sort_order', order: 'asc' }]"
             item-value="id"
-            no-data-text="該当するメニューはありません。"
+            :no-data-text="MESSAGES.mastersUi.services.noData"
         >
             <template #no-data>
                 <EmptyState
                     icon="mdi-magnify"
-                    title="該当するメニューはありません"
-                    description="検索条件を変更するか、新しいメニューを追加してください。"
+                    :title="MESSAGES.mastersUi.services.emptyTitle"
+                    :description="MESSAGES.mastersUi.services.emptyDescription"
                 />
             </template>
             <template #item.name="{ item }">
@@ -170,15 +165,15 @@ const formatPrice = (price: number): string =>
             <template #item.analysis_category_name="{ item }"><template v-if="item.analysis_category_name">{{ item.analysis_category_name }}</template><EmptyValue :label="MESSAGES.common.notSet" v-else /></template>
             <template #item.tax_category_name="{ item }"><template v-if="item.tax_category_name">{{ item.tax_category_name }}</template><EmptyValue :label="MESSAGES.common.notSet" v-else /></template>
             <template #item.duration_min="{ item }">
-                {{ item.duration_min }}分
+                {{ fillMessage(MESSAGES.mastersUi.services.minutesValue, { minutes: String(item.duration_min) }) }}
             </template>
             <template #item.price="{ item }">
-                {{ formatPrice(item.price) }}
+                {{ formatYenCurrency(item.price) }}
             </template>
             <template #item.is_online_bookable="{ item }">
                 <StatusChip
                     :status="item.is_online_bookable ? 'active' : 'canceled'"
-                    :label="item.is_online_bookable ? '可' : '不可'"
+                    :label="item.is_online_bookable ? MESSAGES.mastersUi.services.available : MESSAGES.mastersUi.services.unavailable"
                 />
             </template>
             <template #item.is_active="{ item }">
@@ -186,13 +181,14 @@ const formatPrice = (price: number): string =>
                     :model-value="item.is_active"
                     color="primary"
                     hide-details
-                    :aria-label="`${item.name}の有効状態`"
-                    @click.stop="toggleActive(item)"
+                    :aria-label="fillMessage(MESSAGES.mastersUi.services.activeState, { name: item.name })"
+                    :disabled="isActivePending(item.id)"
+                    @update:model-value="toggleActive(item, $event)"
                 />
             </template>
             <template #item.staff_names="{ item }">
                 <span :title="item.staff_names.join('、')">
-                    {{ item.staff_names.length }}名
+                    {{ fillMessage(MESSAGES.mastersUi.services.staffCount, { count: String(item.staff_names.length) }) }}
                 </span>
             </template>
             <template #item.actions="{ item }">
@@ -203,13 +199,13 @@ const formatPrice = (price: number): string =>
                     prepend-icon="mdi-pencil-outline"
                     :href="`/admin/services/${item.id}/edit`"
                 >
-                    編集
+                    {{ MESSAGES.mastersUi.services.edit }}
                 </v-btn>
-                <MasterDeleteButton type="services" :id="item.id" :name="item.name" label="メニュー" />
+                <MasterDeleteButton type="services" :id="item.id" :name="item.name" :label="MESSAGES.mastersUi.services.masterLabel" />
             </template>
         </v-data-table>
     </SectionCard>
-    <TrashedMasterList type="services" label="メニュー" :items="trashed ?? []" />
+    <TrashedMasterList type="services" :label="MESSAGES.mastersUi.services.masterLabel" :items="trashed ?? []" />
 </template>
 
 <style scoped>

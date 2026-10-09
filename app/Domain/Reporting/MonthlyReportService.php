@@ -29,11 +29,11 @@ final class MonthlyReportService
         CarbonInterface|string|null $asOfDate = null,
     ): MonthlyBusinessSummary {
         if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12) {
-            throw new InvalidArgumentException('年月の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.year_month_invalid'));
         }
         $salesBasis = $basis instanceof SalesBasis ? $basis : SalesBasis::tryFrom($basis);
         if ($salesBasis === null) {
-            throw new InvalidArgumentException('売上基準の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.revenue_basis_invalid'));
         }
 
         $start = CarbonImmutable::create($year, $month, 1, 0, 0, 0, $this->businessTime->timezone())->startOfDay();
@@ -163,11 +163,11 @@ final class MonthlyReportService
                 ? CarbonImmutable::instance($value)->setTimezone($this->businessTime->timezone())->startOfDay()
                 : CarbonImmutable::createFromFormat('!Y-m-d', $value, $this->businessTime->timezone());
             if ($date === false) {
-                throw new InvalidArgumentException('as_of_dateは対象月内（未来月は月初前日も可）で指定してください。');
+                throw new InvalidArgumentException(__('messages.reporting_validation.as_of_month_with_future_invalid'));
             }
             if ((is_string($value) && $date->format('Y-m-d') !== $value)
                 || $date->lt($start->subDay()) || $date->gt($end)) {
-                throw new InvalidArgumentException('as_of_dateは対象月内（未来月は月初前日も可）で指定してください。');
+                throw new InvalidArgumentException(__('messages.reporting_validation.as_of_month_with_future_invalid'));
             }
 
             return $date;

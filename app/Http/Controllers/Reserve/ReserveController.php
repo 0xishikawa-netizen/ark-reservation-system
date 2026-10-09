@@ -13,14 +13,13 @@ use App\Domain\Ticket\TicketLedgerService;
 use App\Enums\Reservation\PaymentMethod;
 use App\Enums\Reservation\ReservationSource;
 use App\Exceptions\Reservation\SlotUnavailableException;
+use App\Http\Controllers\Concerns\ResolvesAuthenticatedUser;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Booking\AvailabilityRequest;
 use App\Http\Requests\Booking\WeekAvailabilityRequest;
 use App\Http\Requests\Customer\StoreReservationRequest;
-use App\Models\Customer;
 use App\Models\Membership;
 use App\Models\TicketWallet;
-use App\Models\User;
 use App\Queries\OnlineBookableServiceQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -31,6 +30,8 @@ use Inertia\Response;
 
 class ReserveController extends Controller
 {
+    use ResolvesAuthenticatedUser;
+
     public function create(
         Request $request,
         OnlineBookableServiceQuery $query,
@@ -168,27 +169,5 @@ class ReserveController extends Controller
         return redirect()
             ->route('mypage.reservations.show', $reservation)
             ->with('success', __('messages.reservation.confirmed'));
-    }
-
-    private function userFor(Request $request): User
-    {
-        $user = $request->user();
-
-        if (! $user instanceof User) {
-            abort(403);
-        }
-
-        return $user;
-    }
-
-    private function customerFor(Request $request): Customer
-    {
-        $customer = $this->userFor($request)->customer;
-
-        if (! $customer instanceof Customer) {
-            abort(403);
-        }
-
-        return $customer;
     }
 }

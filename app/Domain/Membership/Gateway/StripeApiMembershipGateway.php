@@ -221,22 +221,22 @@ final class StripeApiMembershipGateway implements MembershipStripeGateway
         } catch (CardException $exception) {
             throw new PaymentGatewayDeclinedException(
                 (string) ($exception->getDeclineCode() ?? $exception->getStripeCode() ?? 'card_declined'),
-                'カード決済が承認されませんでした。',
+                __('messages.payment.card_payment_declined'),
             );
         } catch (ApiConnectionException) {
-            throw new PaymentGatewayTimeoutException('Stripeとの通信結果を確認できませんでした。');
+            throw new PaymentGatewayTimeoutException(__('messages.payment.gateway_timeout'));
         } catch (ApiErrorException $exception) {
             $status = $exception->getHttpStatus();
 
             if ($status !== null && $status >= 500) {
-                throw new PaymentGatewayTimeoutException('Stripeとの通信結果を確認できませんでした。');
+                throw new PaymentGatewayTimeoutException(__('messages.payment.gateway_timeout'));
             }
 
-            throw new PaymentGatewayException('Stripe APIがリクエストを受け付けませんでした。');
+            throw new PaymentGatewayException(__('messages.payment.gateway_request_rejected'));
         } catch (PaymentGatewayException $exception) {
             throw $exception;
         } catch (Throwable) {
-            throw new PaymentGatewayException('Stripe APIの処理中にエラーが発生しました。');
+            throw new PaymentGatewayException(__('messages.payment.gateway_processing_error'));
         }
     }
 }

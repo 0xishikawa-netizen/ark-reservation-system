@@ -28,8 +28,6 @@ final class PaymentService
 {
     private const AMBIGUOUS_TIMEOUT_CODE = 'ambiguous_timeout';
 
-    private const AMBIGUOUS_TIMEOUT_MESSAGE = 'Stripeとの通信結果を確認できませんでした。再照合が必要です。';
-
     public function __construct(
         private readonly StripeGateway $gateway,
         private readonly IdempotencyKeyFactory $idempotencyKeys,
@@ -110,7 +108,7 @@ final class PaymentService
                 $locked->forceFill([
                     'needs_attention' => true,
                     'failure_code' => 'payment_intent_conflict',
-                    'failure_message' => '異なるPaymentIntent IDが返されました。',
+                    'failure_message' => __('messages.payment.intent_id_conflict'),
                 ])->save();
             }
 
@@ -439,7 +437,7 @@ final class PaymentService
             $this->markPaymentAttention(
                 $persisted,
                 'payment_intent_mismatch',
-                'PaymentIntent IDが一致しません。',
+                __('messages.payment.intent_id_mismatch'),
             );
 
             throw new PaymentGatewayException('PaymentIntent IDが一致しません。');
@@ -450,7 +448,7 @@ final class PaymentService
             $this->markPaymentAttention(
                 $persisted,
                 'payment_amount_mismatch',
-                'Stripeとローカルの決済金額または通貨が一致しません。',
+                __('messages.payment.amount_or_currency_mismatch'),
             );
 
             throw new PaymentGatewayException('Stripe決済金額の整合性を確認できませんでした。');
@@ -570,7 +568,7 @@ final class PaymentService
             PaymentStatus::Voided => ['voided_at' => $payment->voided_at ?? now()],
             PaymentStatus::Failed => [
                 'failure_code' => $this->safeFailureCode($result->failureCode ?? 'card_declined'),
-                'failure_message' => 'カード決済が承認されませんでした。',
+                'failure_message' => __('messages.payment.card_payment_declined'),
             ],
             default => [],
         };
@@ -603,7 +601,7 @@ final class PaymentService
             if ($result->status === 'failed') {
                 $exception = new PaymentGatewayDeclinedException(
                     $this->safeFailureCode($result->failureCode ?? 'refund_failed'),
-                    '返金処理が承認されませんでした。',
+                    __('messages.payment.refund_processing_declined'),
                 );
                 $this->markRefundDeclined($refund, $payment, $exception);
 
@@ -707,7 +705,7 @@ final class PaymentService
         $this->markPaymentAttention(
             $payment,
             self::AMBIGUOUS_TIMEOUT_CODE,
-            self::AMBIGUOUS_TIMEOUT_MESSAGE,
+            __('messages.payment.ambiguous_timeout'),
         );
     }
 
@@ -734,7 +732,7 @@ final class PaymentService
                 $this->stateMachine->apply($locked, 'status', PaymentStatus::Failed->value);
                 $locked->forceFill([
                     'failure_code' => $this->safeFailureCode($exception->gatewayCode),
-                    'failure_message' => 'カード決済が承認されませんでした。',
+                    'failure_message' => __('messages.payment.card_payment_declined'),
                     'needs_attention' => false,
                 ])->save();
 
@@ -756,14 +754,14 @@ final class PaymentService
             if ($lockedRefund->status === RefundStatus::Pending) {
                 $lockedRefund->forceFill([
                     'failure_code' => self::AMBIGUOUS_TIMEOUT_CODE,
-                    'failure_message' => self::AMBIGUOUS_TIMEOUT_MESSAGE,
+                    'failure_message' => __('messages.payment.ambiguous_timeout'),
                 ])->save();
             }
 
             $lockedPayment->forceFill([
                 'needs_attention' => true,
                 'failure_code' => self::AMBIGUOUS_TIMEOUT_CODE,
-                'failure_message' => self::AMBIGUOUS_TIMEOUT_MESSAGE,
+                'failure_message' => __('messages.payment.ambiguous_timeout'),
             ])->save();
         });
     }
@@ -781,7 +779,7 @@ final class PaymentService
                 $lockedRefund->forceFill([
                     'status' => RefundStatus::Failed,
                     'failure_code' => $this->safeFailureCode($exception->gatewayCode),
-                    'failure_message' => '返金処理が承認されませんでした。',
+                    'failure_message' => __('messages.payment.refund_processing_declined'),
                 ])->save();
 
                 $this->auditLogger->log(
@@ -802,7 +800,7 @@ final class PaymentService
         DB::transaction(function () use ($refund, $payment, $code): void {
             $lockedPayment = $this->lockPayment($payment);
             $lockedRefund = PaymentRefund::query()->whereKey($refund->getKey())->lockForUpdate()->firstOrFail();
-            $message = 'Stripe返金の完了確認が必要です。';
+            $message = __('messages.payment.refund_completion_needs_confirmation');
 
             if ($lockedRefund->status === RefundStatus::Pending) {
                 $lockedRefund->forceFill([
@@ -848,13 +846,13 @@ final class PaymentService
         $errors = [];
 
         if ($amount <= 0) {
-            $errors['amount'] = '返金額は1円以上で指定してください。';
+            $errors['amount'] = __('messages.payment.refund_amount_positive');
         }
 
         if ($reason === '') {
-            $errors['reason'] = '返金理由は必須です。';
+            $errors['reason'] = __('messages.payment.refund_reason_required');
         } elseif (mb_strlen($reason) > 255) {
-            $errors['reason'] = '返金理由は255文字以内で指定してください。';
+            $errors['reason'] = __('messages.payment.refund_reason_max');
         }
 
         if ($errors !== []) {

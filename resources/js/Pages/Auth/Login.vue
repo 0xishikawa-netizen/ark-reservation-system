@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineProps<{
     status?: string | null;
@@ -20,7 +21,7 @@ const submit = (): void => {
 </script>
 
 <template>
-    <AuthCard title="ログイン" subtitle="ご登録のメールアドレスとパスワードでログインしてください。">
+    <AuthCard :title="MESSAGES.customerUi.auth.login.title" :subtitle="MESSAGES.customerUi.auth.login.subtitle">
         <v-alert v-if="status" type="success" variant="tonal" density="comfortable" class="mb-4">
             {{ status }}
         </v-alert>
@@ -28,7 +29,7 @@ const submit = (): void => {
         <v-form @submit.prevent="submit">
             <v-text-field
                 v-model="form.email"
-                label="メールアドレス"
+                :label="MESSAGES.customerUi.auth.email"
                 type="email"
                 autocomplete="email"
                 :error-messages="form.errors.email"
@@ -37,7 +38,7 @@ const submit = (): void => {
             />
             <v-text-field
                 v-model="form.password"
-                label="パスワード"
+                :label="MESSAGES.customerUi.auth.password"
                 type="password"
                 autocomplete="current-password"
                 :error-messages="form.errors.password"
@@ -46,11 +47,11 @@ const submit = (): void => {
             <div class="d-flex align-center justify-space-between mb-2">
                 <v-checkbox
                     v-model="form.remember"
-                    label="ログイン状態を保持する"
+                    :label="MESSAGES.customerUi.auth.login.remember"
                     density="compact"
                     hide-details
                 />
-                <a href="/forgot-password" class="text-body-2">パスワードを忘れた方</a>
+                <a href="/forgot-password" class="text-body-2">{{ MESSAGES.customerUi.auth.login.forgot }}</a>
             </div>
             <v-btn
                 type="submit"
@@ -60,12 +61,12 @@ const submit = (): void => {
                 block
                 :loading="form.processing"
             >
-                ログイン
+                {{ MESSAGES.customerUi.auth.login.title }}
             </v-btn>
         </v-form>
 
-        <div class="ark-auth-divider my-5" role="separator" aria-label="または">
-            <span>または</span>
+        <div class="ark-auth-divider my-5" role="separator" :aria-label="MESSAGES.customerUi.auth.or">
+            <span>{{ MESSAGES.customerUi.auth.or }}</span>
         </div>
 
         <v-btn
@@ -83,12 +84,12 @@ const submit = (): void => {
                     <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
                 </svg>
             </span>
-            Google でログイン
+            {{ MESSAGES.customerUi.auth.login.google }}
         </v-btn>
 
         <template #footer>
-            <span class="text-body-2 text-medium-emphasis">アカウントをお持ちでない方は</span>
-            <a href="/register" class="text-body-2 font-weight-medium ml-1">新規登録</a>
+            <span class="text-body-2 text-medium-emphasis">{{ MESSAGES.customerUi.auth.login.noAccount }}</span>
+            <a href="/register" class="text-body-2 font-weight-medium ml-1">{{ MESSAGES.customerUi.auth.register.title }}</a>
         </template>
     </AuthCard>
 </template>

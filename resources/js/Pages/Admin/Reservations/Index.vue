@@ -9,6 +9,9 @@ import {
     statusColor,
 } from '@/design/tokens';
 import { DateField, PageHeader, SectionCard } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateTime } from '@/utils/dateFormat';
 
 defineOptions({ layout: AdminLayout });
 
@@ -69,23 +72,23 @@ const staffId = ref<number | null>(props.filters.staff_id);
 const status = ref<string | null>(props.filters.status);
 
 const headers = [
-    { title: '日時', key: 'starts_at', sortable: false },
-    { title: '顧客', key: 'customer_name', sortable: false },
-    { title: 'メニュー', key: 'service_name', sortable: false },
-    { title: '担当', key: 'staff_name', sortable: false },
-    { title: '状態', key: 'status', sortable: false },
-    { title: '予約元', key: 'source', sortable: false },
+    { title: MESSAGES.boardUi.reservationIndex.dateTime, key: 'starts_at', sortable: false },
+    { title: MESSAGES.boardUi.reservationIndex.customer, key: 'customer_name', sortable: false },
+    { title: MESSAGES.boardUi.reservationIndex.menu, key: 'service_name', sortable: false },
+    { title: MESSAGES.boardUi.reservationIndex.staff, key: 'staff_name', sortable: false },
+    { title: MESSAGES.boardUi.reservationIndex.status, key: 'status', sortable: false },
+    { title: MESSAGES.boardUi.reservationIndex.source, key: 'source', sortable: false },
     { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
 const statusItems = [
-    { title: '予約確定', value: 'confirmed' },
-    { title: '完了', value: 'completed' },
-    { title: '無断キャンセル', value: 'no_show' },
-    { title: 'キャンセル', value: 'canceled' },
-    { title: '支払い待ち', value: 'pending_payment' },
-    { title: '外部連携待ち', value: 'pending_external_sync' },
-    { title: '期限切れ', value: 'expired' },
+    { title: MESSAGES.boardUi.reservationIndex.confirmed, value: 'confirmed' },
+    { title: MESSAGES.boardUi.reservationIndex.completed, value: 'completed' },
+    { title: MESSAGES.boardUi.reservationIndex.noShow, value: 'no_show' },
+    { title: MESSAGES.boardUi.reservationIndex.canceled, value: 'canceled' },
+    { title: MESSAGES.boardUi.reservationIndex.pendingPayment, value: 'pending_payment' },
+    { title: MESSAGES.boardUi.reservationIndex.pendingExternalSync, value: 'pending_external_sync' },
+    { title: MESSAGES.boardUi.reservationIndex.expired, value: 'expired' },
 ];
 
 function applyFilters(): void {
@@ -122,16 +125,6 @@ function goToPage(targetPage: number): void {
     }, { preserveState: true, preserveScroll: true });
 }
 
-function formatDateTime(value: string): string {
-    return new Intl.DateTimeFormat('ja-JP', {
-        month: 'numeric',
-        day: 'numeric',
-        weekday: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-    }).format(new Date(value.replace(' ', 'T')));
-}
-
 function openReservation(reservationId: number): void {
     if (canManage.value) {
         router.visit(`/admin/reservations/${reservationId}/edit`);
@@ -140,9 +133,9 @@ function openReservation(reservationId: number): void {
 </script>
 
 <template>
-    <Head title="予約" />
+    <Head :title="MESSAGES.boardUi.reservationIndex.title" />
 
-    <PageHeader title="予約" :subtitle="`全 ${reservations.total} 件`">
+    <PageHeader :title="MESSAGES.boardUi.reservationIndex.title" :subtitle="fillMessage(MESSAGES.boardUi.reservationIndex.total, { count: String(reservations.total) })">
         <template #actions>
             <!-- 予約はブッキングボードから取る（専用の新規予約画面は廃止）。 -->
             <v-btn
@@ -151,7 +144,7 @@ function openReservation(reservationId: number): void {
                 prepend-icon="mdi-calendar-month-outline"
                 href="/admin/schedule?panel=create"
             >
-                ブッキングボードで予約
+                {{ MESSAGES.boardUi.reservationIndex.bookOnBoard }}
             </v-btn>
         </template>
     </PageHeader>
@@ -164,16 +157,16 @@ function openReservation(reservationId: number): void {
         class="mb-4"
         @click:close="clearCustomerFilter"
     >
-        <strong>{{ filtered_customer.name }}</strong> 様の予約のみ表示しています。
+        <strong>{{ filtered_customer.name }}</strong>{{ MESSAGES.boardUi.reservationIndex.customerFilterSuffix }}
     </v-alert>
 
-    <SectionCard title="予約一覧" class="ark-table-section">
+    <SectionCard :title="MESSAGES.boardUi.reservationIndex.listTitle" class="ark-table-section">
         <div class="ark-table-section__filters">
             <v-form class="filter-grid" @submit.prevent="applyFilters">
                 <div class="filter-grid__date">
                     <DateField
                         v-model="date"
-                        label="日付"
+                        :label="MESSAGES.boardUi.reservationIndex.date"
                         @update:model-value="applyFilters"
                     />
                 </div>
@@ -182,7 +175,7 @@ function openReservation(reservationId: number): void {
                     :items="staff"
                     item-title="display_name"
                     item-value="user_id"
-                    label="担当"
+                    :label="MESSAGES.boardUi.reservationIndex.staff"
                     clearable
                     hide-details
                     class="filter-grid__staff"
@@ -191,13 +184,13 @@ function openReservation(reservationId: number): void {
                 <v-select
                     v-model="status"
                     :items="statusItems"
-                    label="状態"
+                    :label="MESSAGES.boardUi.reservationIndex.status"
                     clearable
                     hide-details
                     class="filter-grid__status"
                     @update:model-value="applyFilters"
                 />
-                <v-btn variant="text" @click="clearFilters">クリア</v-btn>
+                <v-btn variant="text" @click="clearFilters">{{ MESSAGES.boardUi.reservationIndex.clear }}</v-btn>
             </v-form>
         </div>
 
@@ -209,13 +202,13 @@ function openReservation(reservationId: number): void {
             item-value="id"
             hide-default-footer
             hover
-            no-data-text="該当する予約はありません。"
+            :no-data-text="MESSAGES.boardUi.reservationIndex.noData"
         >
             <template #item.starts_at="{ item }">
-                {{ formatDateTime(item.starts_at) }}
+                {{ formatDateTime(item.starts_at, 'monthDayWeekday') }}
             </template>
             <template #item.staff_name="{ item }">
-                {{ item.staff_name ?? '担当なし' }}
+                {{ item.staff_name ?? MESSAGES.boardUi.reservationIndex.unassignedStaff }}
             </template>
             <template #item.status="{ item }">
                 <v-chip :color="statusColor(item.status)" size="small">
@@ -247,7 +240,7 @@ function openReservation(reservationId: number): void {
                     prepend-icon="mdi-pencil-outline"
                     @click="openReservation(item.id)"
                 >
-                    編集
+                    {{ MESSAGES.boardUi.reservationIndex.edit }}
                 </v-btn>
             </template>
         </v-data-table>

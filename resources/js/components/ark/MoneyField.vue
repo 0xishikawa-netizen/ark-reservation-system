@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { formatMoney, toDigits } from '@/utils/money';
+import { MESSAGES } from '@/constants/messages';
 
 /**
  * 金額の入力欄。数字だけを受け付け、フォーカスが外れている間は 3 桁ごとにカンマを付けて表示する。
@@ -14,7 +15,7 @@ const props = withDefaults(defineProps<{
     /** 末尾に出す単位。 */
     suffix?: string;
 }>(), {
-    suffix: '円',
+    suffix: MESSAGES.customerUi.format.yenUnit,
 });
 
 const emit = defineEmits<{ 'update:modelValue': [value: number | null] }>();

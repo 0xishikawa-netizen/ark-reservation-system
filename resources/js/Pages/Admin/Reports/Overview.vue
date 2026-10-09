@@ -4,6 +4,7 @@ import { MonthField, PageHeader, SectionCard } from '@/components/ark';
 import { MonthlyReportTabs, ReportFilterBar, ReportFilterField, ReportKpi, ReportSelect, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -25,6 +26,7 @@ interface Report {
 const props = defineProps<{ report: Report }>();
 const hub = MESSAGES.monthlyHub;
 const labels = MESSAGES.reporting;
+const M = MESSAGES.reportsUi.overview;
 const basisItems: { title: string; value: SalesBasis }[] = [
     { title: labels.annualPaymentBasis, value: 'payment_date' },
     { title: labels.annualTreatmentBasis, value: 'treatment_date' },
@@ -73,7 +75,7 @@ function reload(month: string, basis: SalesBasis): void {
         <ReportKpi :label="hub.reach6"><ReportValue :value="report.retention.reach_6" format="percent" :empty-label="MESSAGES.common.notCalculated" /></ReportKpi>
         <ReportKpi :label="hub.reach10"><ReportValue :value="report.retention.reach_10" format="percent" :empty-label="MESSAGES.common.notCalculated" /></ReportKpi>
         <ReportKpi :label="hub.utilization"><ReportValue :value="report.utilization.utilization_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /><template #caption>{{ hub.bookable }} <ReportValue :value="report.utilization.bookable_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></template></ReportKpi>
-        <ReportKpi :label="`${hub.weekday}／${hub.weekend}（${hub.bookable}）`"><ReportValue :value="report.utilization.weekday.bookable_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /> ／ <ReportValue :value="report.utilization.weekend.bookable_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></ReportKpi>
+        <ReportKpi :label="fillMessage(M.dayTypeBookable, { weekday: hub.weekday, weekend: hub.weekend, bookable: hub.bookable })"><ReportValue :value="report.utilization.weekday.bookable_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /> ／ <ReportValue :value="report.utilization.weekend.bookable_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></ReportKpi>
     </div>
 
     <div class="overview-grid">

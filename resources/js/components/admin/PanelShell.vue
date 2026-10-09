@@ -2,6 +2,9 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import PanelHeader from '@/components/admin/PanelHeader.vue';
 
+/** スクロール有無を判定する際に許容する端数ピクセル。 */
+const SCROLLABLE_TOLERANCE_PX = 1;
+
 withDefaults(defineProps<{
     title: string;
     icon?: string | null;
@@ -31,7 +34,7 @@ let bodyResizeObserver: ResizeObserver | null = null;
 function syncBodyScrollable(): void {
     const el = bodyEl.value;
 
-    bodyScrollable.value = el !== null && el.scrollHeight > el.clientHeight + 1;
+    bodyScrollable.value = el !== null && el.scrollHeight > el.clientHeight + SCROLLABLE_TOLERANCE_PX;
 }
 
 onMounted(() => {

@@ -27,9 +27,9 @@ defineProps<{
 </script>
 
 <template>
-    <Head title="スタッフ" />
+    <Head :title="MESSAGES.mastersUi.staff.title" />
 
-    <PageHeader title="スタッフ" subtitle="スタッフ情報と予約受付状態を管理します。">
+    <PageHeader :title="MESSAGES.mastersUi.staff.title" :subtitle="MESSAGES.mastersUi.staff.subtitle">
         <template #actions>
             <v-btn
                 v-if="page.props.auth.can.shiftsManage"
@@ -37,27 +37,27 @@ defineProps<{
                 prepend-icon="mdi-calendar-clock-outline"
                 href="/admin/staff-shifts"
             >
-                勤務枠
+                {{ MESSAGES.mastersUi.staff.shifts }}
             </v-btn>
             <v-btn color="primary" variant="flat" prepend-icon="mdi-account-plus-outline" href="/admin/staff/create">
-                スタッフを追加
+                {{ MESSAGES.mastersUi.staff.add }}
             </v-btn>
         </template>
     </PageHeader>
 
-    <SectionCard title="スタッフ一覧" class="ark-table-section">
+    <SectionCard :title="MESSAGES.mastersUi.staff.list" class="ark-table-section">
         <v-table>
             <thead>
                 <tr>
-                    <th>表示名</th>
-                    <th>氏名</th>
-                    <th>メールアドレス</th>
-                    <th>ロール</th>
-                    <th>色</th>
-                    <th>予約受付</th>
-                    <th>ログイン</th>
-                    <th>表示順</th>
-                    <th class="text-right">操作</th>
+                    <th>{{ MESSAGES.mastersUi.staff.displayName }}</th>
+                    <th>{{ MESSAGES.mastersUi.staff.name }}</th>
+                    <th>{{ MESSAGES.mastersUi.staff.email }}</th>
+                    <th>{{ MESSAGES.mastersUi.staff.role }}</th>
+                    <th>{{ MESSAGES.mastersUi.staff.color }}</th>
+                    <th>{{ MESSAGES.mastersUi.staff.booking }}</th>
+                    <th>{{ MESSAGES.mastersUi.staff.login }}</th>
+                    <th>{{ MESSAGES.mastersUi.staff.sortOrder }}</th>
+                    <th class="text-right">{{ MESSAGES.mastersUi.staff.operation }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -80,13 +80,13 @@ defineProps<{
                     <td>
                         <StatusChip
                             :status="member.is_bookable ? 'active' : 'canceled'"
-                            :label="member.is_bookable ? '可' : '不可'"
+                            :label="member.is_bookable ? MESSAGES.mastersUi.staff.available : MESSAGES.mastersUi.staff.unavailable"
                         />
                     </td>
                     <td>
                         <StatusChip
                             :status="member.is_active ? 'active' : 'no_show'"
-                            :label="member.is_active ? '有効' : '無効'"
+                            :label="member.is_active ? MESSAGES.mastersUi.staff.active : MESSAGES.mastersUi.staff.inactive"
                         />
                     </td>
                     <td>{{ member.sort_order }}</td>
@@ -101,9 +101,9 @@ defineProps<{
                                 class="staff-row-actions__btn"
                                 :href="`/admin/staff/${member.user_id}/edit`"
                             >
-                                編集
+                                {{ MESSAGES.mastersUi.staff.edit }}
                             </v-btn>
-                            <MasterDeleteButton type="staff" :id="member.user_id" :name="member.display_name" label="スタッフ" />
+                            <MasterDeleteButton type="staff" :id="member.user_id" :name="member.display_name" :label="MESSAGES.mastersUi.staff.masterLabel" />
                             <v-btn
                                 size="small"
                                 variant="outlined"
@@ -111,7 +111,7 @@ defineProps<{
                                 class="staff-row-actions__btn"
                                 :href="`/admin/staff-shifts?staff_id=${member.user_id}`"
                             >
-                                勤務枠
+                                {{ MESSAGES.mastersUi.staff.shifts }}
                             </v-btn>
                         </div>
                     </td>
@@ -120,15 +120,15 @@ defineProps<{
                     <td colspan="9">
                         <EmptyState
                             icon="mdi-account-group-outline"
-                            title="スタッフはまだ登録されていません"
-                            description="スタッフを追加すると、こちらで予約受付や勤務枠を管理できます。"
+                            :title="MESSAGES.mastersUi.staff.emptyTitle"
+                            :description="MESSAGES.mastersUi.staff.emptyDescription"
                         />
                     </td>
                 </tr>
             </tbody>
         </v-table>
     </SectionCard>
-    <TrashedMasterList type="staff" label="スタッフ" :items="trashed ?? []" />
+    <TrashedMasterList type="staff" :label="MESSAGES.mastersUi.staff.masterLabel" :items="trashed ?? []" />
 </template>
 
 <style scoped>

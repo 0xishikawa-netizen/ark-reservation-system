@@ -4,8 +4,17 @@ import { ref } from 'vue';
 import { PageHeader, SectionCard } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
+
+// 返金率の入力範囲。
+const MIN_REFUND_PERCENT = 0;
+const MAX_REFUND_PERCENT = 100;
+// 段階番号は画面上で1始まり。
+const TIER_NUMBER_OFFSET = 1;
+// 返金段階は最低1行を維持する。
+const MINIMUM_TIER_COUNT = 1;
 
 interface CancellationTier {
     min_hours_before: number;
@@ -70,15 +79,15 @@ const updatePolicy = (): void => {
 </script>
 
 <template>
-    <Head title="予約ポリシー" />
+    <Head :title="MESSAGES.mastersUi.reservationPolicy.title" />
 
     <div class="ark-settings-page">
     <PageHeader
-        title="予約ポリシー"
-        subtitle="予約開始までの時間に応じたカード決済の自動返金率を設定します。"
+        :title="MESSAGES.mastersUi.reservationPolicy.title"
+        :subtitle="MESSAGES.mastersUi.reservationPolicy.subtitle"
     />
 
-    <SectionCard title="キャンセル時の返金率">
+    <SectionCard :title="MESSAGES.mastersUi.reservationPolicy.sectionTitle">
         <v-alert type="info" variant="tonal" class="mb-5">
             {{ MESSAGES.settings.cancellationTierHint }}
         </v-alert>
@@ -86,10 +95,10 @@ const updatePolicy = (): void => {
         <v-table class="policy-table">
             <thead>
                 <tr>
-                    <th scope="col">予約開始まで</th>
-                    <th scope="col">返金率</th>
+                    <th scope="col">{{ MESSAGES.mastersUi.reservationPolicy.beforeStart }}</th>
+                    <th scope="col">{{ MESSAGES.mastersUi.reservationPolicy.refundRate }}</th>
                     <th scope="col" class="action-column">
-                        <span class="sr-only">操作</span>
+                        <span class="sr-only">{{ MESSAGES.mastersUi.reservationPolicy.operation }}</span>
                     </th>
                 </tr>
             </thead>
@@ -99,23 +108,23 @@ const updatePolicy = (): void => {
                         <v-text-field
                             v-model.number="tier.min_hours_before"
                             type="number"
-                            min="0"
-                            suffix="時間以上"
+                            :min="MIN_REFUND_PERCENT"
+                            :suffix="MESSAGES.mastersUi.reservationPolicy.hoursOrMore"
                             hide-details="auto"
                             :error-messages="errors[`tiers.${index}.min_hours_before`]"
-                            :aria-label="`段階${index + 1}の予約開始までの時間`"
+                            :aria-label="fillMessage(MESSAGES.mastersUi.reservationPolicy.tierHoursAria, { number: String(index + TIER_NUMBER_OFFSET) })"
                         />
                     </td>
                     <td>
                         <v-text-field
                             v-model.number="tier.refund_percent"
                             type="number"
-                            min="0"
-                            max="100"
+                            :min="MIN_REFUND_PERCENT"
+                            :max="MAX_REFUND_PERCENT"
                             suffix="%"
                             hide-details="auto"
                             :error-messages="errors[`tiers.${index}.refund_percent`]"
-                            :aria-label="`段階${index + 1}の返金率`"
+                            :aria-label="fillMessage(MESSAGES.mastersUi.reservationPolicy.tierRefundAria, { number: String(index + TIER_NUMBER_OFFSET) })"
                         />
                     </td>
                     <td class="action-column">
@@ -123,8 +132,8 @@ const updatePolicy = (): void => {
                             icon="mdi-delete-outline"
                             variant="text"
                             color="error"
-                            :disabled="tiers.length === 1 || processing"
-                            :aria-label="`段階${index + 1}を削除`"
+                            :disabled="tiers.length === MINIMUM_TIER_COUNT || processing"
+                            :aria-label="fillMessage(MESSAGES.mastersUi.reservationPolicy.tierDeleteAria, { number: String(index + TIER_NUMBER_OFFSET) })"
                             @click="removeTier(index)"
                         />
                     </td>
@@ -143,7 +152,7 @@ const updatePolicy = (): void => {
             :disabled="processing"
             @click="addTier"
         >
-            段階を追加
+            {{ MESSAGES.mastersUi.reservationPolicy.addTier }}
         </v-btn>
 
         <v-divider class="my-6" />
@@ -151,17 +160,17 @@ const updatePolicy = (): void => {
         <v-text-field
             v-model.number="noShowRefundPercent"
             type="number"
-            min="0"
-            max="100"
+            :min="MIN_REFUND_PERCENT"
+            :max="MAX_REFUND_PERCENT"
             suffix="%"
-            label="無断キャンセル時の返金率"
+            :label="MESSAGES.mastersUi.reservationPolicy.noShowRefund"
             max-width="360"
             :error-messages="errors.no_show_refund_percent"
         />
 
         <div class="d-flex justify-end mt-4">
             <v-btn color="primary" :loading="processing" @click="updatePolicy">
-                保存
+                {{ MESSAGES.mastersUi.reservationPolicy.save }}
             </v-btn>
         </div>
     </SectionCard>

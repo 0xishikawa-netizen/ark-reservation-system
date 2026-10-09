@@ -2,6 +2,7 @@
 import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { ColorField, PageHeader, SectionCard, MoneyField } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import ServiceResourceFields from '@/components/admin/ServiceResourceFields.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -22,7 +23,7 @@ defineProps<{
     qualifications: MasterOption[];
 }>();
 
-const categorySuggestions = ['整体', 'トレーニング', 'コンディショニング'];
+const categorySuggestions = MESSAGES.mastersUi.services.categorySuggestions;
 
 const form = useForm({
     name: '',
@@ -46,24 +47,24 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Head title="メニュー作成" />
+    <Head :title="MESSAGES.mastersUi.services.createTitle" />
 
     <div class="service-form-shell">
         <PageHeader
-            title="メニュー作成"
-            subtitle="予約時に表示するメニュー内容と受付条件を設定します。"
+            :title="MESSAGES.mastersUi.services.createTitle"
+            :subtitle="MESSAGES.mastersUi.services.createSubtitle"
         />
 
         <v-form @submit.prevent="submit">
             <SectionCard>
                 <section class="mb-6" aria-labelledby="service-create-basic">
                     <h2 id="service-create-basic" class="section-heading text-subtitle-1 mb-4">
-                        基本情報
+                        {{ MESSAGES.mastersUi.services.basicInformation }}
                     </h2>
                     <v-text-field
                         v-model="form.name"
                         class="mb-1"
-                        label="メニュー名"
+                        :label="MESSAGES.mastersUi.services.name"
                         :error-messages="form.errors.name"
                         maxlength="100"
                         required
@@ -71,7 +72,7 @@ const submit = (): void => {
                     <v-combobox
                         v-model="form.category"
                         class="mb-1"
-                        label="カテゴリ"
+                        :label="MESSAGES.mastersUi.services.category"
                         :items="categorySuggestions"
                         :error-messages="form.errors.category"
                         clearable
@@ -79,7 +80,7 @@ const submit = (): void => {
                     <div class="master-fields">
                         <v-select
                             v-model="form.analysis_category_id"
-                            label="集計用メニュー分類"
+                            :label="MESSAGES.mastersUi.services.analysisCategoryField"
                             :items="analysisCategories"
                             item-title="name"
                             item-value="id"
@@ -88,7 +89,7 @@ const submit = (): void => {
                         />
                         <v-select
                             v-model="form.tax_category_id"
-                            label="税区分"
+                            :label="MESSAGES.mastersUi.services.taxCategory"
                             :items="taxCategories"
                             item-title="name"
                             item-value="id"
@@ -97,7 +98,7 @@ const submit = (): void => {
                         />
                     </div>
                     <div class="mb-4">
-                        <ColorField v-model="form.color" label="表示色" />
+                        <ColorField v-model="form.color" :label="MESSAGES.mastersUi.services.displayColor" />
                         <div v-if="form.errors.color" class="text-error text-caption mt-1">
                             {{ form.errors.color }}
                         </div>
@@ -108,12 +109,12 @@ const submit = (): void => {
 
                 <section aria-labelledby="service-create-booking">
                     <h2 id="service-create-booking" class="section-heading text-subtitle-1 mb-4">
-                        予約設定
+                        {{ MESSAGES.mastersUi.services.reservationSettings }}
                     </h2>
                     <div class="number-fields mb-4">
                         <v-text-field
                             v-model.number="form.duration_min"
-                            label="所要時間（分）"
+                            :label="MESSAGES.mastersUi.services.durationMinutes"
                             type="number"
                             min="5"
                             max="600"
@@ -122,13 +123,13 @@ const submit = (): void => {
                         />
                         <MoneyField
                             v-model="form.price"
-                            label="価格（税込）"
+                            :label="MESSAGES.mastersUi.services.priceTaxIncluded"
                             :error-messages="form.errors.price"
                             required
                         />
                         <v-text-field
                             v-model.number="form.sort_order"
-                            label="表示順"
+                            :label="MESSAGES.mastersUi.services.sortOrder"
                             type="number"
                             :error-messages="form.errors.sort_order"
                             required
@@ -137,14 +138,14 @@ const submit = (): void => {
                     <div class="switches mb-4">
                         <v-switch
                             v-model="form.is_online_bookable"
-                            label="オンライン予約を受け付ける"
+                            :label="MESSAGES.mastersUi.services.onlineBookable"
                             color="primary"
                             :error-messages="form.errors.is_online_bookable"
                             hide-details="auto"
                         />
                         <v-switch
                             v-model="form.requires_staff"
-                            label="施術スタッフを必要とする"
+                            :label="MESSAGES.mastersUi.services.requiresStaff"
                             color="primary"
                             :error-messages="form.errors.requires_staff"
                             hide-details="auto"
@@ -152,7 +153,7 @@ const submit = (): void => {
                     </div>
                     <v-autocomplete
                         v-model="form.staff_ids"
-                        label="施術可能スタッフ"
+                        :label="MESSAGES.mastersUi.services.eligibleStaff"
                         :items="staff"
                         item-title="display_name"
                         item-value="user_id"
@@ -165,7 +166,7 @@ const submit = (): void => {
                         <template #item="{ props: itemProps, item }">
                             <v-list-item
                                 v-bind="itemProps"
-                                :subtitle="item.raw.is_bookable ? undefined : '予約受付停止中'"
+                                :subtitle="item.raw.is_bookable ? undefined : MESSAGES.mastersUi.services.bookingStopped"
                             />
                         </template>
                     </v-autocomplete>
@@ -182,9 +183,9 @@ const submit = (): void => {
 
                 <div class="form-actions d-flex ga-3 flex-wrap">
                     <v-btn type="submit" color="primary" :loading="form.processing">
-                        作成
+                        {{ MESSAGES.mastersUi.services.create }}
                     </v-btn>
-                    <v-btn variant="text" href="/admin/services">キャンセル</v-btn>
+                    <v-btn variant="text" href="/admin/services">{{ MESSAGES.mastersUi.services.cancel }}</v-btn>
                 </div>
             </SectionCard>
         </v-form>

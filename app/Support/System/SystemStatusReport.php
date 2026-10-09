@@ -63,7 +63,7 @@ final class SystemStatusReport
             ],
             'reconcile' => [
                 'measured' => false,
-                'note' => '日次バッチで実行。結果は失敗ジョブ / ログを参照。',
+                'note' => __('messages.system_status.reconcile_note'),
             ],
             'last_backup' => $this->lastBackup(),
             'real_stripe_test_mode_qa' => self::REAL_STRIPE_TEST_MODE_QA,

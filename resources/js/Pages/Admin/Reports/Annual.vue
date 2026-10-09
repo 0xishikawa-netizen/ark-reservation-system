@@ -5,8 +5,13 @@ import { DateField, PageHeader, SectionCard, YearField } from '@/components/ark'
 import { ReportFilterBar, ReportFilterField, ReportSelect, ReportTable, ReportValue, type ReportValueFormat } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { changeAndReload } from '@/composables/reportNavigation';
 
 defineOptions({ layout: AdminLayout });
+
+/** 事業年度の開始月（4月〜翌3月） */
+const FISCAL_YEAR_START_MONTH = 4;
 
 type SalesBasis = 'payment_date' | 'treatment_date';
 type Period = 'fiscal' | 'calendar';
@@ -21,6 +26,7 @@ interface ColumnGroup { title: string; columns: Column[] }
 
 const props = defineProps<{ report: AnnualReport; dataEndpoint: string }>();
 const labels = MESSAGES.reporting;
+const M = MESSAGES.reportsUi.annual;
 const report = ref(props.report);
 const year = ref(props.report.year);
 const basis = ref<SalesBasis>(props.report.sales_basis);
@@ -30,7 +36,7 @@ const periodItems: { title: string; value: Period }[] = [
     { title: labels.annualCalendar, value: 'calendar' },
 ];
 /** 事業年度は4月〜翌3月（2026年度＝2026年4月〜2027年3月）。 */
-const periodTitle = computed(() => (report.value.period === 'fiscal' ? `${report.value.year}年度` : `${report.value.year}年`));
+const periodTitle = computed(() => fillMessage(report.value.period === 'fiscal' ? M.fiscalYear : M.calendarYear, { year: String(report.value.year) }));
 const asOfDate = ref(props.report.as_of_date);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -121,9 +127,7 @@ function changePeriod(value: Period): void {
 }
 
 function changeBasis(value: SalesBasis): void {
-    if (value === basis.value) return;
-    basis.value = value;
-    void loadReport();
+    changeAndReload(basis, value, loadReport);
 }
 
 function changeAsOf(value: string): void {
@@ -166,7 +170,7 @@ function changeAsOf(value: string): void {
             </thead>
             <tbody>
                 <tr v-for="row in report.months" :key="row.month_key" :class="{ 'row-muted': row.is_future }">
-                    <th class="is-sticky"><template v-if="report.period === 'fiscal' && (row.month === 1 || row.month === 4)">{{ row.year }}/</template>{{ row.month }}月</th>
+                    <th class="is-sticky"><template v-if="report.period === 'fiscal' && (row.month === 1 || row.month === FISCAL_YEAR_START_MONTH)">{{ row.year }}/</template>{{ fillMessage(M.month, { month: String(row.month) }) }}</th>
                     <td v-for="column in columns" :key="column.key" class="num" :class="{ 'group-start': column.groupStart }">
                         <ReportValue
                             :value="numericValue(row, column.key)"

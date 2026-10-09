@@ -151,7 +151,7 @@ class ServiceController extends Controller
 
         return back()->with(
             'success',
-            $validated['active'] ? 'サービスを有効化しました。' : 'サービスを無効化しました。',
+            $validated['active'] ? __('messages.service.activated') : __('messages.service.deactivated'),
         );
     }
 

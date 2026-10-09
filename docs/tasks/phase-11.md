@@ -40,8 +40,9 @@
 | 11-31 | 月次レポート（タブ再編・日計明細・予約分析・概要） | DONE（2026-09-27）`docs/REPORTS_UI.md` |
 | 11-32 | 業務シナリオ結合確認・全回帰 | DONE（2026-09-27）`docs/PHASE11_OPERATIONAL_VERIFICATION.md` |
 | 11-33 | 品質向上：全体レビュー指摘（H-1〜H-5・Medium/Low）の修正と回帰テスト強化 | DONE（2026-10-07）`docs/review/2026-10-07-full-code-review.md` §5 |
+| 11-34 | 文言・定数の集約（レビュー L-4）と共通化 | DONE（2026-10-09） |
 
-**Current Task: なし。** 11-33 は 2026-10-07 に DONE。 11-27〜11-32 は 2026-09-27 に DONE（一括承認分を1 Taskずつ実施）。 2026-09-27、実物帳票サンプル比較（`docs/handoff/2026-09-26-sample-comparison.md`）に基づき、ユーザーが11-19〜11-26と11-13再開を一括承認した。
+**Current Task: なし。** 11-34 は 2026-10-09 に DONE。 11-33 は 2026-10-07 に DONE。 11-27〜11-32 は 2026-09-27 に DONE（一括承認分を1 Taskずつ実施）。 2026-09-27、実物帳票サンプル比較（`docs/handoff/2026-09-26-sample-comparison.md`）に基づき、ユーザーが11-19〜11-26と11-13再開を一括承認した。
 ただし実装は常に1 Taskずつ（完了→次TaskをCURRENTへ）進める。
 
 実装できるのは `docs/PLAN.md` の Current Task と本表の **CURRENT / APPROVED** が一致する1 Taskだけ。
@@ -642,3 +643,31 @@ Task 11-1では生成せず、必要データ、テンプレート管理、シ�
 - [x] 並行・冪等（`tests/Feature/Concurrency/`。既存で網羅済みのケースはレビュー報告に列挙）：同一枠の二重予約（一意制約）、キャンセル・返金・会計確定・会計取消・Webhook の多重実行、最後の 1 回の回数券の取り合い、楽観ロック競合を、既存テストで未カバーのものだけ追加。
 - [x] `./vendor/bin/sail artisan test` 全件成功（2026-10-07：1242 件・174,122 assertions）、`./vendor/bin/sail npm run build` 成功・型エラー 0、`migrate:status` に pending なし。
 - [x] `docs/specs/`、`docs/review/2026-10-07-full-code-review.md`、`docs/OPERATIONS.md` を最終実装に同期。
+
+### Task 11-34 — 文言・定数の集約（2026-10-09 ユーザー承認・DONE 2026-10-09）
+
+目的：レビュー L-4（画面・サーバーの直書き文言）を解消し、「定数にできるところは定数にする」。**表示される文字列は一字一句変えず、置き場所だけを移す**（既存テストのアサーションはそのまま通ること）。挙動・レイアウト・API は変えない。
+
+#### 対象
+- **画面（Vue / TS）**：テンプレート・スクリプト内で利用者に見える日本語（見出し・ラベル・ボタン・プレースホルダ・ツールチップ・aria-label・確認文・空表示・エラー）→ `resources/js/constants/messages/{board,masters,reports,customer}.ts`（`MESSAGES.boardUi` / `mastersUi` / `reportsUi` / `customerUi`）。既存の `MESSAGES` に同じ文言のキーがあれば再利用する。差し込み値がある文言は `{name}` 形式の置換か、既存の関数パターン（`messages.ts` 末尾）に揃える。
+- **画面ロジックの意味のある数値**（ポーリング間隔・タイムアウト・しきい値・上限件数・スロット幅の既定など）→ ファイル先頭の名前付き定数（`UPPER_SNAKE_CASE`、日本語コメントで意味）。CSS の値は対象外。
+- **サーバー（PHP）**：利用者に届く文言（`ValidationException`、フラッシュ、利用者に表示される例外、通知・メール、画面へ返すラベル）→ `lang/ja/messages.php`（`__('messages.<グループ>.<キー>')`）。
+
+#### 対象外（理由）
+- Excel 原本の固定セル・見出し（`app/Domain/Reporting/Excel/*`）と旧帳票変換の照合キー（`Import/*`）：原本と一字一句一致させるデータ。
+- 監査ログの要約・Artisan コマンドの出力・ログ：運用者向けの内部記録。
+- 開発者向けの内部例外（`LogicException` / `RuntimeException` 等で利用者に表示されないもの）。
+- 既に定数として集約されているファイル（`resources/js/constants/*`、`design/tokens.ts`）、コメント、テストコード。
+
+#### 共通化（2026-10-09 ユーザー追加要望）
+同じ処理を複数の画面・クラスで定義し直している箇所を、既存の共通置き場へ集約する。**挙動・出力は変えない**（整形結果が一字でも違う重複は、差を保ったまま引数で切り替えるか、共通化しない）。1 人保守の方針どおり、不要な抽象化（汎用フレームワーク化・継承の多段化）はしない。
+
+- 画面：日時・日付・時刻・金額の整形（`formatDateTime` 11 / `formatPrice`・`money`・`yen` 16 / `formatDate`・`fmtDay` 12 / `timeLabel` 4）、`genderLabel` 5、`signed` 4、`todayIso` 3、`loadStripeJs` 4、マスタ一覧の有効/無効切替（処理中フラグ付き）、帳票の月・売上基準の切替 → `resources/js/utils/` または `resources/js/composables/`（既存の `utils/money.ts`・`components/reports/format.ts` を優先して再利用）。
+- サーバー：予約 FormRequest 5 本の `validateStaff` / `validateBoundary` / `validatedService` → trait、Controller の `userFor` / `customerFor`、`ReservationService` と `ScheduleBlockService` の `lockResources` → 共通クラス。
+- 共通化した関数には単体テスト（Vitest / PHPUnit）を付ける。
+
+#### 受け入れ条件
+- [x] 対象範囲に、利用者向けの日本語直書きが残っていない（対象外は理由付きで一覧化）。
+- [x] `./vendor/bin/sail npm run build` 成功・型エラー 0、`npm run test`（Vitest）167 件成功。
+- [x] `./vendor/bin/sail artisan test` 全件成功（1242 件・174,122 assertions。既存アサーション不変）。
+- [x] 表示文字列が変わっていないことを差分で確認（変更前の日本語の連なりを変更後の全文言から照合。不一致は部品分割による誤検知のみ）。

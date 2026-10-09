@@ -29,7 +29,7 @@ final class ReportReconciliationService
     public function forMonth(int $year, int $month, ?int $batchId = null): array
     {
         if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12) {
-            throw new InvalidArgumentException('年月の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.year_month_invalid'));
         }
         $start = CarbonImmutable::create($year, $month, 1, 0, 0, 0, 'Asia/Tokyo');
         $end = $start->endOfMonth()->startOfDay();
@@ -115,11 +115,11 @@ final class ReportReconciliationService
     {
         if (! in_array($category, self::DIFFERENCE_CATEGORIES, true)
             || ! in_array($status, ['confirmed', 'needs_attention'], true) || trim($reason) === '') {
-            throw new InvalidArgumentException('差分分類、確認状態、理由を指定してください。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.reconciliation_fields_required'));
         }
         $metric = DB::table('historical_metric_values')->where('id', $historicalMetricId)->whereNull('invalidated_at')->first();
         if ($metric === null) {
-            throw new InvalidArgumentException('有効な過去集計値が見つかりません。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.historical_metric_not_found'));
         }
         DB::table('historical_metric_reviews')->updateOrInsert(
             ['historical_metric_value_id' => $historicalMetricId],
@@ -257,7 +257,7 @@ final class ReportReconciliationService
         }
         $batch = DB::table('historical_import_batches')->find($batchId);
         if ($batch === null || $batch->invalidated_at !== null) {
-            throw new InvalidArgumentException('有効な取込batchが見つかりません。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.import_batch_not_found'));
         }
         $ark = [
             ...$business->totals,

@@ -5,8 +5,13 @@ import { EmptyValue, MonthField, PageHeader, SectionCard } from '@/components/ar
 import { MonthlyReportTabs, ReportFilterBar, ReportFilterField, ReportKpi, ReportSelect, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { changeAndReload } from '@/composables/reportNavigation';
 
 defineOptions({ layout: AdminLayout });
+
+/** 税率（bps）を % 表示へ直す割り算の値（1% = 100bps） */
+const BPS_PER_PERCENT = 100;
 
 type SalesBasis = 'payment_date' | 'treatment_date';
 interface Ratio { numerator: number; denominator: number; value: number | null }
@@ -49,6 +54,7 @@ const props = withDefaults(defineProps<{
     paymentMethodColumns: () => [],
 });
 const labels = MESSAGES.reporting;
+const M = MESSAGES.reportsUi.monthly;
 const report = ref(props.report);
 const selectedMonth = ref(props.report.month_key);
 const selectedBasis = ref<SalesBasis>(props.report.sales_basis);
@@ -111,7 +117,7 @@ const taxRates = computed<TaxRateTotal[]>(() => {
 });
 const taxRateLabel = (tax: TaxRateTotal): string => tax.rate_bps === null
     ? labels.monthlyTaxRateUnknown
-    : labels.monthlyTaxRateTarget.replace('{rate}', String(tax.rate_bps / 100));
+    : fillMessage(labels.monthlyTaxRateTarget, { rate: String(tax.rate_bps / BPS_PER_PERCENT) });
 const totalNumber = (key: string): number => report.value.totals[key] as number;
 const categoryTotals = computed(() => report.value.totals.analysis_category_visit_counts as Record<string, number>);
 
@@ -141,21 +147,17 @@ async function loadReport(): Promise<void> {
 }
 
 function changeMonth(value: string): void {
-    if (value === selectedMonth.value) return;
-    selectedMonth.value = value;
-    void loadReport();
+    changeAndReload(selectedMonth, value, loadReport);
 }
 
 function changeBasis(value: SalesBasis): void {
-    if (value === selectedBasis.value) return;
-    selectedBasis.value = value;
-    void loadReport();
+    changeAndReload(selectedBasis, value, loadReport);
 }
 </script>
 
 <template>
-    <Head title="月計" />
-    <PageHeader title="月計" subtitle="日次と同じ事実データから、月の日別実績・目標進捗を集計します。">
+    <Head :title="M.title" />
+    <PageHeader :title="M.title" :subtitle="M.subtitle">
         <template #actions>
             <v-btn href="/admin/reports/customers" variant="outlined" color="primary" prepend-icon="mdi-account-group-outline" data-testid="customers-link">
                 {{ labels.customerOpen }}
@@ -191,10 +193,10 @@ function changeBasis(value: SalesBasis): void {
     </ReportFilterBar>
 
     <div class="report-kpi-grid monthly-kpis" :aria-busy="loading">
-        <ReportKpi label="月間目標">
+        <ReportKpi :label="M.monthlyTarget">
             <ReportValue :value="report.progress.target_amount" format="money" :empty-label="MESSAGES.common.notSet" />
         </ReportKpi>
-        <ReportKpi label="現在実績" emphasis>
+        <ReportKpi :label="M.currentActual" emphasis>
             <ReportValue :value="report.progress.actual_amount" format="money" />
             <template #caption>{{ basisLabel }}</template>
         </ReportKpi>
@@ -202,43 +204,43 @@ function changeBasis(value: SalesBasis): void {
             <ReportValue :value="totalNumber('net_sales') ?? null" format="money" />
             <template #caption>{{ labels.monthlyGrossSales }} <ReportValue :value="totalNumber('gross_sales') ?? null" format="money" /> / {{ labels.monthlySalesTax }} <ReportValue :value="totalNumber('sales_tax') ?? null" format="money" /></template>
         </ReportKpi>
-        <ReportKpi label="達成率">
+        <ReportKpi :label="MESSAGES.monthlyHub.achievement">
             <ReportValue :value="report.progress.achievement_rate" format="percent" :empty-label="MESSAGES.common.notCalculated" />
         </ReportKpi>
-        <ReportKpi label="残必要売上">
+        <ReportKpi :label="M.remainingRequired">
             <ReportValue :value="report.progress.remaining_required_amount" format="money" :empty-label="MESSAGES.common.notCalculated" />
-            <template #caption>差額 <ReportValue :value="report.progress.difference_amount" format="money" :empty-label="MESSAGES.common.notCalculated" /></template>
+            <template #caption>{{ M.difference }} <ReportValue :value="report.progress.difference_amount" format="money" :empty-label="MESSAGES.common.notCalculated" /></template>
         </ReportKpi>
-        <ReportKpi label="経過 / 残営業日">
-            {{ report.business_days.elapsed }} / {{ report.business_days.remaining }}<small>日</small>
-            <template #caption>臨時休業 {{ report.business_days.closed }}日</template>
+        <ReportKpi :label="M.businessDays">
+            {{ report.business_days.elapsed }} / {{ report.business_days.remaining }}<small>{{ M.dayUnit }}</small>
+            <template #caption>{{ fillMessage(M.temporaryClosed, { count: String(report.business_days.closed) }) }}</template>
         </ReportKpi>
-        <ReportKpi label="残営業日平均">
+        <ReportKpi :label="M.remainingDailyAverage">
             <ReportValue :value="report.progress.required_daily_average" format="money" :empty-label="MESSAGES.common.notCalculated" />
         </ReportKpi>
-        <ReportKpi label="平日平均">
-            <ReportValue :value="report.averages.weekday_visits" format="decimal" :empty-label="MESSAGES.common.notCalculated" /><small v-if="report.averages.weekday_visits !== null">来店</small>
+        <ReportKpi :label="M.weekdayAverage">
+            <ReportValue :value="report.averages.weekday_visits" format="decimal" :empty-label="MESSAGES.common.notCalculated" /><small v-if="report.averages.weekday_visits !== null">{{ labels.monthlyVisitUnit }}</small>
             <template #caption><ReportValue :value="report.averages.weekday_sales" format="money" :empty-label="MESSAGES.common.notCalculated" /></template>
         </ReportKpi>
-        <ReportKpi label="土日平均">
-            <ReportValue :value="report.averages.weekend_visits" format="decimal" :empty-label="MESSAGES.common.notCalculated" /><small v-if="report.averages.weekend_visits !== null">来店</small>
+        <ReportKpi :label="M.weekendAverage">
+            <ReportValue :value="report.averages.weekend_visits" format="decimal" :empty-label="MESSAGES.common.notCalculated" /><small v-if="report.averages.weekend_visits !== null">{{ labels.monthlyVisitUnit }}</small>
             <template #caption><ReportValue :value="report.averages.weekend_sales" format="money" :empty-label="MESSAGES.common.notCalculated" /></template>
         </ReportKpi>
     </div>
 
-    <SectionCard title="日別実績" :subtitle="labels.monthlyDailySubtitle">
+    <SectionCard :title="M.dailyTitle" :subtitle="labels.monthlyDailySubtitle">
         <ReportTable :loading="loading" max-height="none" page-sticky-header min-width="1800px" sticky-width="56px" data-testid="monthly-daily-table">
             <thead>
                 <tr class="group-row">
-                    <th rowspan="2" class="is-sticky">日</th>
-                    <th rowspan="2">曜</th>
+                    <th rowspan="2" class="is-sticky">{{ M.dayUnit }}</th>
+                    <th rowspan="2">{{ M.weekdayShort }}</th>
                     <th :colspan="paymentColumns.length + 1" class="group-start">{{ labels.monthlyTreatmentPayments }}</th>
                     <th :colspan="retailColumns.length + 1" class="group-start">{{ labels.monthlyRetailPayments }}</th>
                     <th v-if="hasUnallocated" rowspan="2" class="num group-start">{{ labels.monthlyUnallocated }}</th>
                     <th colspan="4" class="group-start">{{ labels.monthlySales }}</th>
-                    <th colspan="4" class="group-start">来店</th>
-                    <th colspan="3" class="group-start">初診</th>
-                    <th :colspan="categories.length + 1" class="group-start">施術分類</th>
+                    <th colspan="4" class="group-start">{{ labels.monthlyVisitUnit }}</th>
+                    <th colspan="3" class="group-start">{{ labels.annualFirst }}</th>
+                    <th :colspan="categories.length + 1" class="group-start">{{ M.analysisCategory }}</th>
                 </tr>
                 <tr>
                     <th v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">{{ methodHeading(method) }}</th>
@@ -247,16 +249,16 @@ function changeBasis(value: SalesBasis): void {
                     <th class="num" :class="{ 'group-start': retailColumns.length === 0 }">{{ labels.monthlyNetSubtotal }}</th>
                     <th class="num group-start">{{ labels.monthlyNetSales }}</th><th class="num">{{ labels.monthlySalesTax }}</th><th class="num">{{ labels.monthlyGrossSales }}</th>
                     <th class="num">{{ labels.monthlySelectedRevenue }}<br><small>{{ basisLabel }}</small></th>
-                    <th class="num group-start">来店数</th><th class="num">ロング</th><th class="num">予約</th><th class="num">予約率</th>
-                    <th class="num group-start">初診数</th><th class="num">初診予約</th><th class="num">初診予約率</th>
+                    <th class="num group-start">{{ MESSAGES.monthlyHub.visits }}</th><th class="num">{{ labels.annualLong }}</th><th class="num">{{ M.reservation }}</th><th class="num">{{ labels.annualReservationRate }}</th>
+                    <th class="num group-start">{{ M.firstVisitCount }}</th><th class="num">{{ labels.annualFirstReservation }}</th><th class="num">{{ labels.annualFirstReservationRate }}</th>
                     <th v-for="(category, index) in categories" :key="category" class="num" :class="{ 'group-start': index === 0 }">{{ category }}</th>
-                    <th class="num">分類不明</th>
+                    <th class="num">{{ M.unknownCategory }}</th>
                 </tr>
             </thead>
             <tbody>
                 <tr v-for="row in report.daily_rows" :key="row.business_date" :class="{ 'row-muted': row.is_future, 'row-alert': row.is_closed }">
-                    <th class="is-sticky">{{ row.day }}日</th>
-                    <td>{{ row.weekday }}<span v-if="row.is_closed" class="cell-tag">休</span></td>
+                    <th class="is-sticky">{{ fillMessage(M.day, { day: String(row.day) }) }}</th>
+                    <td>{{ row.weekday }}<span v-if="row.is_closed" class="cell-tag">{{ M.closedTag }}</span></td>
                     <td v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">
                         <ReportValue :value="categoryAmount(row, method.payment_method_id, 'treatment_amount')" format="money" :hidden="isPending(row)" :empty-label="labels.futureDay" />
                     </td>
@@ -285,7 +287,7 @@ function changeBasis(value: SalesBasis): void {
             </tbody>
             <tfoot>
                 <tr>
-                    <th class="is-sticky">合計</th>
+                    <th class="is-sticky">{{ MESSAGES.monthlyHub.total }}</th>
                     <td><EmptyValue /></td>
                     <td v-for="(method, index) in paymentColumns" :key="method.payment_method_id" class="num" :class="{ 'group-start': index === 0 }">
                         <ReportValue :value="categoryTotal(method.payment_method_id, 'treatment_amount')" format="money" />

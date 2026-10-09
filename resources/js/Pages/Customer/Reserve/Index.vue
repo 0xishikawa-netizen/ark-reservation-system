@@ -4,6 +4,9 @@ import { computed, ref, watch } from 'vue';
 import { WeeklyAvailabilityTimetable } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateOnly, formatDateTime } from '@/utils/dateFormat';
+import { formatYenSuffix } from '@/utils/money';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -26,17 +29,20 @@ interface TicketAvailability { available_total: number; wallets: TicketWalletOpt
 interface MembershipAvailability { available: number; status: string | null }
 type PaymentMethod = 'onsite' | 'ticket' | 'card' | 'membership';
 
+/** 1回の予約で使う回数券・利用権の回数（残りがこれ未満なら選べない）。 */
+const USES_PER_RESERVATION = 1;
+
 const props = defineProps<{
     services: ServiceOption[];
     ticket: TicketAvailability;
     membership: MembershipAvailability;
 }>();
-const stepNames = ['メニュー', 'スタッフ', '日時', 'お支払い', '確認'] as const;
+const stepNames = MESSAGES.customerUi.reserve.steps;
 const step = ref(1);
 const submitErrorStep = ref<number | null>(null);
 const bookableMembershipStatuses = ['active', 'grace', 'canceling'];
 const canUseMembership = computed(() =>
-    props.membership.available >= 1
+    props.membership.available >= USES_PER_RESERVATION
         && props.membership.status !== null
         && bookableMembershipStatuses.includes(props.membership.status),
 );
@@ -54,17 +60,17 @@ const selectedService = computed(() =>
     props.services.find((service) => service.id === serviceId.value) ?? null,
 );
 const staffItems = computed<Array<{ title: string; value: number | null }>>(() => [
-    { title: '指名なし', value: null },
+    { title: MESSAGES.customerUi.reserve.staffUnspecified, value: null },
     ...(selectedService.value?.staff.map((staff) => ({
         title: staff.display_name,
         value: staff.id,
     })) ?? []),
 ]);
 const selectedStaffName = computed(() => staffId.value === null
-    ? '指名なし（空いているスタッフを自動割当）'
-    : selectedService.value?.staff.find((staff) => staff.id === staffId.value)?.display_name ?? '未選択');
+    ? MESSAGES.customerUi.reserve.staffUnspecifiedSummary
+    : selectedService.value?.staff.find((staff) => staff.id === staffId.value)?.display_name ?? MESSAGES.customerUi.booking.unselected);
 const paymentMethodAvailable = computed(() => {
-    if (form.payment_method === 'ticket') return props.ticket.available_total >= 1;
+    if (form.payment_method === 'ticket') return props.ticket.available_total >= USES_PER_RESERVATION;
     if (form.payment_method === 'membership') return canUseMembership.value;
     return ['onsite', 'card'].includes(form.payment_method);
 });
@@ -98,18 +104,11 @@ watch(staffId, () => {
     selectedStartsAt.value = null;
 });
 
-function formatPrice(price: number): string {
-    return `${new Intl.NumberFormat('ja-JP').format(price)}円`;
+function durationPriceLabel(durationMin: number, price: number): string {
+    return fillMessage(MESSAGES.customerUi.booking.durationPrice, { min: String(durationMin), price: formatYenSuffix(price) });
 }
-function formatDateTime(value: string): string {
-    return new Intl.DateTimeFormat('ja-JP', {
-        month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit',
-    }).format(new Date(value.replace(' ', 'T')));
-}
-function formatDate(value: string): string {
-    return new Intl.DateTimeFormat('ja-JP', {
-        year: 'numeric', month: 'long', day: 'numeric',
-    }).format(new Date(`${value}T00:00:00`));
+function walletLabel(wallet: TicketWalletOption): string {
+    return fillMessage(MESSAGES.customerUi.reserve.walletSummary, { name: wallet.product_name, count: String(wallet.available), date: formatDateOnly(wallet.expires_at, 'dateLong') });
 }
 function nextStep(): void {
     if (canAdvance.value && step.value < stepNames.length) step.value += 1;
@@ -146,14 +145,14 @@ function submit(): void {
 </script>
 
 <template>
-    <Head title="予約する" />
+    <Head :title="MESSAGES.customerUi.booking.title" />
     <v-card class="reserve-card mx-auto" max-width="720">
         <div class="reserve-card__header">
-            <v-card-title class="text-h5 pa-0">予約する</v-card-title>
-            <v-card-subtitle class="pa-0 mt-1">画面に沿って予約内容を選択してください</v-card-subtitle>
+            <v-card-title class="text-h5 pa-0">{{ MESSAGES.customerUi.booking.title }}</v-card-title>
+            <v-card-subtitle class="pa-0 mt-1">{{ MESSAGES.customerUi.booking.subtitle }}</v-card-subtitle>
         </div>
 
-        <nav v-if="services.length > 0" class="reserve-progress" aria-label="予約手順">
+        <nav v-if="services.length > 0" class="reserve-progress" :aria-label="MESSAGES.customerUi.booking.stepsLabel">
             <ol class="reserve-stepper">
                 <li
                     v-for="(stepName, index) in stepNames"
@@ -171,7 +170,7 @@ function submit(): void {
             </ol>
             <div class="reserve-progress__mobile" aria-live="polite">
                 <div class="reserve-progress__mobile-label">
-                    <span>ステップ {{ step }} / {{ stepNames.length }}</span>
+                    <span>{{ fillMessage(MESSAGES.customerUi.booking.stepCounter, { current: String(step), total: String(stepNames.length) }) }}</span>
                     <strong>{{ currentStepName }}</strong>
                 </div>
                 <v-progress-linear :model-value="progress" color="primary" height="4" rounded />
@@ -190,7 +189,7 @@ function submit(): void {
                     class="mb-4"
                 >{{ MESSAGES.common.checkInputPolite }}</v-alert>
                 <section v-if="step === 1" class="reserve-section" aria-labelledby="member-service-step">
-                    <h2 id="member-service-step" class="reserve-section__title text-subtitle-1">メニューを選択</h2>
+                    <h2 id="member-service-step" class="reserve-section__title text-subtitle-1">{{ MESSAGES.customerUi.booking.selectService }}</h2>
                     <div class="service-grid">
                         <button
                             v-for="service in services" :key="service.id" type="button"
@@ -200,32 +199,32 @@ function submit(): void {
                             <span class="service-card__image" aria-hidden="true"><v-icon icon="mdi-image-outline" size="32" /></span>
                             <span class="service-card__content">
                                 <strong>{{ service.name }}</strong>
-                                <span>{{ service.duration_min }}分 / {{ formatPrice(service.price) }}</span>
+                                <span>{{ durationPriceLabel(service.duration_min, service.price) }}</span>
                             </span>
                             <v-icon v-if="serviceId === service.id" icon="mdi-check-circle" color="primary" size="24" />
                         </button>
                     </div>
                     <div v-if="form.errors.service_id" class="text-error text-body-2 mt-2">{{ form.errors.service_id }}</div>
                     <div class="reserve-actions">
-                        <v-btn color="primary" size="large" class="reserve-primary-action" :disabled="!canAdvance" @click="nextStep">次へ</v-btn>
+                        <v-btn color="primary" size="large" class="reserve-primary-action" :disabled="!canAdvance" @click="nextStep">{{ MESSAGES.customerUi.booking.next }}</v-btn>
                     </div>
                 </section>
 
                 <section v-else-if="step === 2" class="reserve-section" aria-labelledby="member-staff-step">
-                    <h2 id="member-staff-step" class="reserve-section__title text-subtitle-1">スタッフを選択</h2>
+                    <h2 id="member-staff-step" class="reserve-section__title text-subtitle-1">{{ MESSAGES.customerUi.booking.selectStaff }}</h2>
                     <v-select
-                        v-model="staffId" :items="staffItems" label="担当スタッフ" persistent-hint
-                        hint="指名なしの場合は、予約確定時に空いているスタッフを割り当てます。"
+                        v-model="staffId" :items="staffItems" :label="MESSAGES.customerUi.booking.staffLabel" persistent-hint
+                        :hint="MESSAGES.customerUi.reserve.staffHint"
                         :error-messages="form.errors.staff_id"
                     />
                     <div class="reserve-actions">
-                        <v-btn class="reserve-back-action" variant="text" @click="previousStep">戻る</v-btn>
-                        <v-btn color="primary" size="large" class="reserve-primary-action" :disabled="!canAdvance" @click="nextStep">次へ</v-btn>
+                        <v-btn class="reserve-back-action" variant="text" @click="previousStep">{{ MESSAGES.customerUi.booking.back }}</v-btn>
+                        <v-btn color="primary" size="large" class="reserve-primary-action" :disabled="!canAdvance" @click="nextStep">{{ MESSAGES.customerUi.booking.next }}</v-btn>
                     </div>
                 </section>
 
                 <section v-else-if="step === 3" class="reserve-section" aria-labelledby="member-datetime-step">
-                    <h2 id="member-datetime-step" class="reserve-section__title text-subtitle-1">日時を選択</h2>
+                    <h2 id="member-datetime-step" class="reserve-section__title text-subtitle-1">{{ MESSAGES.customerUi.booking.selectDateTime }}</h2>
                     <WeeklyAvailabilityTimetable
                         v-if="selectedService"
                         v-model="selectedStartsAt" :service-id="selectedService.id" :staff-id="staffId"
@@ -233,28 +232,28 @@ function submit(): void {
                     />
                     <div v-if="form.errors.starts_at" class="text-error text-body-2 mt-2">{{ form.errors.starts_at }}</div>
                     <div class="reserve-actions">
-                        <v-btn class="reserve-back-action" variant="text" @click="previousStep">戻る</v-btn>
-                        <v-btn color="primary" size="large" class="reserve-primary-action" :disabled="!canAdvance" @click="nextStep">次へ</v-btn>
+                        <v-btn class="reserve-back-action" variant="text" @click="previousStep">{{ MESSAGES.customerUi.booking.back }}</v-btn>
+                        <v-btn color="primary" size="large" class="reserve-primary-action" :disabled="!canAdvance" @click="nextStep">{{ MESSAGES.customerUi.booking.next }}</v-btn>
                     </div>
                 </section>
 
                 <section v-else-if="step === 4" class="reserve-section" aria-labelledby="member-payment-step">
-                    <h2 id="member-payment-step" class="reserve-section__title text-subtitle-1">お支払い方法を選択</h2>
+                    <h2 id="member-payment-step" class="reserve-section__title text-subtitle-1">{{ MESSAGES.customerUi.booking.selectPayment }}</h2>
                     <v-radio-group v-model="form.payment_method" :error-messages="form.errors.payment_method">
-                        <v-radio label="店頭でお支払い" value="onsite" />
-                        <v-radio label="クレジットカードで事前に支払う" value="card" />
-                        <v-radio :label="`回数券を使う（残り ${ticket.available_total} 回）`" value="ticket" :disabled="ticket.available_total < 1" />
-                        <v-radio :label="`利用権を使う（当期残り ${membership.available} 回）`" value="membership" :disabled="!canUseMembership" />
+                        <v-radio :label="MESSAGES.customerUi.reserve.paymentOnsite" value="onsite" />
+                        <v-radio :label="MESSAGES.customerUi.reserve.paymentCard" value="card" />
+                        <v-radio :label="fillMessage(MESSAGES.customerUi.reserve.paymentTicket, { count: String(ticket.available_total) })" value="ticket" :disabled="ticket.available_total < USES_PER_RESERVATION" />
+                        <v-radio :label="fillMessage(MESSAGES.customerUi.reserve.paymentMembership, { count: String(membership.available) })" value="membership" :disabled="!canUseMembership" />
                     </v-radio-group>
                     <v-alert v-if="form.payment_method === 'card'" type="info" variant="tonal" density="comfortable" class="mb-4">
                         {{ MESSAGES.payment.cardAfterReserve }}
                     </v-alert>
-                    <v-alert v-if="ticket.available_total < 1" type="info" variant="tonal" density="compact" class="mb-4">
+                    <v-alert v-if="ticket.available_total < USES_PER_RESERVATION" type="info" variant="tonal" density="compact" class="mb-4">
                         {{ MESSAGES.ticket.noneSelectable }}
                     </v-alert>
                     <v-alert v-else-if="form.payment_method === 'ticket'" type="info" variant="tonal" density="compact" class="mb-4">
                         <div v-for="wallet in ticket.wallets" :key="wallet.id">
-                            {{ wallet.product_name }}：{{ wallet.available }}回（有効期限 {{ formatDate(wallet.expires_at) }}）
+                            {{ walletLabel(wallet) }}
                         </div>
                     </v-alert>
                     <v-alert v-if="!canUseMembership" type="info" variant="tonal" density="compact" class="mb-4">
@@ -264,25 +263,25 @@ function submit(): void {
                         {{ MESSAGES.membership.usesOnePerPeriod }}
                     </v-alert>
                     <div class="reserve-actions">
-                        <v-btn class="reserve-back-action" variant="text" @click="previousStep">戻る</v-btn>
-                        <v-btn color="primary" size="large" class="reserve-primary-action" :disabled="!canAdvance" @click="nextStep">次へ</v-btn>
+                        <v-btn class="reserve-back-action" variant="text" @click="previousStep">{{ MESSAGES.customerUi.booking.back }}</v-btn>
+                        <v-btn color="primary" size="large" class="reserve-primary-action" :disabled="!canAdvance" @click="nextStep">{{ MESSAGES.customerUi.booking.next }}</v-btn>
                     </div>
                 </section>
 
                 <section v-else class="reserve-section" aria-labelledby="member-confirm-step">
-                    <h2 id="member-confirm-step" class="reserve-section__title text-subtitle-1">予約内容を確認</h2>
+                    <h2 id="member-confirm-step" class="reserve-section__title text-subtitle-1">{{ MESSAGES.customerUi.booking.confirmHeading }}</h2>
                     <v-card class="reservation-summary" variant="flat">
                         <v-list lines="two" bg-color="transparent">
-                            <v-list-item title="メニュー" :subtitle="selectedService?.name" />
-                            <v-list-item title="所要時間・料金" :subtitle="`${selectedService?.duration_min}分 / ${formatPrice(selectedService?.price ?? 0)}`" />
-                            <v-list-item title="担当" :subtitle="selectedStaffName" />
-                            <v-list-item title="日時" :subtitle="selectedStartsAt ? formatDateTime(selectedStartsAt) : ''" />
+                            <v-list-item :title="MESSAGES.customerUi.booking.summaryService" :subtitle="selectedService?.name" />
+                            <v-list-item :title="MESSAGES.customerUi.booking.summaryDurationPrice" :subtitle="durationPriceLabel(selectedService?.duration_min ?? 0, selectedService?.price ?? 0)" />
+                            <v-list-item :title="MESSAGES.customerUi.booking.summaryStaff" :subtitle="selectedStaffName" />
+                            <v-list-item :title="MESSAGES.customerUi.booking.summaryDateTime" :subtitle="selectedStartsAt ? formatDateTime(selectedStartsAt, 'monthLongDayWeekday') : ''" />
                         </v-list>
                     </v-card>
                     <v-alert v-if="form.errors.reservation" type="error" variant="tonal" class="mb-4">{{ form.errors.reservation }}</v-alert>
                     <div class="reserve-actions">
-                        <v-btn class="reserve-back-action" variant="text" :disabled="form.processing" @click="previousStep">戻る</v-btn>
-                        <v-btn color="primary" size="large" class="reserve-primary-action" :loading="form.processing" :disabled="!canSubmit" @click="submit">予約する</v-btn>
+                        <v-btn class="reserve-back-action" variant="text" :disabled="form.processing" @click="previousStep">{{ MESSAGES.customerUi.booking.back }}</v-btn>
+                        <v-btn color="primary" size="large" class="reserve-primary-action" :loading="form.processing" :disabled="!canSubmit" @click="submit">{{ MESSAGES.customerUi.booking.title }}</v-btn>
                     </div>
                 </section>
             </template>

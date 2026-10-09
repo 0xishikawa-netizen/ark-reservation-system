@@ -4,6 +4,7 @@ import { computed } from 'vue';
 import { PageHeader, SectionCard } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -28,18 +29,18 @@ const unlinkGoogle = (): void => {
 </script>
 
 <template>
-    <Head title="セキュリティ設定" />
+    <Head :title="MESSAGES.customerUi.security.title" />
 
     <PageHeader
-        title="セキュリティ設定"
-        subtitle="ログイン方法と連携アカウントを管理できます。"
+        :title="MESSAGES.customerUi.security.title"
+        :subtitle="MESSAGES.customerUi.security.subtitle"
     />
 
-    <SectionCard title="ログイン方法">
+    <SectionCard :title="MESSAGES.customerUi.security.loginMethods">
         <v-list lines="two" class="pa-0">
             <v-list-item
-                title="メールアドレスとパスワード"
-                :subtitle="hasPassword ? '設定済み' : '未設定'"
+                :title="MESSAGES.customerUi.security.emailPassword"
+                :subtitle="hasPassword ? MESSAGES.customerUi.security.configured : MESSAGES.common.notSet"
             >
                 <template #prepend>
                     <v-icon icon="mdi-form-textbox-password" />
@@ -50,14 +51,14 @@ const unlinkGoogle = (): void => {
                         size="small"
                         variant="flat"
                     >
-                        {{ hasPassword ? '有効' : '未設定' }}
+                        {{ hasPassword ? MESSAGES.customerUi.security.enabled : MESSAGES.common.notSet }}
                     </v-chip>
                 </template>
             </v-list-item>
         </v-list>
     </SectionCard>
 
-    <SectionCard title="連携アカウント" class="mt-4">
+    <SectionCard :title="MESSAGES.customerUi.security.linkedAccounts" class="mt-4">
         <v-alert
             v-if="linkError"
             type="error"
@@ -74,9 +75,9 @@ const unlinkGoogle = (): void => {
                 <div class="font-weight-medium">Google</div>
                 <div class="text-body-2 text-medium-emphasis">
                     <template v-if="google.linked">
-                        連携済み{{ google.email ? `（${google.email}）` : '' }}
+                        {{ google.email ? fillMessage(MESSAGES.customerUi.security.linkedWithEmail, { email: google.email }) : MESSAGES.customerUi.security.linked }}
                     </template>
-                    <template v-else>未連携</template>
+                    <template v-else>{{ MESSAGES.customerUi.security.notLinked }}</template>
                 </div>
             </div>
             <v-chip
@@ -84,7 +85,7 @@ const unlinkGoogle = (): void => {
                 size="small"
                 variant="flat"
             >
-                {{ google.linked ? '連携済み' : '未連携' }}
+                {{ google.linked ? MESSAGES.customerUi.security.linked : MESSAGES.customerUi.security.notLinked }}
             </v-chip>
         </div>
 
@@ -96,7 +97,7 @@ const unlinkGoogle = (): void => {
                 prepend-icon="mdi-google"
                 @click="linkGoogle"
             >
-                Google アカウントを連携
+                {{ MESSAGES.customerUi.security.linkGoogle }}
             </v-btn>
             <v-btn
                 v-else
@@ -105,7 +106,7 @@ const unlinkGoogle = (): void => {
                 :disabled="!hasPassword"
                 @click="unlinkGoogle"
             >
-                連携を解除
+                {{ MESSAGES.customerUi.security.unlink }}
             </v-btn>
             <p
                 v-if="google.linked && !hasPassword"

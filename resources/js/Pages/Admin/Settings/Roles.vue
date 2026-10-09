@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
 import { PageHeader, SectionCard } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 
 defineOptions({ layout: AdminLayout });
@@ -81,16 +82,15 @@ function submit(): void {
 </script>
 
 <template>
-    <Head title="ロール権限管理" />
+    <Head :title="MESSAGES.mastersUi.roles.title" />
 
     <PageHeader
-        title="ロール権限管理"
-        subtitle="「スタッフ」「マネージャー」ロールが見られる画面・できる操作を設定します。"
+        :title="MESSAGES.mastersUi.roles.title"
+        :subtitle="MESSAGES.mastersUi.roles.subtitle"
     />
 
     <v-alert type="info" variant="tonal" class="mb-5">
-        管理者（admin）は常にすべての権限を持ちます。ここでは変更できません。
-        また、どのロールでも管理画面への入場自体は常に許可されます。
+        {{ MESSAGES.mastersUi.roles.notice }}
     </v-alert>
 
     <SectionCard
@@ -102,10 +102,10 @@ function submit(): void {
         <v-table density="comfortable">
             <thead>
                 <tr>
-                    <th>画面・操作</th>
-                    <th class="text-center" style="width: 96px">スタッフ</th>
-                    <th class="text-center" style="width: 96px">マネージャー</th>
-                    <th class="text-center" style="width: 96px">管理者</th>
+                    <th>{{ MESSAGES.mastersUi.roles.permission }}</th>
+                    <th class="text-center" style="width: 96px">{{ MESSAGES.mastersUi.roles.staff }}</th>
+                    <th class="text-center" style="width: 96px">{{ MESSAGES.mastersUi.roles.manager }}</th>
+                    <th class="text-center" style="width: 96px">{{ MESSAGES.mastersUi.roles.admin }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -145,7 +145,7 @@ function submit(): void {
 
     <div class="d-flex ga-3 mt-2 mb-6">
         <v-btn color="primary" size="large" :loading="processing" @click="submit">
-            保存
+            {{ MESSAGES.mastersUi.roles.save }}
         </v-btn>
     </div>
 </template>

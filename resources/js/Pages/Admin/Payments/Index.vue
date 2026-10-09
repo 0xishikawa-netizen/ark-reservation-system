@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -43,15 +44,8 @@ const props = defineProps<{
 const status = ref(props.filters.status);
 const needsAttention = ref(props.filters.needs_attention);
 
-const statusLabels: Record<string, string> = {
-    pending: '手続き中',
-    authorized: 'カード仮押さえ（未請求）',
-    succeeded: '支払い済み',
-    voided: '仮押さえ取消',
-    failed: '失敗',
-    partially_refunded: '一部返金済み',
-    refunded: '全額返金済み',
-};
+const M = MESSAGES.reportsUi.paymentIndex;
+const statusLabels = M.statusLabels;
 
 const applyFilters = (): void => {
     router.get(
@@ -91,15 +85,15 @@ const clearCustomerFilter = (): void => {
 </script>
 
 <template>
-    <Head title="決済管理" />
+    <Head :title="M.title" />
 
     <v-container fluid class="ark-page py-4">
-        <PageHeader title="決済管理" subtitle="決済状況と要対応項目を確認します。">
+        <PageHeader :title="M.title" :subtitle="M.subtitle">
             <template #actions>
                 <StatusChip
                 v-if="attention_count > 0"
                     status="failed"
-                    :label="`要対応 ${attention_count} 件`"
+                    :label="fillMessage(M.attentionCount, { count: String(attention_count) })"
                 />
             </template>
         </PageHeader>
@@ -112,16 +106,16 @@ const clearCustomerFilter = (): void => {
             class="mb-4"
             @click:close="clearCustomerFilter"
         >
-            <strong>{{ filtered_customer.name }}</strong> 様の決済のみ表示しています。
+            <strong>{{ filtered_customer.name }}</strong> {{ M.customerOnly }}
         </v-alert>
 
         <div class="ark-page__sections">
-            <SectionCard title="絞り込み" variant="outlined">
+            <SectionCard :title="M.filter" variant="outlined">
                 <div class="d-flex flex-wrap ga-4 align-center">
                     <v-select
                         v-model="status"
-                        :items="[{ title: 'すべて', value: '' }, ...statuses.map((s) => ({ title: statusLabels[s] ?? s, value: s }))]"
-                        label="ステータス"
+                        :items="[{ title: M.all, value: '' }, ...statuses.map((s) => ({ title: statusLabels[s] ?? s, value: s }))]"
+                        :label="M.statusFilter"
                         density="compact"
                         hide-details
                         style="max-width: 240px"
@@ -136,9 +130,9 @@ const clearCustomerFilter = (): void => {
                         mandatory
                         @update:model-value="(v: string) => { needsAttention = v === 'attention'; applyFilters(); }"
                     >
-                        <v-btn value="all" size="small">すべて表示</v-btn>
+                        <v-btn value="all" size="small">{{ M.showAll }}</v-btn>
                         <v-btn value="attention" size="small" color="error">
-                            要対応のみ
+                            {{ M.attentionOnly }}
                             <v-chip
                                 v-if="attention_count > 0"
                                 size="x-small"
@@ -153,17 +147,17 @@ const clearCustomerFilter = (): void => {
                 </div>
             </SectionCard>
 
-            <SectionCard title="決済一覧" variant="outlined" class="ark-table-section">
+            <SectionCard :title="M.listTitle" variant="outlined" class="ark-table-section">
                 <v-table density="comfortable">
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>顧客</th>
-                        <th>予約</th>
-                        <th class="text-right">金額</th>
-                        <th class="text-right">返金済</th>
-                        <th>状態</th>
-                        <th>作成</th>
+                        <th>{{ M.customer }}</th>
+                        <th>{{ M.reservation }}</th>
+                        <th class="text-right">{{ M.amount }}</th>
+                        <th class="text-right">{{ M.refunded }}</th>
+                        <th>{{ M.status }}</th>
+                        <th>{{ M.createdAt }}</th>
                         <th />
                     </tr>
                 </thead>
@@ -192,7 +186,7 @@ const clearCustomerFilter = (): void => {
                             <StatusChip
                                 v-if="payment.needs_attention"
                                 status="failed"
-                                label="要対応"
+                                :label="M.needsAttention"
                                 class="ml-1"
                             />
                         </td>
@@ -206,7 +200,7 @@ const clearCustomerFilter = (): void => {
                                 :href="`/admin/payments/${payment.id}`"
                                 @click.prevent="router.get(`/admin/payments/${payment.id}`)"
                             >
-                                詳細
+                                {{ MESSAGES.customer.openDetail }}
                             </v-btn>
                         </td>
                     </tr>
@@ -214,8 +208,8 @@ const clearCustomerFilter = (): void => {
                         <td colspan="8">
                             <EmptyState
                                 icon="mdi-credit-card-search-outline"
-                                title="該当する決済はありません"
-                                description="条件を変更すると、ほかの決済を確認できます。"
+                                :title="M.emptyTitle"
+                                :description="M.emptyDescription"
                             />
                         </td>
                     </tr>

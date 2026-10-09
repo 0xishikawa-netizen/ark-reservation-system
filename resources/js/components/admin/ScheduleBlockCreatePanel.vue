@@ -7,6 +7,15 @@ import { applyBlockPrefill, blockEndTimeFrom, type BlockDraft } from '@/composab
 import { isPastDateTime } from '@/utils/pastDateTime';
 import { BLOCK_TYPES } from '@/constants/scheduleBlockTypes';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatMonthDayWeekday, todayIso } from '@/utils/dateFormat';
+
+/** 予定時刻選択の最小刻み。 */
+const MIN_SLOT_MINUTES = 5;
+/** 1時間あたりの分数。 */
+const MINUTES_PER_HOUR = 60;
+/** 2桁の時刻表示幅。 */
+const TIME_PART_WIDTH = 2;
 
 interface StaffOption {
     user_id: number;
@@ -63,23 +72,6 @@ applyBlockPrefill(props.draft, {
     time: props.prefill.time,
 });
 
-function fmtDay(iso: string): string {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-        return '';
-    }
-
-    const [y, m, d] = iso.split('-').map(Number);
-    const weekday = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(new Date(y, m - 1, d));
-
-    return `${m}/${d}（${weekday}）`;
-}
-
-function todayIso(): string {
-    const now = new Date();
-
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
-
 // 予定は「スタッフの予定」だけを扱う（ブース単位の予定は業務上使わない・§ブース廃止）。
 const form = useForm({
     staff_id: props.draft.staff_id,
@@ -120,7 +112,7 @@ const requiresTitle = computed(() => form.type === 'OTHER');
 /** 台帳に出ている営業時間の範囲（TimeField の選択肢をこの中だけに絞る）。 */
 const openTime = computed(() => props.businessHours.open.slice(0, 5));
 const closeTime = computed(() => props.businessHours.close.slice(0, 5));
-const stepMinutes = computed(() => Math.max(props.businessHours.slot_minutes, 5));
+const stepMinutes = computed(() => Math.max(props.businessHours.slot_minutes, MIN_SLOT_MINUTES));
 /** 終了時刻は開始より後だけを選べるようにする。 */
 const endMinTime = computed(() => {
     if (form.start_at === '') {
@@ -128,9 +120,9 @@ const endMinTime = computed(() => {
     }
 
     const [h, m] = form.start_at.split(':').map(Number);
-    const next = h * 60 + m + stepMinutes.value;
+    const next = h * MINUTES_PER_HOUR + m + stepMinutes.value;
 
-    return `${String(Math.floor(next / 60)).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
+    return `${String(Math.floor(next / MINUTES_PER_HOUR)).padStart(TIME_PART_WIDTH, '0')}:${String(next % MINUTES_PER_HOUR).padStart(TIME_PART_WIDTH, '0')}`;
 });
 
 const selectedStaffName = computed<string | null>(
@@ -180,7 +172,7 @@ function submit(): void {
 
 <template>
     <PanelShell
-        title="予定を追加"
+        :title="MESSAGES.boardUi.scheduleBlock.createTitle"
         icon="mdi-clock-plus-outline"
         :show-back="canGoBack"
         @close="emit('close')"
@@ -189,15 +181,15 @@ function submit(): void {
         <!-- 予約パネルと同じ「日付／時間／担当」のカード。 -->
         <div class="sbc__when">
             <div class="sbc__when-cell">
-                <span class="sbc__when-label">日付</span>
-                <span class="sbc__when-value">{{ fmtDay(form.work_date) }}</span>
+                <span class="sbc__when-label">{{ MESSAGES.boardUi.scheduleBlock.date }}</span>
+                <span class="sbc__when-value">{{ formatMonthDayWeekday(form.work_date) }}</span>
             </div>
             <div class="sbc__when-cell">
-                <span class="sbc__when-label">時間</span>
+                <span class="sbc__when-label">{{ MESSAGES.boardUi.scheduleBlock.time }}</span>
                 <span class="sbc__when-value sbc__when-value--time">{{ form.start_at }}〜{{ form.end_at }}</span>
             </div>
             <div v-if="selectedStaffName" class="sbc__when-cell sbc__when-cell--staff">
-                <span class="sbc__when-label">担当</span>
+                <span class="sbc__when-label">{{ MESSAGES.boardUi.scheduleBlock.staffShort }}</span>
                 <span class="sbc__when-value">{{ selectedStaffName }}</span>
             </div>
         </div>
@@ -207,7 +199,7 @@ function submit(): void {
             :items="staff"
             item-title="display_name"
             item-value="user_id"
-            label="スタッフ"
+            :label="MESSAGES.boardUi.scheduleBlock.staff"
             density="compact"
             variant="outlined"
             hide-details="auto"
@@ -215,8 +207,8 @@ function submit(): void {
         />
 
         <div class="sbc__typefield">
-            <span class="sbc__typelabel">種類</span>
-            <div class="sbc__typegrid" role="radiogroup" aria-label="予定の種類">
+            <span class="sbc__typelabel">{{ MESSAGES.boardUi.scheduleBlock.type }}</span>
+            <div class="sbc__typegrid" role="radiogroup" :aria-label="MESSAGES.boardUi.scheduleBlock.typeAria">
                 <button
                     v-for="t in ALL_BLOCK_TYPES"
                     :key="t.value"
@@ -236,20 +228,20 @@ function submit(): void {
         <v-text-field
             v-if="requiresTitle"
             v-model="form.title"
-            label="タイトル"
-            placeholder="例：撮影、銀行、機器メンテナンス"
+            :label="MESSAGES.boardUi.scheduleBlock.title"
+            :placeholder="MESSAGES.boardUi.scheduleBlock.titleExample"
             density="compact"
             variant="outlined"
             hide-details="auto"
             :error-messages="form.errors.title"
         />
 
-        <DateField block v-model="form.work_date" label="日付" density="compact" :clearable="false" />
+        <DateField block v-model="form.work_date" :label="MESSAGES.boardUi.scheduleBlock.date" density="compact" :clearable="false" />
 
         <div class="sbc__time-row">
             <TimeField block
                 v-model="form.start_at"
-                label="開始"
+                :label="MESSAGES.boardUi.scheduleBlock.start"
                 density="compact"
                 :min-time="openTime"
                 :max-time="closeTime"
@@ -258,7 +250,7 @@ function submit(): void {
             />
             <TimeField block
                 v-model="form.end_at"
-                label="終了"
+                :label="MESSAGES.boardUi.scheduleBlock.end"
                 density="compact"
                 :min-time="endMinTime"
                 :max-time="closeTime"
@@ -269,7 +261,7 @@ function submit(): void {
 
         <v-textarea
             v-model="form.note"
-            label="メモ（任意）"
+            :label="MESSAGES.boardUi.scheduleBlock.optionalMemo"
             rows="2"
             auto-grow
             variant="outlined"
@@ -295,18 +287,18 @@ function submit(): void {
                 :loading="form.processing"
                 @click="requestSubmit"
             >
-                追加する
+                {{ MESSAGES.boardUi.scheduleBlock.add }}
             </v-btn>
         </template>
         <!-- 過去の日時に入れる時だけ確認する（入力ミス防止）。 -->
         <v-dialog v-model="pastConfirmOpen" max-width="400">
             <v-card>
                 <v-card-title class="text-subtitle-1 font-weight-bold">{{ MESSAGES.schedule.pastConfirmTitle }}</v-card-title>
-                <v-card-text>{{ MESSAGES.schedule.pastConfirmBody.replace('{when}', pastConfirmLabel) }}</v-card-text>
+                <v-card-text>{{ fillMessage(MESSAGES.schedule.pastConfirmBody, { when: pastConfirmLabel }) }}</v-card-text>
                 <v-card-actions>
                     <v-spacer />
-                    <v-btn variant="text" @click="pastConfirmOpen = false">やめる</v-btn>
-                    <v-btn color="primary" variant="flat" data-testid="past-confirm" @click="pastConfirmOpen = false; submit()">この日時で登録する</v-btn>
+                    <v-btn variant="text" @click="pastConfirmOpen = false">{{ MESSAGES.boardUi.scheduleBlock.stop }}</v-btn>
+                    <v-btn color="primary" variant="flat" data-testid="past-confirm" @click="pastConfirmOpen = false; submit()">{{ MESSAGES.boardUi.scheduleBlock.registerThisDateTime }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>

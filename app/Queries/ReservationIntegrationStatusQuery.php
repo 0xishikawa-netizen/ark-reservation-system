@@ -56,11 +56,11 @@ final class ReservationIntegrationStatusQuery
         $needsAttention = $failedOutbox + $openConflicts + $stuckProcessing;
 
         $status = match (true) {
-            $isActive && $health === 'unconfigured' => '未設定',
-            ! $isActive && $health === 'unconfigured' => '未設定',
-            ! $isActive => '停止',
-            $needsAttention > 0 || $health === 'needs_attention' => '要確認',
-            default => '正常',
+            $isActive && $health === 'unconfigured' => __('messages.query_labels.unconfigured'),
+            ! $isActive && $health === 'unconfigured' => __('messages.query_labels.unconfigured'),
+            ! $isActive => __('messages.query_labels.integration_stopped'),
+            $needsAttention > 0 || $health === 'needs_attention' => __('messages.query_labels.needs_confirmation'),
+            default => __('messages.query_labels.normal'),
         };
 
         return [
@@ -153,7 +153,7 @@ final class ReservationIntegrationStatusQuery
     private function label(string $key): string
     {
         return match ($key) {
-            'mock' => 'Mock（テスト用）',
+            'mock' => __('messages.query_labels.provider_mock'),
             'peak_manager' => 'Peak Manager',
             'salon_board' => 'SALON BOARD',
             default => $key,

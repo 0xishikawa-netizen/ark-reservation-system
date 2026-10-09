@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { MESSAGES } from '@/constants/messages';
 
 const props = defineProps<{
     modelValue: string;
@@ -103,7 +104,7 @@ const selectCustomColor = (value: unknown): void => {
                                 size="16"
                             />
                         </span>
-                        <span>カスタム</span>
+                        <span>{{ MESSAGES.customerUi.colorField.custom }}</span>
                     </button>
                 </template>
 

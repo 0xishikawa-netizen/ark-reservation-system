@@ -7,6 +7,9 @@ defineOptions({ inheritAttrs: false });
 
 type FieldDensity = 'default' | 'comfortable' | 'compact';
 
+/** 1時間あたりの分数。 */
+const MINUTES_PER_HOUR = 60;
+
 const props = withDefaults(defineProps<{
     modelValue: string;
     label: string;
@@ -49,12 +52,12 @@ const listEl = ref<HTMLElement | null>(null);
 function toMinutes(hhmm: string): number {
     const [h, m] = hhmm.split(':').map(Number);
 
-    return h * 60 + m;
+    return h * MINUTES_PER_HOUR + m;
 }
 
 function toHHMM(totalMinutes: number): string {
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
+    const h = Math.floor(totalMinutes / MINUTES_PER_HOUR);
+    const m = totalMinutes % MINUTES_PER_HOUR;
 
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, useAttrs } from 'vue';
 import ArkCalendar from './ArkCalendar.vue';
+import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 // 親から渡された class/style は v-menu ではなく実際の入力欄(v-text-field)に当てる。
 defineOptions({ inheritAttrs: false });
@@ -56,7 +58,7 @@ const displayValue = computed(() => {
 
     const weekday = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(date);
 
-    return `${y}/${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}（${weekday}）`;
+    return fillMessage(MESSAGES.customerUi.calendar.dateWithWeekday, { year: String(y), month: String(m).padStart(2, '0'), day: String(d).padStart(2, '0'), weekday: weekday });
 });
 
 const onSelect = (value: string): void => {

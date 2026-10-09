@@ -30,34 +30,34 @@ final class MasterDeletionService
      * @var array<string, array{model: class-string<Model>, label: string, flag: string, config: list<string>}>
      */
     public const TYPES = [
-        'services' => ['model' => Service::class, 'label' => 'メニュー', 'flag' => 'is_active',
+        'services' => ['model' => Service::class, 'label' => 'messages.masters.type_service', 'flag' => 'is_active',
             'config' => ['booth_service', 'qualification_service', 'service_staff']],
-        'booths' => ['model' => Booth::class, 'label' => 'ブース', 'flag' => 'is_active',
+        'booths' => ['model' => Booth::class, 'label' => 'messages.masters.type_booth', 'flag' => 'is_active',
             'config' => ['booth_service']],
-        'products' => ['model' => Product::class, 'label' => '商品', 'flag' => 'is_active', 'config' => []],
-        'staff' => ['model' => Staff::class, 'label' => 'スタッフ', 'flag' => 'is_bookable',
+        'products' => ['model' => Product::class, 'label' => 'messages.masters.type_product', 'flag' => 'is_active', 'config' => []],
+        'staff' => ['model' => Staff::class, 'label' => 'messages.masters.type_staff', 'flag' => 'is_bookable',
             'config' => ['qualification_staff', 'service_staff', 'staff_employment_periods', 'staff_shift_templates', 'staff_shift_exceptions']],
-        'ticket-products' => ['model' => TicketProduct::class, 'label' => '回数券', 'flag' => 'is_active', 'config' => []],
-        'membership-plans' => ['model' => MembershipPlan::class, 'label' => '月額プラン', 'flag' => 'is_active', 'config' => []],
+        'ticket-products' => ['model' => TicketProduct::class, 'label' => 'messages.masters.type_ticket', 'flag' => 'is_active', 'config' => []],
+        'membership-plans' => ['model' => MembershipPlan::class, 'label' => 'messages.masters.type_membership_plan', 'flag' => 'is_active', 'config' => []],
     ];
 
     /** 参照元の表名 → 画面に出す名前。 */
     private const USAGE_LABELS = [
-        'reservations' => '予約',
-        'reservation_segments' => '予約の施術構成',
-        'visits' => '来店',
-        'visit_treatments' => '施術実績',
-        'visit_treatment_staff' => '施術実績',
-        'visit_staff_nominations' => '指名',
-        'checkout_lines' => '会計',
-        'staff_revenue_allocations' => '会計',
-        'staff_schedule_blocks' => 'スタッフ予定',
-        'staff_shifts' => '過去の勤務',
-        'staff_attendances' => '出退勤',
-        'ticket_wallets' => 'お客様の回数券',
-        'ticket_transactions' => '回数券の履歴',
-        'memberships' => '月額契約',
-        'membership_usage_transactions' => '月額の利用履歴',
+        'reservations' => 'messages.masters.usage_reservation',
+        'reservation_segments' => 'messages.masters.usage_reservation_segments',
+        'visits' => 'messages.masters.usage_visit',
+        'visit_treatments' => 'messages.masters.usage_treatment',
+        'visit_treatment_staff' => 'messages.masters.usage_treatment',
+        'visit_staff_nominations' => 'messages.masters.usage_nomination',
+        'checkout_lines' => 'messages.masters.usage_checkout',
+        'staff_revenue_allocations' => 'messages.masters.usage_checkout',
+        'staff_schedule_blocks' => 'messages.masters.usage_staff_schedule',
+        'staff_shifts' => 'messages.masters.usage_past_shift',
+        'staff_attendances' => 'messages.masters.usage_attendance',
+        'ticket_wallets' => 'messages.masters.usage_customer_ticket',
+        'ticket_transactions' => 'messages.masters.usage_ticket_history',
+        'memberships' => 'messages.masters.usage_membership',
+        'membership_usage_transactions' => 'messages.masters.usage_membership_history',
     ];
 
     public function __construct(private readonly AuditLogger $audit) {}
@@ -99,7 +99,9 @@ final class MasterDeletionService
                 $query->where('work_date', '<', now('Asia/Tokyo')->toDateString());
             }
             if ($query->exists()) {
-                $used[] = self::USAGE_LABELS[$referencing] ?? $referencing;
+                $used[] = isset(self::USAGE_LABELS[$referencing])
+                    ? __(self::USAGE_LABELS[$referencing])
+                    : $referencing;
             }
         }
 
@@ -108,7 +110,7 @@ final class MasterDeletionService
 
     public function delete(string $type, Model $model, ?Authenticatable $actor): void
     {
-        $label = self::TYPES[$type]['label'];
+        $label = __(self::TYPES[$type]['label']);
         $usages = $this->usages($type, $model);
         if ($usages !== []) {
             throw ValidationException::withMessages([
@@ -131,7 +133,7 @@ final class MasterDeletionService
     public function restore(string $type, Model $model, ?Authenticatable $actor): void
     {
         $model->restore(); // @phpstan-ignore method.notFound（SoftDeletes を使うモデルだけを TYPES に登録している）
-        $this->audit->log("master.restored.{$type}", $model, self::TYPES[$type]['label'].'を復元: '.$this->nameOf($model), $actor);
+        $this->audit->log("master.restored.{$type}", $model, __(self::TYPES[$type]['label']).'を復元: '.$this->nameOf($model), $actor);
     }
 
     public function nameOf(Model $model): string

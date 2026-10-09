@@ -9,7 +9,8 @@
 | 描画 | Inertia.js（サーバーが props を渡し、`resources/js/Pages/**.vue` を描画） |
 | レイアウト | 管理：`layouts/AdminLayout.vue`（ヘッダーの集計・設定メニュー）／顧客：顧客用レイアウト |
 | 共通部品 | `components/ark/*`（`PageHeader` / `SectionCard` / `StatusChip` / `EmptyValue` / `DateField` / `MonthField` / `YearField` / `MoneyField` / `TimeField` / `MasterDeleteButton` / `TrashedMasterList` / `ReportTable` ほか） |
-| 文言 | `resources/js/constants/messages.ts` の `MESSAGES.<グループ>.<キー>` |
+| 文言 | `resources/js/constants/messages.ts` の `MESSAGES.<グループ>.<キー>`。画面ごとのラベル・見出しは領域別ファイル `constants/messages/{board,masters,reports,customer}.ts`（`MESSAGES.boardUi` / `mastersUi` / `reportsUi` / `customerUi`）。差し込み値は `{名前}` で書き `fillMessage()`（`utils/message.ts`）で埋める（Task 11-34） |
+| 共通処理 | 日時 `utils/dateFormat.ts`（名前付き書式プリセット）、金額 `utils/money.ts`（表示結果ごとに `formatYenCurrency` ￥ / `formatYenSign` ¥ / `formatNumber` / `formatYenSuffix` 円）、符号付き数 `utils/numberFormat.ts`、Stripe.js 読込 `composables/stripeJs.ts`、マスタの有効/無効切替（二重送信防止）`composables/masterActive.ts`、帳票の月・基準切替 `composables/reportNavigation.ts` |
 | 成功・失敗表示 | サーバーの `->with('success'|'error', …)` をフラッシュ表示。検証エラーは各項目に表示 |
 | 型 | TypeScript。props の型は各ページ／`components/admin/**/types.ts` |
 | 端末 | 顧客：スマホ優先／管理：PC・タブレット優先（台帳は 1023px 以下で縦積み） |

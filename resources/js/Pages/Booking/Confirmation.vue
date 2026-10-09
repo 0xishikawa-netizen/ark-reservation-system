@@ -5,8 +5,12 @@ import { DateField, PageHeader, SectionCard, StatusChip } from '@/components/ark
 import { reservationStatusLabel } from '@/design/tokens';
 import GuestBookingLayout from '@/layouts/GuestBookingLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { timeLabel } from '@/utils/dateFormat';
 
 defineOptions({ layout: GuestBookingLayout });
+
+/** 日付変更後に空き時間を取りに行くまでの待ち時間（ミリ秒）。連続入力での多重取得を防ぐ。 */
+const AVAILABILITY_DEBOUNCE_MS = 150;
 
 interface ReservationSummary {
     id: number;
@@ -78,33 +82,24 @@ const upgradeForm = useForm({
 
 const headline = computed(() => {
     if (props.reservation.status === 'confirmed') {
-        return '予約完了';
+        return MESSAGES.customerUi.bookingConfirmation.headlineConfirmed;
     }
     if (props.reservation.status === 'pending_payment') {
-        return '予約枠を確保しました';
+        return MESSAGES.customerUi.bookingConfirmation.headlinePending;
     }
     if (props.reservation.status === 'canceled') {
-        return 'キャンセル済み';
+        return MESSAGES.customerUi.bookingConfirmation.headlineCanceled;
     }
 
-    return '予約状況';
+    return MESSAGES.customerUi.bookingConfirmation.headlineDefault;
 });
 
-const paymentStatusLabels: Record<string, string> = {
-    unpaid: '来店時支払い',
-    pending_payment: '支払い待ち',
-    authorized: '予約確保中',
-    paid: '支払い完了',
-    failed: '支払い失敗',
-    voided: '取消済み',
-    refunded: '返金済み',
-    partially_refunded: '一部返金済み',
-};
+const paymentStatusLabels: Record<string, string> = MESSAGES.customerUi.bookingConfirmation.paymentStatuses;
 
 const paymentMethodLabel = computed(() =>
     props.reservation.payment_method === 'single'
-        ? 'オンライン事前決済'
-        : '来店時に支払う',
+        ? MESSAGES.customerUi.booking.paymentOnline
+        : MESSAGES.customerUi.booking.paymentOnsite,
 );
 
 const showCheckout = computed(() =>
@@ -114,13 +109,13 @@ const showCheckout = computed(() =>
 
 const cancelDialogTitle = computed(() =>
     props.reservation.status === 'pending_payment'
-        ? 'この仮予約をキャンセルしますか？'
-        : '本当にキャンセルしますか？',
+        ? MESSAGES.customerUi.bookingConfirmation.cancelPendingTitle
+        : MESSAGES.customerUi.bookingConfirmation.cancelTitle,
 );
 
 const cancelDialogDescription = computed(() =>
     props.reservation.status === 'pending_payment'
-        ? '仮予約をキャンセルすると、確保中の予約枠は解放されます。'
+        ? MESSAGES.customerUi.bookingConfirmation.cancelPendingDescription
         : MESSAGES.reservation.cancelReleasesSlot,
 );
 
@@ -145,7 +140,7 @@ watch(date, () => {
         return;
     }
 
-    availabilityTimer = setTimeout(() => void loadAvailability(), 150);
+    availabilityTimer = setTimeout(() => void loadAvailability(), AVAILABILITY_DEBOUNCE_MS);
 });
 
 watch(() => props.reservation.version, (version) => {
@@ -164,10 +159,6 @@ function formatReservationDate(dateValue: string, timeValue: string): string {
         hour: '2-digit',
         minute: '2-digit',
     }).format(new Date(`${dateValue}T${timeValue}:00`));
-}
-
-function timeLabel(value: string): string {
-    return value.slice(11, 16);
 }
 
 function today(): string {
@@ -244,11 +235,11 @@ function upgrade(): void {
 </script>
 
 <template>
-    <Head title="予約状況" />
+    <Head :title="MESSAGES.customerUi.bookingConfirmation.headlineDefault" />
 
     <PageHeader
         :title="headline"
-        subtitle="このページは予約内容の確認・変更に使用できます。URLを大切に保管してください。"
+        :subtitle="MESSAGES.customerUi.bookingConfirmation.pageSubtitle"
     />
 
     <SectionCard class="mb-4">
@@ -265,13 +256,13 @@ function upgrade(): void {
 
         <v-list lines="two" bg-color="transparent" class="reservation-details">
             <v-list-item
-                title="日時"
+                :title="MESSAGES.customerUi.bookingConfirmation.dateTime"
                 :subtitle="formatReservationDate(reservation.date, reservation.time)"
             />
-            <v-list-item title="メニュー" :subtitle="reservation.service_name" />
-            <v-list-item title="担当" :subtitle="reservation.staff_name ?? 'お任せ'" />
-            <v-list-item title="お支払い" :subtitle="paymentMethodLabel" />
-            <v-list-item title="予約番号" :subtitle="String(reservation.id)" />
+            <v-list-item :title="MESSAGES.customerUi.bookingConfirmation.service" :subtitle="reservation.service_name" />
+            <v-list-item :title="MESSAGES.customerUi.bookingConfirmation.staff" :subtitle="reservation.staff_name ?? MESSAGES.customerUi.bookingConfirmation.staffAny" />
+            <v-list-item :title="MESSAGES.customerUi.bookingConfirmation.payment" :subtitle="paymentMethodLabel" />
+            <v-list-item :title="MESSAGES.customerUi.bookingConfirmation.reservationNumber" :subtitle="String(reservation.id)" />
         </v-list>
 
         <v-alert
@@ -291,7 +282,7 @@ function upgrade(): void {
             block
             class="mt-4"
         >
-            お支払いを完了する
+            {{ MESSAGES.customerUi.bookingConfirmation.completePayment }}
         </v-btn>
 
         <div v-if="reservation.can_reschedule || reservation.can_cancel" class="management-actions mt-5">
@@ -302,7 +293,7 @@ function upgrade(): void {
                 size="large"
                 @click="changeOpen = true"
             >
-                日時を変更
+                {{ MESSAGES.customerUi.bookingConfirmation.reschedule }}
             </v-btn>
             <v-btn
                 v-if="reservation.can_cancel"
@@ -311,38 +302,38 @@ function upgrade(): void {
                 size="large"
                 @click="cancelOpen = true"
             >
-                キャンセル
+                {{ MESSAGES.customerUi.bookingConfirmation.cancel }}
             </v-btn>
         </div>
     </SectionCard>
 
     <SectionCard
         v-if="showUpgrade"
-        title="次回から入力不要にしませんか？"
-        subtitle="この予約のお客様情報をそのまま使って会員登録できます。"
+        :title="MESSAGES.customerUi.bookingConfirmation.upgradeTitle"
+        :subtitle="MESSAGES.customerUi.bookingConfirmation.upgradeSubtitle"
         class="upgrade-card"
     >
         <ul class="upgrade-benefits text-body-2">
-            <li>予約履歴・次回予約の確認</li>
-            <li>決済履歴の確認・再予約</li>
-            <li>次回から登録情報の再入力が不要</li>
+            <li>{{ MESSAGES.customerUi.bookingConfirmation.upgradeBenefitHistory }}</li>
+            <li>{{ MESSAGES.customerUi.bookingConfirmation.upgradeBenefitPayments }}</li>
+            <li>{{ MESSAGES.customerUi.bookingConfirmation.upgradeBenefitNoReentry }}</li>
         </ul>
 
         <v-expand-transition>
             <v-form v-if="upgradeOpen" class="mt-5" @submit.prevent="upgrade">
                 <v-text-field
                     v-model="upgradeForm.email"
-                    label="メールアドレス"
+                    :label="MESSAGES.customerUi.bookingConfirmation.email"
                     type="email"
                     autocomplete="email"
-                    :hint="member_upgrade.email_required ? '確認メールを受け取れるアドレスを入力してください' : '予約時のメールアドレスを使用できます'"
+                    :hint="member_upgrade.email_required ? MESSAGES.customerUi.bookingConfirmation.emailRequiredHint : MESSAGES.customerUi.bookingConfirmation.emailReuseHint"
                     persistent-hint
                     :required="member_upgrade.email_required"
                     :error-messages="upgradeForm.errors.email"
                 />
                 <v-text-field
                     v-model="upgradeForm.password"
-                    label="パスワード"
+                    :label="MESSAGES.customerUi.bookingConfirmation.password"
                     type="password"
                     autocomplete="new-password"
                     :error-messages="upgradeForm.errors.password"
@@ -350,7 +341,7 @@ function upgrade(): void {
                 />
                 <v-text-field
                     v-model="upgradeForm.password_confirmation"
-                    label="パスワード（確認）"
+                    :label="MESSAGES.customerUi.bookingConfirmation.passwordConfirmation"
                     type="password"
                     autocomplete="new-password"
                     required
@@ -362,35 +353,35 @@ function upgrade(): void {
                     block
                     :loading="upgradeForm.processing"
                 >
-                    会員登録を完了する
+                    {{ MESSAGES.customerUi.bookingConfirmation.upgradeSubmit }}
                 </v-btn>
             </v-form>
         </v-expand-transition>
 
         <div v-if="!upgradeOpen" class="upgrade-actions mt-5">
             <v-btn color="primary" size="large" @click="upgradeOpen = true">
-                会員登録する
+                {{ MESSAGES.customerUi.bookingConfirmation.upgradeOpen }}
             </v-btn>
             <v-btn variant="text" size="large" @click="upgradeVisible = false">
-                今はしない
+                {{ MESSAGES.customerUi.bookingConfirmation.upgradeLater }}
             </v-btn>
         </div>
         <v-btn v-else variant="text" block class="mt-2" @click="upgradeOpen = false">
-            入力を閉じる
+            {{ MESSAGES.customerUi.bookingConfirmation.upgradeClose }}
         </v-btn>
     </SectionCard>
 
     <v-dialog v-model="changeOpen" max-width="560">
-        <v-card title="予約日時を変更">
+        <v-card :title="MESSAGES.customerUi.bookingConfirmation.rescheduleTitle">
             <v-card-text>
                 <DateField
                     v-model="date"
-                    label="変更後の日付"
+                    :label="MESSAGES.customerUi.bookingConfirmation.newDate"
                     :min="today()"
                     class="mb-4"
                 />
                 <p v-if="loadingSlots" class="text-body-2 text-medium-emphasis mb-4">
-                    空き時間を確認しています…
+                    {{ MESSAGES.customerUi.bookingConfirmation.loadingSlots }}
                 </p>
                 <v-alert v-if="availabilityError" type="error" variant="tonal" class="mb-4">
                     {{ availabilityError }}
@@ -427,7 +418,7 @@ function upgrade(): void {
                 </div>
             </v-card-text>
             <v-card-actions class="pa-4">
-                <v-btn variant="text" @click="changeOpen = false">閉じる</v-btn>
+                <v-btn variant="text" @click="changeOpen = false">{{ MESSAGES.customerUi.bookingConfirmation.close }}</v-btn>
                 <v-spacer />
                 <v-btn
                     color="primary"
@@ -435,7 +426,7 @@ function upgrade(): void {
                     :loading="changeForm.processing"
                     @click="reschedule"
                 >
-                    この日時に変更
+                    {{ MESSAGES.customerUi.bookingConfirmation.rescheduleSubmit }}
                 </v-btn>
             </v-card-actions>
         </v-card>
@@ -447,7 +438,7 @@ function upgrade(): void {
                 <p class="mb-4">{{ cancelDialogDescription }}</p>
                 <v-textarea
                     v-model="cancelForm.reason"
-                    label="理由（任意）"
+                    :label="MESSAGES.customerUi.bookingConfirmation.reasonOptional"
                     maxlength="255"
                     rows="3"
                     :error-messages="cancelForm.errors.reason"
@@ -462,10 +453,10 @@ function upgrade(): void {
                 </v-alert>
             </v-card-text>
             <v-card-actions class="pa-4">
-                <v-btn variant="text" @click="cancelOpen = false">戻る</v-btn>
+                <v-btn variant="text" @click="cancelOpen = false">{{ MESSAGES.customerUi.bookingConfirmation.back }}</v-btn>
                 <v-spacer />
                 <v-btn color="error" :loading="cancelForm.processing" @click="cancelReservation">
-                    キャンセルを確定
+                    {{ MESSAGES.customerUi.bookingConfirmation.cancelSubmit }}
                 </v-btn>
             </v-card-actions>
         </v-card>

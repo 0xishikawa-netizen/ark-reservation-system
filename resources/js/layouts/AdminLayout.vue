@@ -6,16 +6,23 @@ import { MESSAGES } from '@/constants/messages';
 import { reportNavigationItems } from './reportNavigation';
 import { settingsNavigationItems, settingsSections } from './settingsNavigation';
 
+/** 画面右上の時計を更新する間隔（ミリ秒）。 */
+const CLOCK_INTERVAL_MS = 1000;
+
+/** ヘッダーのグループ名・項目名。 */
+const GROUP = MESSAGES.customerUi.navigation.groups;
+const ITEM = MESSAGES.customerUi.navigation.items;
+
 const navigationGroupTitles = [
     // 店舗業務のメイン画面。ヘッダー左端（ダッシュボードより前）に単独タブで出す。
-    'ボード',
-    'ホーム',
-    '予約',
-    '顧客',
-    '支払い',
-    '集計',
-    '設定',
-    'システム',
+    GROUP.board,
+    GROUP.home,
+    GROUP.reservation,
+    GROUP.customer,
+    GROUP.payment,
+    GROUP.reports,
+    GROUP.settings,
+    GROUP.system,
 ] as const;
 
 type NavigationGroupTitle = (typeof navigationGroupTitles)[number];
@@ -67,40 +74,40 @@ const navigationItems = computed<NavigationItem[]>(() => {
 
     return [
         {
-            title: 'ダッシュボード',
+            title: ITEM.dashboard,
             href: '/admin',
             disabled: false,
             icon: 'mdi-view-dashboard-outline',
-            group: 'ホーム',
+            group: GROUP.home,
         },
         ...(can.reservationsView
-            ? [{ title: 'ブッキングボード', href: '/admin/schedule', disabled: false, icon: 'mdi-calendar-month-outline', group: 'ボード' as const }]
+            ? [{ title: ITEM.schedule, href: '/admin/schedule', disabled: false, icon: 'mdi-calendar-month-outline', group: GROUP.board }]
             : []),
         ...reportNavigationItems(can, page.props.auth.reportRoutes),
         ...settingsNavigationItems(can),
         ...(can.checkoutsManage
-            ? [{ title: '来店・会計', href: '/admin/checkouts', disabled: false, icon: 'mdi-cash-register', group: '支払い' as const }]
+            ? [{ title: ITEM.checkouts, href: '/admin/checkouts', disabled: false, icon: 'mdi-cash-register', group: GROUP.payment }]
             : []),
         ...(can.customersView
-            ? [{ title: '顧客', href: '/admin/customers', disabled: false, icon: 'mdi-account-multiple-outline', group: '顧客' as const }]
+            ? [{ title: ITEM.customers, href: '/admin/customers', disabled: false, icon: 'mdi-account-multiple-outline', group: GROUP.customer }]
             : []),
         ...(can.reservationsView
             ? [
-                  { title: '予約', href: '/admin/reservations', disabled: false, icon: 'mdi-format-list-bulleted', group: '予約' as const },
-                  { title: '決済', href: '/admin/payments', disabled: false, icon: 'mdi-credit-card-outline', group: '支払い' as const },
+                  { title: ITEM.reservations, href: '/admin/reservations', disabled: false, icon: 'mdi-format-list-bulleted', group: GROUP.reservation },
+                  { title: ITEM.payments, href: '/admin/payments', disabled: false, icon: 'mdi-credit-card-outline', group: GROUP.payment },
               ]
             : []),
         ...(can.failedJobsView
             ? [
-                  { title: 'システム状態', href: '/admin/system/status', disabled: false, icon: 'mdi-monitor-dashboard', group: 'システム' as const },
-                  { title: '失敗ジョブ', href: '/admin/system/failed-jobs', disabled: false, icon: 'mdi-alert-circle-outline', group: 'システム' as const },
+                  { title: ITEM.systemStatus, href: '/admin/system/status', disabled: false, icon: 'mdi-monitor-dashboard', group: GROUP.system },
+                  { title: ITEM.failedJobs, href: '/admin/system/failed-jobs', disabled: false, icon: 'mdi-alert-circle-outline', group: GROUP.system },
               ]
             : []),
         ...(can.auditLogsView
-            ? [{ title: '監査ログ', href: '/admin/system/audit-logs', disabled: false, icon: 'mdi-clipboard-text-clock-outline', group: 'システム' as const }]
+            ? [{ title: ITEM.auditLogs, href: '/admin/system/audit-logs', disabled: false, icon: 'mdi-clipboard-text-clock-outline', group: GROUP.system }]
             : []),
         ...(can.integrationsView
-            ? [{ title: '外部予約連携', href: '/admin/integrations/reservations', disabled: false, icon: 'mdi-sync', group: 'システム' as const }]
+            ? [{ title: ITEM.integrations, href: '/admin/integrations/reservations', disabled: false, icon: 'mdi-sync', group: GROUP.system }]
             : []),
     ];
 });
@@ -129,7 +136,7 @@ interface NavigationSection {
  * subgroup を持たない項目は見出しなしのセクションにまとめる。
  */
 const groupSections = (items: NavigationItem[]): NavigationSection[] => {
-    if (items.length > 0 && items.every((item) => item.group === '設定')) {
+    if (items.length > 0 && items.every((item) => item.group === GROUP.settings)) {
         return settingsSections(items).map((section) => ({
             label: section.title,
             icon: section.icon,
@@ -214,7 +221,7 @@ const currentTimeLabel = computed(() => {
 });
 
 onMounted(() => {
-    clockTimer = setInterval(() => { now.value = new Date(); }, 1000);
+    clockTimer = setInterval(() => { now.value = new Date(); }, CLOCK_INTERVAL_MS);
 });
 
 onBeforeUnmount(() => {
@@ -232,7 +239,7 @@ onBeforeUnmount(() => {
                 <v-btn
                     class="d-md-none"
                     icon="mdi-menu"
-                    aria-label="メニューを開く"
+                    :aria-label="MESSAGES.customerUi.navigation.openMenu"
                     color="primary"
                     variant="text"
                     @click="mobileNavOpen = true"
@@ -254,7 +261,7 @@ onBeforeUnmount(() => {
                 </span>
             </template>
 
-            <nav class="ark-topnav d-none d-md-flex" aria-label="管理メニュー">
+            <nav class="ark-topnav d-none d-md-flex" :aria-label="MESSAGES.customerUi.navigation.adminMenu">
                 <template v-for="group in navigationGroups" :key="group.title">
                     <button
                         v-if="group.items.length === 1"
@@ -355,7 +362,7 @@ onBeforeUnmount(() => {
             </nav>
 
             <template #append>
-                <span class="ark-topbar__clock" aria-label="現在時刻">
+                <span class="ark-topbar__clock" :aria-label="MESSAGES.customerUi.navigation.currentTime">
                     <v-icon icon="mdi-clock-outline" size="18" />
                     {{ currentTimeLabel }}
                 </span>
@@ -375,16 +382,16 @@ onBeforeUnmount(() => {
                     class="mr-1"
                     @click="logout"
                 >
-                    ログアウト
+                    {{ MESSAGES.customerUi.navigation.logout }}
                 </v-btn>
             </template>
         </v-app-bar>
 
         <!-- 狭い画面：全項目のドロワー -->
         <v-navigation-drawer v-model="mobileNavOpen" temporary width="272">
-            <v-list-item class="py-3" :title="page.props.name" subtitle="管理画面" />
+            <v-list-item class="py-3" :title="page.props.name" :subtitle="MESSAGES.customerUi.navigation.adminConsole" />
             <v-divider />
-            <v-list nav aria-label="管理メニュー">
+            <v-list nav :aria-label="MESSAGES.customerUi.navigation.adminMenu">
                 <template v-for="group in navigationGroups" :key="group.title">
                     <v-list-subheader class="text-overline">{{ group.title }}</v-list-subheader>
                     <template v-for="section in groupSections(group.items)" :key="section.label ?? '_'">

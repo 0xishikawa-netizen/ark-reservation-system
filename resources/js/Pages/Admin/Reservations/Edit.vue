@@ -9,6 +9,16 @@ import {
     reservationStatusLabel,
 } from '@/design/tokens';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateTime, timeLabel } from '@/utils/dateFormat';
+
+/** 条件変更後に空き時間を再取得するまでの待機時間。 */
+const AVAILABILITY_DEBOUNCE_MS = 150;
+/** 担当者の性別希望。 */
+const GENDER_PREFERENCES = [
+    { value: 'male', label: MESSAGES.boardUi.reservationEdit.malePreference },
+    { value: 'female', label: MESSAGES.boardUi.reservationEdit.femalePreference },
+] as const;
 
 defineOptions({ layout: AdminLayout });
 
@@ -226,7 +236,7 @@ watch([selectedServiceId, selectedStaffId, selectedBoothId, date], () => {
         return;
     }
 
-    availabilityTimer = setTimeout(() => void loadAvailability(), 150);
+    availabilityTimer = setTimeout(() => void loadAvailability(), AVAILABILITY_DEBOUNCE_MS);
 });
 
 onMounted(() => {
@@ -361,29 +371,17 @@ function runAction(): void {
 
 function actionTitle(): string {
     return {
-        cancel: '予約をキャンセル',
+        cancel: MESSAGES.boardUi.reservationEdit.cancelActionTitle,
         complete: MESSAGES.visitCompletion.noCheckoutTitle,
-        'no-show': '無断キャンセルに変更',
+        'no-show': MESSAGES.boardUi.reservationEdit.noShowActionTitle,
     }[dialog.value ?? 'cancel'];
 }
 
-function formatDateTime(value: string): string {
-    return new Intl.DateTimeFormat('ja-JP', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        weekday: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-    }).format(new Date(value.replace(' ', 'T')));
-}
-
-function timeLabel(value: string): string {
-    return value.slice(11, 16);
-}
-
 function formatMoney(value: number): string {
-    return `${new Intl.NumberFormat('ja-JP').format(value)}円`;
+    return MESSAGES.boardUi.reservationEdit.yen.replace(
+        '{amount}',
+        new Intl.NumberFormat('ja-JP').format(value),
+    );
 }
 
 function submitAdjustment(): void {
@@ -398,23 +396,23 @@ function submitAdjustment(): void {
 </script>
 
 <template>
-    <Head :title="`予約 #${reservation.id}`" />
+    <Head :title="fillMessage(MESSAGES.boardUi.reservationEdit.pageTitle, { id: String(reservation.id) })" />
 
-    <PageHeader :title="`予約 #${reservation.id}`" :subtitle="formatDateTime(reservation.starts_at)">
+    <PageHeader :title="fillMessage(MESSAGES.boardUi.reservationEdit.pageTitle, { id: String(reservation.id) })" :subtitle="formatDateTime(reservation.starts_at, 'long')">
         <template #actions>
             <v-btn
                 variant="text"
                 prepend-icon="mdi-account-outline"
                 :href="`/admin/customers/${reservation.customer_id}`"
             >
-                顧客詳細へ
+                {{ MESSAGES.boardUi.reservationEdit.customerDetail }}
             </v-btn>
             <v-btn
                 variant="outlined"
                 prepend-icon="mdi-calendar-month-outline"
                 :href="`/admin/schedule?date=${reservation.starts_at.slice(0, 10)}&reservation=${reservation.id}`"
             >
-                ブッキングボードで確認
+                {{ MESSAGES.boardUi.reservationEdit.checkOnBoard }}
             </v-btn>
         </template>
     </PageHeader>
@@ -445,21 +443,21 @@ function submitAdjustment(): void {
 
         <div class="reservation-hero__facts">
             <div class="reservation-hero__fact">
-                <div class="text-caption text-medium-emphasis">日時</div>
-                <div class="font-weight-medium">{{ formatDateTime(reservation.starts_at) }}</div>
+                <div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.reservationEdit.dateTime }}</div>
+                <div class="font-weight-medium">{{ formatDateTime(reservation.starts_at, 'long') }}</div>
             </div>
             <div class="reservation-hero__fact">
-                <div class="text-caption text-medium-emphasis">担当</div>
-                <div class="font-weight-medium">{{ reservation.staff_name ?? '担当なし' }}</div>
+                <div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.reservationEdit.staff }}</div>
+                <div class="font-weight-medium">{{ reservation.staff_name ?? MESSAGES.boardUi.reservationEdit.unassignedStaff }}</div>
             </div>
             <div class="reservation-hero__fact">
-                <div class="text-caption text-medium-emphasis">ブース</div>
+                <div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.reservationEdit.booth }}</div>
                 <div class="font-weight-medium"><template v-if="reservation.booth_name">{{ reservation.booth_name }}</template><EmptyValue :label="MESSAGES.common.notSet" v-else /></div>
             </div>
         </div>
     </SectionCard>
 
-    <SectionCard title="日時・担当の変更" subtitle="確定済みの予約のみ変更できます。" class="mb-6">
+    <SectionCard :title="MESSAGES.boardUi.reservationEdit.editScheduleTitle" :subtitle="MESSAGES.boardUi.reservationEdit.editScheduleSubtitle" class="mb-6">
         <v-alert v-if="!isConfirmed" type="info" variant="tonal" class="mb-5">
             {{ MESSAGES.reservation.notConfirmedNotEditable }}
         </v-alert>
@@ -487,7 +485,7 @@ function submitAdjustment(): void {
                     :items="eligibleStaff"
                     item-title="display_name"
                     item-value="user_id"
-                    label="担当スタッフ"
+                    :label="MESSAGES.boardUi.reservationEdit.staffLabel"
                     variant="outlined"
                     density="comfortable"
                     clearable
@@ -502,7 +500,7 @@ function submitAdjustment(): void {
                     :items="boothItems"
                     item-title="name"
                     item-value="id"
-                    :label="(service?.booth_ids ?? []).length > 0 ? MESSAGES.reservation.boothMappedLabel : 'ブース（任意）'"
+                    :label="(service?.booth_ids ?? []).length > 0 ? MESSAGES.reservation.boothMappedLabel : MESSAGES.boardUi.reservationEdit.optionalBooth"
                     variant="outlined"
                     density="comfortable"
                     clearable
@@ -510,7 +508,7 @@ function submitAdjustment(): void {
                     :disabled="!isConfirmed"
                     :error-messages="form.errors.booth_id"
                 />
-                <div class="edit-prefs field-grid__full" role="group" aria-label="担当の希望">
+                <div class="edit-prefs field-grid__full" role="group" :aria-label="MESSAGES.boardUi.reservationEdit.staffPreference">
                     <v-btn
                         size="small"
                         :variant="form.is_staff_requested ? 'flat' : 'outlined'"
@@ -518,9 +516,9 @@ function submitAdjustment(): void {
                         :disabled="!isConfirmed || selectedStaffId === null"
                         data-testid="edit-nomination"
                         @click="toggleNomination"
-                    >指名</v-btn>
+                    >{{ MESSAGES.boardUi.reservationEdit.nomination }}</v-btn>
                     <v-btn
-                        v-for="g in [{ value: 'male', label: '男性希望' }, { value: 'female', label: '女性希望' }]"
+                        v-for="g in GENDER_PREFERENCES"
                         :key="g.value"
                         size="small"
                         :variant="form.staff_gender_preference === g.value ? 'flat' : 'outlined'"
@@ -536,7 +534,7 @@ function submitAdjustment(): void {
                 <div class="date-field">
                     <DateField
                         v-model="date"
-                        label="変更日"
+                        :label="MESSAGES.boardUi.reservationEdit.changeDate"
                         hide-details="auto"
                         :disabled="!isConfirmed"
                     />
@@ -546,7 +544,7 @@ function submitAdjustment(): void {
                         v-model="selectedSlotValue"
                         :items="slotItems"
                         :loading="loadingSlots"
-                        label="時間"
+                        :label="MESSAGES.boardUi.reservationEdit.time"
                         hide-details="auto"
                         :disabled="!isConfirmed || slotItems.length === 0"
                         :error-messages="form.errors.starts_at"
@@ -571,14 +569,14 @@ function submitAdjustment(): void {
                 variant="tonal"
                 class="mt-4"
             >
-                担当は {{ autoAssignedStaffName }} に自動割当されます。
+                {{ fillMessage(MESSAGES.boardUi.reservationEdit.autoAssignStaff, { name: autoAssignedStaffName ?? '' }) }}
             </v-alert>
 
             <v-divider class="my-5" />
 
             <v-textarea
                 v-model="form.notes"
-                label="備考"
+                :label="MESSAGES.boardUi.reservationEdit.note"
                 maxlength="1000"
                 counter
                 rows="4"
@@ -600,7 +598,7 @@ function submitAdjustment(): void {
                     variant="outlined"
                     @click="router.reload()"
                 >
-                    再読込
+                    {{ MESSAGES.boardUi.reservationEdit.reload }}
                 </v-btn>
             </v-alert>
 
@@ -611,7 +609,7 @@ function submitAdjustment(): void {
                     :loading="form.processing"
                     :disabled="!isConfirmed"
                 >
-                    保存
+                    {{ MESSAGES.boardUi.reservationEdit.save }}
                 </v-btn>
                 <v-btn
                     v-if="justSaved"
@@ -619,13 +617,13 @@ function submitAdjustment(): void {
                     prepend-icon="mdi-calendar-month-outline"
                     :href="`/admin/schedule?date=${reservation.starts_at.slice(0, 10)}&reservation=${reservation.id}`"
                 >
-                    確認
+                    {{ MESSAGES.boardUi.reservationEdit.check }}
                 </v-btn>
             </div>
         </v-form>
     </SectionCard>
 
-    <SectionCard title="ステータス操作" class="mb-6">
+    <SectionCard :title="MESSAGES.boardUi.reservationEdit.statusActions" class="mb-6">
         <v-alert v-if="!isConfirmed" type="info" variant="tonal" class="mb-4">
             {{ MESSAGES.reservation.notConfirmedNotEditable }}
         </v-alert>
@@ -646,17 +644,17 @@ function submitAdjustment(): void {
                 {{ MESSAGES.visitCompletion.noCheckoutMenu }}
             </v-btn>
             <v-btn color="warning" variant="outlined" :disabled="!isConfirmed" @click="dialog = 'no-show'">
-                無断キャンセル
+                {{ MESSAGES.boardUi.reservationEdit.noShow }}
             </v-btn>
             <v-btn color="error" variant="outlined" :disabled="!isConfirmed" @click="dialog = 'cancel'">
-                キャンセル
+                {{ MESSAGES.boardUi.reservationEdit.cancel }}
             </v-btn>
         </div>
     </SectionCard>
 
     <SectionCard
-        title="決済サマリ"
-        subtitle="最終施術金額と実質受領額の差額を追加決済または返金で調整します。"
+        :title="MESSAGES.boardUi.reservationEdit.paymentSummary"
+        :subtitle="MESSAGES.boardUi.reservationEdit.paymentSummarySubtitle"
         class="ark-table-section"
     >
         <v-alert
@@ -665,23 +663,22 @@ function submitAdjustment(): void {
             variant="tonal"
             class="mb-4"
         >
-            追加決済 #{{ payment_summary.in_flight_addon.id }}（{{ formatMoney(payment_summary.in_flight_addon.amount) }}）は
-            {{ payment_summary.in_flight_addon.status }} です。
+            {{ fillMessage(MESSAGES.boardUi.reservationEdit.inFlightAddon, { id: String(payment_summary.in_flight_addon.id), amount: formatMoney(payment_summary.in_flight_addon.amount), status: payment_summary.in_flight_addon.status }) }}
         </v-alert>
 
         <v-row dense class="mb-2">
-            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">当初金額</div><div>{{ formatMoney(payment_summary.original_amount) }}</div></v-col>
-            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">決済確定額</div><div>{{ formatMoney(payment_summary.captured_total) }}</div></v-col>
-            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">返金総額</div><div>{{ formatMoney(payment_summary.refunded_total) }}</div></v-col>
-            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">実質受領額</div><div class="font-weight-bold">{{ formatMoney(payment_summary.net_received) }}</div></v-col>
-            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">最終施術金額</div><div><EmptyValue v-if="payment_summary.final_amount === null" :label="MESSAGES.common.notSet" /><template v-else>{{ formatMoney(payment_summary.final_amount) }}</template></div></v-col>
-            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">差額</div><div>{{ formatMoney(payment_summary.delta) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.reservationEdit.originalAmount }}</div><div>{{ formatMoney(payment_summary.original_amount) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.reservationEdit.capturedTotal }}</div><div>{{ formatMoney(payment_summary.captured_total) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.reservationEdit.refundedTotal }}</div><div>{{ formatMoney(payment_summary.refunded_total) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.reservationEdit.netReceived }}</div><div class="font-weight-bold">{{ formatMoney(payment_summary.net_received) }}</div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.reservationEdit.finalAmount }}</div><div><EmptyValue v-if="payment_summary.final_amount === null" :label="MESSAGES.common.notSet" /><template v-else>{{ formatMoney(payment_summary.final_amount) }}</template></div></v-col>
+            <v-col cols="6" md="2"><div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.reservationEdit.delta }}</div><div>{{ formatMoney(payment_summary.delta) }}</div></v-col>
         </v-row>
 
         <v-form class="d-flex align-start ga-3 flex-wrap mb-5" @submit.prevent="submitAdjustment">
             <MoneyField
                 v-model="adjustmentForm.final_amount"
-                label="最終施術金額"
+                :label="MESSAGES.boardUi.reservationEdit.finalAmount"
                 :error-messages="adjustmentForm.errors.final_amount"
                 style="max-width: 280px"
             />
@@ -692,15 +689,15 @@ function submitAdjustment(): void {
                 :loading="adjustmentForm.processing"
                 :disabled="adjustmentForm.processing"
             >
-                差額を反映
+                {{ MESSAGES.boardUi.reservationEdit.applyDelta }}
             </v-btn>
         </v-form>
 
         <v-table density="compact">
             <thead>
                 <tr>
-                    <th>種類</th><th class="text-right">金額</th><th>状態</th>
-                    <th>決済ID</th><th>請求ID</th><th class="text-right">返金済み</th>
+                    <th>{{ MESSAGES.boardUi.reservationEdit.type }}</th><th class="text-right">{{ MESSAGES.boardUi.reservationEdit.amount }}</th><th>{{ MESSAGES.boardUi.reservationEdit.status }}</th>
+                    <th>{{ MESSAGES.boardUi.reservationEdit.paymentId }}</th><th>{{ MESSAGES.boardUi.reservationEdit.chargeId }}</th><th class="text-right">{{ MESSAGES.boardUi.reservationEdit.refunded }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -708,7 +705,7 @@ function submitAdjustment(): void {
                     <tr>
                         <td>
                             <a :href="`/admin/payments/${payment.id}`">{{ payment.kind_label }}</a>
-                            <v-chip v-if="payment.needs_attention" color="warning" size="x-small" class="ml-2">要対応</v-chip>
+                            <v-chip v-if="payment.needs_attention" color="warning" size="x-small" class="ml-2">{{ MESSAGES.boardUi.reservationEdit.needsAttention }}</v-chip>
                         </td>
                         <td class="text-right">{{ formatMoney(payment.amount) }}</td>
                         <td><StatusChip :status="payment.status" :label="payment.status_label" /></td>
@@ -717,7 +714,7 @@ function submitAdjustment(): void {
                         <td class="text-right">{{ formatMoney(payment.refunded_amount) }}</td>
                     </tr>
                     <tr v-for="(refund, index) in payment.refunds" :key="`${payment.id}-refund-${index}`" class="bg-surface-light">
-                        <td class="pl-8 text-caption">↳ 返金：{{ refund.reason }}</td>
+                        <td class="pl-8 text-caption">{{ fillMessage(MESSAGES.boardUi.reservationEdit.refundReason, { reason: refund.reason }) }}</td>
                         <td class="text-right text-caption">-{{ formatMoney(refund.amount) }}</td>
                         <td><StatusChip :status="refund.status" :label="refund.status" /></td>
                         <td colspan="3" class="text-caption">{{ refund.created_at ?? MESSAGES.common.notRecorded }}</td>
@@ -742,21 +739,21 @@ function submitAdjustment(): void {
                     v-if="dialog === 'cancel'"
                     v-model="cancelReason"
                     class="mt-4"
-                    label="キャンセル理由（任意）"
+                    :label="MESSAGES.boardUi.reservationEdit.optionalCancelReason"
                     maxlength="255"
                     rows="2"
                 />
             </v-card-text>
             <v-card-actions>
                 <v-spacer />
-                <v-btn variant="text" @click="dialog = null">戻る</v-btn>
+                <v-btn variant="text" @click="dialog = null">{{ MESSAGES.boardUi.reservationEdit.back }}</v-btn>
                 <v-btn
                     :color="dialog === 'cancel' ? 'error' : 'primary'"
                     :loading="actionProcessing"
                     :disabled="dialog === 'complete' && exemptionReason === null"
                     @click="runAction"
                 >
-                    実行
+                    {{ MESSAGES.boardUi.reservationEdit.execute }}
                 </v-btn>
             </v-card-actions>
         </v-card>

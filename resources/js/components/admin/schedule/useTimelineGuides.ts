@@ -13,6 +13,21 @@ import type {
     DragState,
 } from "./types";
 
+/** 1時間あたりの分数。 */
+const MINUTES_PER_HOUR = 60;
+/** 30分目盛りの間隔。 */
+const HALF_HOUR_MINUTES = 30;
+/** 細線目盛りの間隔。 */
+const FINE_TICK_MINUTES = 10;
+/** 予約枠単位の最小値。 */
+const MIN_SLOT_UNIT_MINUTES = 1;
+/** グリッド線の幅。 */
+const GRID_LINE_WIDTH_PX = 1;
+/** カーソル枠を濃く表示する幅のしきい値。 */
+const COMPACT_HOVER_WIDTH_PX = 8;
+/** 予約不可帯を集計する最小刻み。 */
+const MIN_UNBOOKABLE_UNIT_MINUTES = 5;
+
 /**
  * 時間軸の目盛り・グリッド、カーソル位置のガイド、新規予約を入れられない時間帯（稼働外／満席）の帯。
  */
@@ -62,10 +77,10 @@ export function useTimelineGuides(ctx: UseTimelineGuidesContext) {
 
     const hourBlocks = computed<HourBlock[]>(() => {
         const blocks: HourBlock[] = [];
-        const firstHour = Math.ceil(openMinute.value / 60) * 60;
+        const firstHour = Math.ceil(openMinute.value / MINUTES_PER_HOUR) * MINUTES_PER_HOUR;
 
-        for (let minute = firstHour; minute < closeMinute.value; minute += 60) {
-            const blockEnd = Math.min(minute + 60, closeMinute.value);
+        for (let minute = firstHour; minute < closeMinute.value; minute += MINUTES_PER_HOUR) {
+            const blockEnd = Math.min(minute + MINUTES_PER_HOUR, closeMinute.value);
             blocks.push({
                 minute,
                 label: minuteToLabel(minute),
@@ -84,7 +99,7 @@ export function useTimelineGuides(ctx: UseTimelineGuidesContext) {
         for (
             let minute = openMinute.value;
             minute <= closeMinute.value;
-            minute += 30
+            minute += HALF_HOUR_MINUTES
         ) {
             ticks.push(minute);
         }
@@ -101,7 +116,7 @@ export function useTimelineGuides(ctx: UseTimelineGuidesContext) {
             minute <= closeMinute.value;
             minute += FINE_TICK_MINUTES
         ) {
-            if ((minute - openMinute.value) % 30 !== 0) {
+            if ((minute - openMinute.value) % HALF_HOUR_MINUTES !== 0) {
                 ticks.push(minute);
             }
         }
@@ -115,12 +130,12 @@ export function useTimelineGuides(ctx: UseTimelineGuidesContext) {
      */
     const gridStyle = computed<Record<string, string>>(() => {
         const ten = FINE_TICK_MINUTES * pixelsPerMinute.value;
-        const half = 30 * pixelsPerMinute.value;
-        const hour = 60 * pixelsPerMinute.value;
+        const half = HALF_HOUR_MINUTES * pixelsPerMinute.value;
+        const hour = MINUTES_PER_HOUR * pixelsPerMinute.value;
         // 線は各区間の「先頭」に置く。ヘッダーの時間ブロックが border-left（＝ブロック左端）
         // で線を描いているため、末尾に置くと 1px ずれて見える（§ヘッダーと縦線のずれ）。
         const line = (size: number, color: string): string =>
-            `repeating-linear-gradient(to right, ${color} 0, ${color} 1px, transparent 1px, transparent ${size}px)`;
+            `repeating-linear-gradient(to right, ${color} 0, ${color} ${GRID_LINE_WIDTH_PX}px, transparent ${GRID_LINE_WIDTH_PX}px, transparent ${size}px)`;
 
         return {
             backgroundImage: [
@@ -133,15 +148,13 @@ export function useTimelineGuides(ctx: UseTimelineGuidesContext) {
 
     /** 予約枠1つぶんの分数（設定値。既定5分）。グリッド・目盛り・ガイドはすべてこれに揃える。 */
     const slotUnitMinutes = computed(() =>
-        Math.max(props.business_hours.slot_minutes, 1),
+        Math.max(props.business_hours.slot_minutes, MIN_SLOT_UNIT_MINUTES),
     );
 
     /**
      * 縦の罫線・細かい目盛りの単位は 10 分で固定する。予約枠は5分だが、5分ごとに
      * 線を引くと密すぎて逆に読めなくなるため。5分の精度はカーソルガイド側で示す。
      */
-    const FINE_TICK_MINUTES = 10;
-
     /* ───────────── カーソル位置ガイド（今どの時間の上にいるか） ─────────────
      * 5分単位など細かい粒度だと、マウスがどの時刻を指しているのか見た目では分からない。
      * 予約枠と同じ単位にスナップした縦線＋時刻ラベルを出して、クリック前に確認できるようにする。 */
@@ -197,7 +210,7 @@ export function useTimelineGuides(ctx: UseTimelineGuidesContext) {
      * 細い時はほぼ塗りつぶしにする。拡大時は幅があるので薄くしてカードを隠さない。
      */
     const hoverFill = computed<string>(() =>
-        hoverWidth.value < 8
+        hoverWidth.value < COMPACT_HOVER_WIDTH_PX
             ? "rgba(var(--v-theme-accent), 0.9)"
             : "rgba(var(--v-theme-accent), 0.22)",
     );
@@ -262,7 +275,7 @@ export function useTimelineGuides(ctx: UseTimelineGuidesContext) {
             return [];
         }
 
-        const unit = Math.max(props.business_hours.slot_minutes, 5);
+        const unit = Math.max(props.business_hours.slot_minutes, MIN_UNBOOKABLE_UNIT_MINUTES);
         const raw: Array<"closed" | "full" | null> = [];
 
         for (

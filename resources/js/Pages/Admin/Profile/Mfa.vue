@@ -17,6 +17,8 @@ defineProps<{
     google: { linked: boolean };
 }>();
 
+const M = MESSAGES.reportsUi.mfa;
+
 const linkGoogle = (): void => {
     window.location.href = '/auth/google/link?return=/admin/mfa';
 };
@@ -39,42 +41,41 @@ const verifyCode = (): void => {
 </script>
 
 <template>
-    <Head title="二段階認証の設定" />
+    <Head :title="M.pageTitle" />
 
     <v-container class="py-4" style="max-width: 820px">
-        <h1 class="text-h6 mb-4">二段階認証（MFA）の設定</h1>
+        <h1 class="text-h6 mb-4">{{ M.heading }}</h1>
 
         <v-alert v-if="!mfa.satisfied" type="warning" variant="tonal" class="mb-4">
-            <div class="font-weight-medium">認証アプリの登録が必要です</div>
+            <div class="font-weight-medium">{{ M.totpRequired }}</div>
             <div class="text-body-2">
                 {{ MESSAGES.auth.twoFactorRequired }}
             </div>
         </v-alert>
         <v-alert v-else type="success" variant="tonal" class="mb-4">
-            <div class="font-weight-medium">二段階認証は有効です</div>
-            <div class="text-body-2">ログイン時に認証アプリの6桁コードが求められます。</div>
+            <div class="font-weight-medium">{{ M.enabledTitle }}</div>
+            <div class="text-body-2">{{ M.enabledBody }}</div>
         </v-alert>
 
         <!-- TOTP -->
         <v-card variant="outlined" class="mb-4">
             <v-card-title class="text-subtitle-1">
-                認証アプリ（TOTP）
+                {{ M.totpTitle }}
                 <v-chip
                     :color="totp.enabled ? 'success' : 'grey'"
                     size="small"
                     variant="flat"
                     class="ml-2"
                 >
-                    {{ totp.enabled ? '有効' : '未設定' }}
+                    {{ totp.enabled ? M.enabled : MESSAGES.common.notSet }}
                 </v-chip>
             </v-card-title>
             <v-card-text>
                 <p class="text-body-2 mb-3">
-                    Google Authenticator / 1Password / Authy などの認証アプリに
-                    QRコードを読み込み、表示される6桁コードでログインします。
+                    {{ M.totpDescription }}
                 </p>
                 <v-btn color="primary" variant="flat" href="/admin/two-factor-setup">
-                    {{ totp.enabled ? '認証アプリの再設定' : '認証アプリを設定する' }}
+                    {{ totp.enabled ? M.totpReconfigure : M.totpConfigure }}
                 </v-btn>
             </v-card-text>
         </v-card>
@@ -82,30 +83,29 @@ const verifyCode = (): void => {
         <!-- SMS -->
         <v-card variant="outlined">
             <v-card-title class="text-subtitle-1">
-                SMS（予備の連絡先）
+                {{ M.smsTitle }}
                 <v-chip
                     :color="phone.verified ? 'success' : 'grey'"
                     size="small"
                     variant="flat"
                     class="ml-2"
                 >
-                    {{ phone.verified ? '確認済み' : '未確認' }}
+                    {{ phone.verified ? M.verified : M.unverified }}
                 </v-chip>
             </v-card-title>
             <v-card-text>
                 <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-                    SMS は<strong>予備の連絡手段</strong>です。これだけでは二段階認証の要件を満たしません
-                    （認証アプリの設定が必要です）。
+                    {{ M.smsNoticeLead }}<strong>{{ M.smsNoticeStrong }}</strong>{{ M.smsNoticeTail }}
                 </v-alert>
 
                 <p v-if="phone.masked" class="text-body-2 mb-3">
-                    登録番号: <code>{{ phone.masked }}</code>
+                    {{ M.registeredNumber }} <code>{{ phone.masked }}</code>
                 </p>
 
                 <div class="d-flex ga-3 align-center flex-wrap mb-3">
                     <v-text-field
                         v-model="phoneForm.phone"
-                        label="携帯電話番号"
+                        :label="M.mobilePhone"
                         hide-details="auto"
                         :error-messages="phoneForm.errors.phone"
                         style="max-width: 280px"
@@ -116,14 +116,14 @@ const verifyCode = (): void => {
                         :disabled="!phoneForm.phone"
                         @click="sendCode"
                     >
-                        認証コードを送信
+                        {{ M.sendCode }}
                     </v-btn>
                 </div>
 
                 <div v-if="phone.pending_verification" class="d-flex ga-3 align-center flex-wrap">
                     <v-text-field
                         v-model="codeForm.code"
-                        label="認証コード"
+                        :label="M.verificationCode"
                         hide-details="auto"
                         :error-messages="codeForm.errors.code"
                         style="max-width: 200px"
@@ -134,7 +134,7 @@ const verifyCode = (): void => {
                         :disabled="!codeForm.code"
                         @click="verifyCode"
                     >
-                        確認する
+                        {{ M.verify }}
                     </v-btn>
                 </div>
             </v-card-text>
@@ -143,20 +143,20 @@ const verifyCode = (): void => {
         <!-- Google 連携（二段階認証を代替しない） -->
         <v-card variant="outlined" class="mt-4">
             <v-card-title class="text-subtitle-1">
-                Google アカウント連携
+                {{ M.googleTitle }}
                 <v-chip
                     :color="google.linked ? 'success' : 'grey'"
                     size="small"
                     variant="flat"
                     class="ml-2"
                 >
-                    {{ google.linked ? '連携済み' : '未連携' }}
+                    {{ google.linked ? M.linked : M.unlinked }}
                 </v-chip>
             </v-card-title>
             <v-card-text>
                 <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-                    Google 連携はログインを簡単にするための手段です。
-                    <strong>二段階認証（TOTP）は引き続き必須</strong>で、Google ログインでも省略されません。
+                    {{ M.googleNoticeLead }}
+                    <strong>{{ M.googleNoticeStrong }}</strong>{{ M.googleNoticeTail }}
                 </v-alert>
                 <v-btn
                     v-if="!google.linked"
@@ -165,10 +165,10 @@ const verifyCode = (): void => {
                     prepend-icon="mdi-google"
                     @click="linkGoogle"
                 >
-                    Google アカウントを連携
+                    {{ M.linkGoogle }}
                 </v-btn>
                 <v-btn v-else color="error" variant="outlined" @click="unlinkGoogle">
-                    連携を解除
+                    {{ M.unlinkGoogle }}
                 </v-btn>
             </v-card-text>
         </v-card>

@@ -4,6 +4,9 @@ import { computed, ref, watch } from 'vue';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateObject, formatDateTime } from '@/utils/dateFormat';
+import { signed } from '@/utils/numberFormat';
 
 defineOptions({ layout: AdminLayout });
 
@@ -49,23 +52,23 @@ const props = defineProps<{
 }>();
 
 const walletHeaders = [
-    { title: '商品', key: 'product_name' },
-    { title: '付与数', key: 'purchased_count' },
-    { title: '利用可能', key: 'available' },
-    { title: '予約確保', key: 'held' },
-    { title: '合計', key: 'total' },
-    { title: '有効期限', key: 'expires_at' },
-    { title: '状態', key: 'status' },
+    { title: MESSAGES.mastersUi.customerTickets.product, key: 'product_name' },
+    { title: MESSAGES.mastersUi.customerTickets.grantedCount, key: 'purchased_count' },
+    { title: MESSAGES.mastersUi.customerTickets.available, key: 'available' },
+    { title: MESSAGES.mastersUi.customerTickets.held, key: 'held' },
+    { title: MESSAGES.mastersUi.customerTickets.total, key: 'total' },
+    { title: MESSAGES.mastersUi.customerTickets.expiresAt, key: 'expires_at' },
+    { title: MESSAGES.mastersUi.customerTickets.status, key: 'status' },
     { title: '', key: 'actions', sortable: false },
 ] as const;
 
 const historyHeaders = [
-    { title: '日時', key: 'created_at' },
+    { title: MESSAGES.mastersUi.customerTickets.dateTime, key: 'created_at' },
     { title: 'Wallet', key: 'wallet_id' },
-    { title: '種別', key: 'type' },
-    { title: '増減', key: 'delta' },
-    { title: '予約ID', key: 'reservation_id' },
-    { title: '理由', key: 'reason' },
+    { title: MESSAGES.mastersUi.customerTickets.type, key: 'type' },
+    { title: MESSAGES.mastersUi.customerTickets.delta, key: 'delta' },
+    { title: MESSAGES.mastersUi.customerTickets.reservationId, key: 'reservation_id' },
+    { title: MESSAGES.mastersUi.customerTickets.reason, key: 'reason' },
 ] as const;
 
 const grantDialog = ref(false);
@@ -169,47 +172,24 @@ const submitAdjust = (): void => {
     });
 };
 
-const formatDate = (value: string): string =>
-    new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' }).format(new Date(value));
-
-const formatDateTime = (value: string): string =>
-    new Intl.DateTimeFormat('ja-JP', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value.replace(' ', 'T')));
-
 const statusLabel = (status: string): string => {
-    const labels: Record<string, string> = {
-        active: '有効',
-        exhausted: '残数なし',
-        expired: '期限切れ',
-    };
+    const labels: Record<string, string> = MESSAGES.mastersUi.customerTickets.statuses;
 
     return labels[status] ?? status;
 };
 
 const transactionLabel = (type: string): string => {
-    const labels: Record<string, string> = {
-        PURCHASE: '購入',
-        GRANT: '付与',
-        REVOKE: '取消',
-        RESERVE_HOLD: '予約確保',
-        RESERVE_RELEASE: '予約確保解除',
-        CONSUME: '消化',
-        EXPIRE: '期限切れ',
-        ADJUST: '調整',
-    };
+    const labels: Record<string, string> = MESSAGES.mastersUi.customerTickets.transactionTypes;
 
     return labels[type] ?? type;
 };
 
-const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delta));
 </script>
 
 <template>
-    <Head :title="`${customer.name}の回数券`" />
+    <Head :title="fillMessage(MESSAGES.mastersUi.customerTickets.head, { name: customer.name })" />
 
-    <PageHeader title="顧客回数券" :subtitle="customer.name">
+    <PageHeader :title="MESSAGES.mastersUi.customerTickets.title" :subtitle="customer.name">
         <template #actions>
             <v-btn
                 v-if="can.grant"
@@ -217,7 +197,7 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
                 :disabled="ticketProducts.length === 0"
                 @click="openGrant"
             >
-                付与
+                {{ MESSAGES.mastersUi.customerTickets.grant }}
             </v-btn>
         </template>
     </PageHeader>
@@ -227,49 +207,49 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
             {{ MESSAGES.ticket.noneGrantable }}
         </v-alert>
 
-        <SectionCard class="ark-table-section mb-6" title="保有回数券">
+        <SectionCard class="ark-table-section mb-6" :title="MESSAGES.mastersUi.customerTickets.walletTitle">
         <v-data-table
             :headers="walletHeaders"
             :items="wallets"
             item-value="id"
-            no-data-text="保有している回数券はありません。"
+            :no-data-text="MESSAGES.mastersUi.customerTickets.noWallets"
         >
             <template #no-data>
                 <EmptyState
                     icon="mdi-ticket-confirmation-outline"
-                    title="保有している回数券はありません"
-                    description="回数券を付与すると、こちらに残数と有効期限が表示されます。"
+                    :title="MESSAGES.mastersUi.customerTickets.emptyWalletsTitle"
+                    :description="MESSAGES.mastersUi.customerTickets.emptyWalletsDescription"
                 />
             </template>
-            <template #item.purchased_count="{ item }">{{ item.purchased_count }}回</template>
-            <template #item.expires_at="{ item }">{{ formatDate(item.expires_at) }}</template>
+            <template #item.purchased_count="{ item }">{{ fillMessage(MESSAGES.mastersUi.customerTickets.countValue, { count: String(item.purchased_count) }) }}</template>
+            <template #item.expires_at="{ item }">{{ formatDateObject(new Date(item.expires_at), 'dateMedium') }}</template>
             <template #item.status="{ item }">
                 <StatusChip :status="item.status" :label="statusLabel(item.status)" />
             </template>
             <template #item.actions="{ item }">
                 <div v-if="can.grant" class="d-flex ga-1 justify-end">
-                    <v-btn size="small" variant="text" @click="openRevoke(item)">取消</v-btn>
-                    <v-btn size="small" variant="text" @click="openAdjust(item)">調整</v-btn>
+                    <v-btn size="small" variant="text" @click="openRevoke(item)">{{ MESSAGES.mastersUi.customerTickets.revoke }}</v-btn>
+                    <v-btn size="small" variant="text" @click="openAdjust(item)">{{ MESSAGES.mastersUi.customerTickets.adjust }}</v-btn>
                 </div>
             </template>
         </v-data-table>
         </SectionCard>
 
-        <SectionCard class="ark-table-section" title="履歴">
+        <SectionCard class="ark-table-section" :title="MESSAGES.mastersUi.customerTickets.history">
         <v-data-table
             :headers="historyHeaders"
             :items="history"
             item-value="id"
-            no-data-text="回数券履歴はありません。"
+            :no-data-text="MESSAGES.mastersUi.customerTickets.noHistory"
         >
             <template #no-data>
                 <EmptyState
                     icon="mdi-history"
-                    title="回数券履歴はありません"
-                    description="付与や利用、調整を行うと、こちらに履歴が記録されます。"
+                    :title="MESSAGES.mastersUi.customerTickets.emptyHistoryTitle"
+                    :description="MESSAGES.mastersUi.customerTickets.emptyHistoryDescription"
                 />
             </template>
-            <template #item.created_at="{ item }">{{ formatDateTime(item.created_at) }}</template>
+            <template #item.created_at="{ item }">{{ formatDateTime(item.created_at, 'medium') }}</template>
             <template #item.wallet_id="{ item }">#{{ item.wallet_id }}</template>
             <template #item.type="{ item }">{{ transactionLabel(item.type) }}</template>
             <template #item.delta="{ item }">{{ signed(item.delta) }}</template>
@@ -280,19 +260,19 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
         </v-data-table>
         <v-card-actions>
             <v-btn variant="text" :href="`/admin/customers/${customer.user_id}`">
-                顧客詳細へ戻る
+                {{ MESSAGES.mastersUi.customerTickets.backToCustomer }}
             </v-btn>
         </v-card-actions>
         </SectionCard>
     </div>
 
     <v-dialog v-model="grantDialog" max-width="560">
-        <v-card title="回数券を付与">
+        <v-card :title="MESSAGES.mastersUi.customerTickets.grantTitle">
             <v-card-text>
                 <v-form @submit.prevent="submitGrant">
                     <v-select
                         v-model="grantForm.ticket_product_id"
-                        label="回数券商品"
+                        :label="MESSAGES.mastersUi.customerTickets.productField"
                         :items="ticketProducts"
                         item-title="name"
                         item-value="id"
@@ -301,7 +281,7 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
                     />
                     <v-text-field
                         v-model.number="grantForm.count"
-                        label="付与回数"
+                        :label="MESSAGES.mastersUi.customerTickets.grantCount"
                         type="number"
                         min="1"
                         max="999"
@@ -310,7 +290,7 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
                     />
                     <v-textarea
                         v-model="grantForm.reason"
-                        label="理由"
+                        :label="MESSAGES.mastersUi.customerTickets.reason"
                         maxlength="255"
                         counter
                         :error-messages="grantForm.errors.reason"
@@ -319,23 +299,23 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
                 </v-form>
             </v-card-text>
             <v-card-actions class="justify-end">
-                <v-btn variant="text" @click="grantDialog = false">キャンセル</v-btn>
+                <v-btn variant="text" @click="grantDialog = false">{{ MESSAGES.mastersUi.customerTickets.cancel }}</v-btn>
                 <v-btn color="primary" :loading="grantForm.processing" @click="submitGrant">
-                    付与する
+                    {{ MESSAGES.mastersUi.customerTickets.grantSubmit }}
                 </v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
 
     <v-dialog v-model="revokeDialog" max-width="560">
-        <v-card :title="`${selectedWallet?.product_name ?? ''}を取り消す`">
+        <v-card :title="fillMessage(MESSAGES.mastersUi.customerTickets.revokeTitle, { name: selectedWallet?.product_name ?? '' })">
             <v-card-text>
                 <v-alert v-if="revokeBusinessError" type="error" class="mb-4">
                     {{ revokeBusinessError }}
                 </v-alert>
                 <v-text-field
                     v-model.number="revokeForm.count"
-                    label="取消回数"
+                    :label="MESSAGES.mastersUi.customerTickets.revokeCount"
                     type="number"
                     min="1"
                     :error-messages="revokeForm.errors.count"
@@ -343,7 +323,7 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
                 />
                 <v-textarea
                     v-model="revokeForm.reason"
-                    label="理由"
+                    :label="MESSAGES.mastersUi.customerTickets.reason"
                     maxlength="255"
                     counter
                     :error-messages="revokeForm.errors.reason"
@@ -351,30 +331,30 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
                 />
             </v-card-text>
             <v-card-actions class="justify-end">
-                <v-btn variant="text" @click="revokeDialog = false">キャンセル</v-btn>
+                <v-btn variant="text" @click="revokeDialog = false">{{ MESSAGES.mastersUi.customerTickets.cancel }}</v-btn>
                 <v-btn color="error" :loading="revokeForm.processing" @click="submitRevoke">
-                    取り消す
+                    {{ MESSAGES.mastersUi.customerTickets.revokeSubmit }}
                 </v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
 
     <v-dialog v-model="adjustDialog" max-width="560">
-        <v-card :title="`${selectedWallet?.product_name ?? ''}の残数を調整`">
+        <v-card :title="fillMessage(MESSAGES.mastersUi.customerTickets.adjustTitle, { name: selectedWallet?.product_name ?? '' })">
             <v-card-text>
                 <v-alert v-if="adjustBusinessError" type="error" class="mb-4">
                     {{ adjustBusinessError }}
                 </v-alert>
                 <v-text-field
                     v-model.number="adjustForm.delta"
-                    label="調整数（減らす場合は負数）"
+                    :label="MESSAGES.mastersUi.customerTickets.adjustCount"
                     type="number"
                     :error-messages="adjustForm.errors.delta"
                     required
                 />
                 <v-textarea
                     v-model="adjustForm.reason"
-                    label="理由"
+                    :label="MESSAGES.mastersUi.customerTickets.reason"
                     maxlength="255"
                     counter
                     :error-messages="adjustForm.errors.reason"
@@ -382,9 +362,9 @@ const signed = (delta: number): string => (delta > 0 ? `+${delta}` : String(delt
                 />
             </v-card-text>
             <v-card-actions class="justify-end">
-                <v-btn variant="text" @click="adjustDialog = false">キャンセル</v-btn>
+                <v-btn variant="text" @click="adjustDialog = false">{{ MESSAGES.mastersUi.customerTickets.cancel }}</v-btn>
                 <v-btn color="primary" :loading="adjustForm.processing" @click="submitAdjust">
-                    調整する
+                    {{ MESSAGES.mastersUi.customerTickets.adjustSubmit }}
                 </v-btn>
             </v-card-actions>
         </v-card>

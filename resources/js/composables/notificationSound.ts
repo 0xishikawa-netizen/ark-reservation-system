@@ -10,6 +10,65 @@
  * それまでに届いた通知は音なし（通知カードは通常どおり表示される）。
  */
 
+import { MESSAGES } from '@/constants/messages';
+
+/** コンプレッサーのしきい値。 */
+const COMPRESSOR_THRESHOLD_DB = -18;
+/** コンプレッサーのニー幅。 */
+const COMPRESSOR_KNEE_DB = 6;
+/** コンプレッサーの圧縮比。 */
+const COMPRESSOR_RATIO = 8;
+/** コンプレッサーの立ち上がり時間。 */
+const COMPRESSOR_ATTACK_SECONDS = 0.002;
+/** コンプレッサーの解放時間。 */
+const COMPRESSOR_RELEASE_SECONDS = 0.15;
+/** 音量包絡の無音相当値。 */
+const SILENT_GAIN = 0.0001;
+/** 音ごとの指定がない場合のピーク音量。 */
+const DEFAULT_TONE_PEAK = 0.35;
+/** 音量包絡の立ち上がり時間。 */
+const TONE_ATTACK_SECONDS = 0.01;
+/** 持続音の終了直前に確保する時間。 */
+const SUSTAIN_RELEASE_LEAD_SECONDS = 0.02;
+/** 持続音の最短立ち上がり完了時刻。 */
+const SUSTAIN_MIN_ATTACK_SECONDS = 0.011;
+/** FM変調を終了時に残す割合。 */
+const FM_END_DEPTH_RATIO = 0.05;
+/** 音源停止時に確保する余韻。 */
+const NODE_STOP_TAIL_SECONDS = 0.05;
+/** ベル音の既定長。 */
+const DEFAULT_BELL_DURATION_SECONDS = 1.1;
+/** ベル音の既定音量。 */
+const DEFAULT_BELL_VOLUME = 0.45;
+/** ベル音の既定変調周波数比。 */
+const DEFAULT_BELL_FM_RATIO = 3.5;
+/** ベル音の既定変調量。 */
+const DEFAULT_BELL_FM_INDEX = 1.2;
+/** 電子音の既定長。 */
+const DEFAULT_BEEP_LENGTH_SECONDS = 0.07;
+/** 電子音の既定音量。 */
+const DEFAULT_BEEP_VOLUME = 0.3;
+/** 設定可能な最小音量。 */
+const MIN_VOLUME = 0;
+/** 設定可能な最大音量。 */
+const MAX_VOLUME = 100;
+/** 聴感を補うマスター音量倍率。 */
+const MASTER_GAIN_MULTIPLIER = 1.6;
+/** エコー用ディレイノードの最大遅延。 */
+const MAX_ECHO_DELAY_SECONDS = 1;
+/** エコーの遅延時間。 */
+const ECHO_DELAY_SECONDS = 0.16;
+/** エコーのフィードバック量。 */
+const ECHO_FEEDBACK_GAIN = 0.28;
+/** エコー成分の音量。 */
+const ECHO_WET_GAIN = 0.3;
+/** 再生開始前に確保する時間。 */
+const PLAYBACK_LEAD_SECONDS = 0.02;
+/** 音源破棄までに確保する余韻。 */
+const CLEANUP_TAIL_SECONDS = 2;
+/** 秒をミリ秒へ変換する倍率。 */
+const MILLISECONDS_PER_SECOND = 1000;
+
 type AudioContextCtor = typeof AudioContext;
 
 /** 選べる通知音（サーバー側 NotificationSettings::SOUND_TYPES と揃える）。 */
@@ -38,26 +97,11 @@ export interface NotificationSoundOption {
     loud: boolean;
 }
 
-export const NOTIFICATION_SOUND_OPTIONS: NotificationSoundOption[] = [
-    { value: 'glass', label: 'キラン', description: '高く澄んだ2音', loud: true },
-    { value: 'message', label: 'ピコン', description: '短く明るい上昇音', loud: true },
-    { value: 'tritone', label: 'トゥルルン', description: '軽やかな3音', loud: true },
-    { value: 'sparkle', label: 'キラリン', description: 'きらきらした上昇音', loud: true },
-    { value: 'harp', label: 'ポロロン', description: 'ハープ風の分散和音', loud: true },
-    { value: 'calendar', label: 'リンリン', description: '澄んだベルを3回', loud: true },
-    { value: 'drop', label: 'ポコン', description: '水滴のような丸い音', loud: true },
-    { value: 'chime', label: 'ピンポン', description: '定番の2音チャイム', loud: false },
-    { value: 'bell', label: 'ベル', description: '余韻のある澄んだ音', loud: false },
-    { value: 'marimba', label: 'マリンバ', description: 'やわらかい3音', loud: false },
-    { value: 'pop', label: 'ポップ', description: '短く控えめな音', loud: false },
-    { value: 'alert', label: 'ピピピ', description: '短い電子音3回', loud: false },
-];
+export const NOTIFICATION_SOUND_OPTIONS: NotificationSoundOption[] =
+    MESSAGES.boardUi.notificationSound.sounds.map((option) => ({ ...option }));
 
-export const NOTIFICATION_REPEAT_OPTIONS: { value: NotificationRepeatMode; label: string; description: string }[] = [
-    { value: 'once', label: '1回', description: '届いた時に1回だけ鳴らす' },
-    { value: 'three', label: '3回', description: '少し間をあけて3回鳴らす' },
-    { value: 'until_ack', label: '確認するまで', description: '通知を開くか閉じるまで15秒ごとに鳴らす（最大5分）' },
-];
+export const NOTIFICATION_REPEAT_OPTIONS: { value: NotificationRepeatMode; label: string; description: string }[] =
+    MESSAGES.boardUi.notificationSound.repeats.map((option) => ({ ...option }));
 
 export const DEFAULT_NOTIFICATION_SOUND: NotificationSoundType = 'glass';
 export const DEFAULT_NOTIFICATION_VOLUME = 80;
@@ -94,11 +138,11 @@ function getContext(): AudioContext | null {
         context = new Ctor();
         // 音割れさせずに音圧を上げるためのコンプレッサー（全音共通の出口）。
         const compressor = context.createDynamicsCompressor();
-        compressor.threshold.setValueAtTime(-18, context.currentTime);
-        compressor.knee.setValueAtTime(6, context.currentTime);
-        compressor.ratio.setValueAtTime(8, context.currentTime);
-        compressor.attack.setValueAtTime(0.002, context.currentTime);
-        compressor.release.setValueAtTime(0.15, context.currentTime);
+        compressor.threshold.setValueAtTime(COMPRESSOR_THRESHOLD_DB, context.currentTime);
+        compressor.knee.setValueAtTime(COMPRESSOR_KNEE_DB, context.currentTime);
+        compressor.ratio.setValueAtTime(COMPRESSOR_RATIO, context.currentTime);
+        compressor.attack.setValueAtTime(COMPRESSOR_ATTACK_SECONDS, context.currentTime);
+        compressor.release.setValueAtTime(COMPRESSOR_RELEASE_SECONDS, context.currentTime);
         compressor.connect(context.destination);
         output = compressor;
     } catch {
@@ -142,7 +186,7 @@ function tone(ctx: AudioContext, dest: AudioNode, start: number, t: Tone): void 
     const gain = ctx.createGain();
     const startAt = start + t.at;
     const endAt = startAt + t.duration;
-    const peak = t.volume ?? 0.35;
+    const peak = t.volume ?? DEFAULT_TONE_PEAK;
 
     osc.type = t.type ?? 'sine';
     osc.frequency.setValueAtTime(t.frequency, startAt);
@@ -152,14 +196,14 @@ function tone(ctx: AudioContext, dest: AudioNode, start: number, t: Tone): void 
     }
 
     // クリックノイズが出ないよう、立ち上がり・減衰をなめらかにする。
-    gain.gain.setValueAtTime(0.0001, startAt);
-    gain.gain.exponentialRampToValueAtTime(peak, startAt + 0.01);
+    gain.gain.setValueAtTime(SILENT_GAIN, startAt);
+    gain.gain.exponentialRampToValueAtTime(peak, startAt + TONE_ATTACK_SECONDS);
 
     if (t.sustain) {
-        gain.gain.setValueAtTime(peak, Math.max(endAt - 0.02, startAt + 0.011));
+        gain.gain.setValueAtTime(peak, Math.max(endAt - SUSTAIN_RELEASE_LEAD_SECONDS, startAt + SUSTAIN_MIN_ATTACK_SECONDS));
     }
 
-    gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
+    gain.gain.exponentialRampToValueAtTime(SILENT_GAIN, endAt);
 
     if (t.fm !== undefined) {
         const mod = ctx.createOscillator();
@@ -169,25 +213,39 @@ function tone(ctx: AudioContext, dest: AudioNode, start: number, t: Tone): void 
         mod.frequency.setValueAtTime(t.frequency * t.fm.ratio, startAt);
         // 立ち上がりは倍音多め→だんだん丸い音に（ベルの自然な減衰）。
         modGain.gain.setValueAtTime(depth, startAt);
-        modGain.gain.exponentialRampToValueAtTime(Math.max(depth * 0.05, 0.0001), endAt);
+        modGain.gain.exponentialRampToValueAtTime(Math.max(depth * FM_END_DEPTH_RATIO, SILENT_GAIN), endAt);
         mod.connect(modGain);
         modGain.connect(osc.frequency);
         mod.start(startAt);
-        mod.stop(endAt + 0.05);
+        mod.stop(endAt + NODE_STOP_TAIL_SECONDS);
     }
 
     osc.connect(gain);
     gain.connect(dest);
     osc.start(startAt);
-    osc.stop(endAt + 0.05);
+    osc.stop(endAt + NODE_STOP_TAIL_SECONDS);
 }
 
 /** グラス・ベル系の1音（FM 合成）。 */
-function bellNote(frequency: number, at: number, duration = 1.1, volume = 0.45, ratio = 3.5, index = 1.2): Tone {
+function bellNote(
+    frequency: number,
+    at: number,
+    duration = DEFAULT_BELL_DURATION_SECONDS,
+    volume = DEFAULT_BELL_VOLUME,
+    ratio = DEFAULT_BELL_FM_RATIO,
+    index = DEFAULT_BELL_FM_INDEX,
+): Tone {
     return { frequency, at, duration, volume, fm: { ratio, index } };
 }
 
-function beeps(startAt: number, count: number, gap: number, frequency: number, length = 0.07, volume = 0.3): Tone[] {
+function beeps(
+    startAt: number,
+    count: number,
+    gap: number,
+    frequency: number,
+    length = DEFAULT_BEEP_LENGTH_SECONDS,
+    volume = DEFAULT_BEEP_VOLUME,
+): Tone[] {
     return Array.from({ length: count }, (_, i) => ({
         frequency,
         at: startAt + i * gap,
@@ -282,24 +340,24 @@ export function playNotificationSound(
     const play = (): void => {
         const master = ctx.createGain();
         // 聴感に合わせて2乗カーブにする（50% でもちゃんと小さく聞こえるように）。
-        const level = Math.min(Math.max(volume, 0), 100) / 100;
-        master.gain.setValueAtTime(level * level * 1.6, ctx.currentTime);
+        const level = Math.min(Math.max(volume, MIN_VOLUME), MAX_VOLUME) / MAX_VOLUME;
+        master.gain.setValueAtTime(level * level * MASTER_GAIN_MULTIPLIER, ctx.currentTime);
         master.connect(dest);
 
         // 通知音らしい広がりを出す軽いエコー（元の音＋遅れて小さく2〜3回返ってくる音）。
-        const delay = ctx.createDelay(1);
+        const delay = ctx.createDelay(MAX_ECHO_DELAY_SECONDS);
         const feedback = ctx.createGain();
         const wet = ctx.createGain();
-        delay.delayTime.setValueAtTime(0.16, ctx.currentTime);
-        feedback.gain.setValueAtTime(0.28, ctx.currentTime);
-        wet.gain.setValueAtTime(0.3, ctx.currentTime);
+        delay.delayTime.setValueAtTime(ECHO_DELAY_SECONDS, ctx.currentTime);
+        feedback.gain.setValueAtTime(ECHO_FEEDBACK_GAIN, ctx.currentTime);
+        wet.gain.setValueAtTime(ECHO_WET_GAIN, ctx.currentTime);
         master.connect(delay);
         delay.connect(feedback);
         feedback.connect(delay);
         delay.connect(wet);
         wet.connect(dest);
 
-        const now = ctx.currentTime + 0.02;
+        const now = ctx.currentTime + PLAYBACK_LEAD_SECONDS;
 
         for (const t of PATTERNS[type] ?? PATTERNS[DEFAULT_NOTIFICATION_SOUND]) {
             tone(ctx, master, now, t);
@@ -311,7 +369,7 @@ export function playNotificationSound(
             delay.disconnect();
             feedback.disconnect();
             wet.disconnect();
-        }, (notificationSoundLength(type) + 2) * 1000);
+        }, (notificationSoundLength(type) + CLEANUP_TAIL_SECONDS) * MILLISECONDS_PER_SECOND);
     };
 
     play();

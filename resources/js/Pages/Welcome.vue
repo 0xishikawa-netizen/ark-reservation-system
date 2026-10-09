@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import { MESSAGES } from '@/constants/messages';
 
 defineProps<{
     appName: string;
@@ -27,16 +28,16 @@ defineProps<{
 
                 <h1 class="welcome__title">{{ appName }}</h1>
                 <p class="welcome__lead">
-                    予約・回数券・月額会員をオンラインで。<br />
-                    アカウントにログインしてご利用ください。
+                    {{ MESSAGES.customerUi.welcome.leadFirst }}<br />
+                    {{ MESSAGES.customerUi.welcome.leadSecond }}
                 </p>
 
                 <div class="welcome__actions">
                     <v-btn color="primary" variant="flat" size="large" href="/login">
-                        ログイン
+                        {{ MESSAGES.customerUi.welcome.login }}
                     </v-btn>
                     <v-btn color="primary" variant="outlined" size="large" href="/register">
-                        新規登録
+                        {{ MESSAGES.customerUi.welcome.register }}
                     </v-btn>
                 </div>
             </div>

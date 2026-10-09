@@ -5,6 +5,12 @@ import PanelShell from '@/components/admin/PanelShell.vue';
 import { DateField, TimeField } from '@/components/ark';
 import { LEGACY_BLOCK_TYPES, BLOCK_TYPES } from '@/constants/scheduleBlockTypes';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+
+/** 予定時刻選択の最小刻み。 */
+const MIN_SLOT_MINUTES = 5;
+/** 1時間あたりの分数。 */
+const MINUTES_PER_HOUR = 60;
 
 interface StaffOption {
     user_id: number;
@@ -80,20 +86,22 @@ const blockColor = computed(() => BLOCK_COLOR[props.block.type] ?? 'secondary');
 function toMinutes(hhmm: string): number {
     const [h, m] = hhmm.slice(0, 5).split(':').map(Number);
 
-    return h * 60 + m;
+    return h * MINUTES_PER_HOUR + m;
 }
 
 /** 所要時間（「1時間30分」の形）。何分押さえているかを一目で分かるようにする。 */
 const durationLabel = computed<string>(() => {
     const minutes = Math.max(toMinutes(props.block.end_at) - toMinutes(props.block.start_at), 0);
-    const hours = Math.floor(minutes / 60);
-    const rest = minutes % 60;
+    const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+    const rest = minutes % MINUTES_PER_HOUR;
 
     if (hours === 0) {
-        return `${rest}分`;
+        return fillMessage(MESSAGES.boardUi.scheduleBlock.minutes, { minutes: String(rest) });
     }
 
-    return rest === 0 ? `${hours}時間` : `${hours}時間${rest}分`;
+    return rest === 0
+        ? fillMessage(MESSAGES.boardUi.scheduleBlock.hours, { hours: String(hours) })
+        : fillMessage(MESSAGES.boardUi.scheduleBlock.hoursAndMinutes, { hours: String(hours), minutes: String(rest) });
 });
 
 function fmtDay(iso: string): string {
@@ -109,7 +117,7 @@ function fmtDay(iso: string): string {
 
 const openTime = computed(() => props.businessHours.open.slice(0, 5));
 const closeTime = computed(() => props.businessHours.close.slice(0, 5));
-const stepMinutes = computed(() => Math.max(props.businessHours.slot_minutes, 5));
+const stepMinutes = computed(() => Math.max(props.businessHours.slot_minutes, MIN_SLOT_MINUTES));
 
 const emit = defineEmits<{
     close: [];
@@ -123,10 +131,10 @@ const deleting = ref(false);
 
 const targetName = computed<string>(() => {
     if (props.block.staff_id !== null) {
-        return props.staff.find((s) => s.user_id === props.block.staff_id)?.display_name ?? 'スタッフ';
+        return props.staff.find((s) => s.user_id === props.block.staff_id)?.display_name ?? MESSAGES.boardUi.scheduleBlock.staff;
     }
     if (props.block.booth_id !== null) {
-        return props.booths.find((b) => b.id === props.block.booth_id)?.name ?? 'ブース';
+        return props.booths.find((b) => b.id === props.block.booth_id)?.name ?? MESSAGES.boardUi.scheduleBlock.booth;
     }
 
     return MESSAGES.common.emptyValue;
@@ -186,7 +194,7 @@ function confirmDelete(): void {
 
 <template>
     <PanelShell
-        title="予定詳細"
+        :title="MESSAGES.boardUi.scheduleBlock.detailTitle"
         icon="mdi-clock-outline"
         :show-back="canGoBack"
         @close="emit('close')"
@@ -218,14 +226,14 @@ function confirmDelete(): void {
             <!-- 対象・メモは定義リストで揃える。 -->
             <dl class="sbd__facts">
                 <div>
-                    <dt>対象</dt>
+                    <dt>{{ MESSAGES.boardUi.scheduleBlock.target }}</dt>
                     <dd>
                         <v-icon icon="mdi-account-outline" size="13" class="sbd__facts-icon" />
                         {{ targetName }}
                     </dd>
                 </div>
                 <div>
-                    <dt>メモ</dt>
+                    <dt>{{ MESSAGES.boardUi.scheduleBlock.memo }}</dt>
                     <dd :class="{ 'sbd__facts-empty': !block.note }">
                         {{ block.note || MESSAGES.common.emptyValue }}
                     </dd>
@@ -243,7 +251,7 @@ function confirmDelete(): void {
                 :items="staff"
                 item-title="display_name"
                 item-value="user_id"
-                label="スタッフ"
+                :label="MESSAGES.boardUi.scheduleBlock.staff"
                 density="compact"
                 variant="outlined"
                 hide-details="auto"
@@ -251,8 +259,8 @@ function confirmDelete(): void {
             />
 
             <div class="sbd__typefield">
-                <span class="sbd__typelabel">種類</span>
-                <div class="sbd__typegrid" role="radiogroup" aria-label="予定の種類">
+                <span class="sbd__typelabel">{{ MESSAGES.boardUi.scheduleBlock.type }}</span>
+                <div class="sbd__typegrid" role="radiogroup" :aria-label="MESSAGES.boardUi.scheduleBlock.typeAria">
                     <button
                         v-for="t in blockTypeOptions"
                         :key="t.value"
@@ -272,19 +280,19 @@ function confirmDelete(): void {
             <v-text-field
                 v-if="requiresTitle"
                 v-model="form.title"
-                label="タイトル"
+                :label="MESSAGES.boardUi.scheduleBlock.title"
                 density="compact"
                 variant="outlined"
                 hide-details="auto"
                 :error-messages="form.errors.title"
             />
 
-            <DateField block v-model="form.work_date" label="日付" density="compact" :clearable="false" />
+            <DateField block v-model="form.work_date" :label="MESSAGES.boardUi.scheduleBlock.date" density="compact" :clearable="false" />
 
             <div class="sbd__time-row">
                 <TimeField block
                     v-model="form.start_at"
-                    label="開始"
+                    :label="MESSAGES.boardUi.scheduleBlock.start"
                     density="compact"
                     :min-time="openTime"
                     :max-time="closeTime"
@@ -293,7 +301,7 @@ function confirmDelete(): void {
                 />
                 <TimeField block
                     v-model="form.end_at"
-                    label="終了"
+                    :label="MESSAGES.boardUi.scheduleBlock.end"
                     density="compact"
                     :min-time="openTime"
                     :max-time="closeTime"
@@ -304,7 +312,7 @@ function confirmDelete(): void {
 
             <v-textarea
                 v-model="form.note"
-                label="メモ（任意）"
+                :label="MESSAGES.boardUi.scheduleBlock.optionalMemo"
                 rows="2"
                 auto-grow
                 variant="outlined"
@@ -317,16 +325,16 @@ function confirmDelete(): void {
         <template #footer>
             <div v-if="!editing" class="sbd__actions">
                 <v-btn variant="outlined" color="accent" size="small" prepend-icon="mdi-pencil-outline" @click="editing = true">
-                    編集
+                    {{ MESSAGES.boardUi.scheduleBlock.edit }}
                 </v-btn>
                 <v-btn variant="outlined" color="error" size="small" prepend-icon="mdi-delete-outline" @click="deleteConfirm = true">
-                    削除
+                    {{ MESSAGES.boardUi.scheduleBlock.delete }}
                 </v-btn>
             </div>
             <div v-else class="sbd__actions">
-                <v-btn variant="text" size="small" :disabled="form.processing" @click="editing = false">やめる</v-btn>
+                <v-btn variant="text" size="small" :disabled="form.processing" @click="editing = false">{{ MESSAGES.boardUi.scheduleBlock.stop }}</v-btn>
                 <v-btn color="primary" variant="flat" size="small" :loading="form.processing" @click="submitEdit">
-                    変更を保存
+                    {{ MESSAGES.boardUi.scheduleBlock.saveChanges }}
                 </v-btn>
             </div>
         </template>
@@ -339,8 +347,8 @@ function confirmDelete(): void {
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer />
-                    <v-btn variant="text" :disabled="deleting" @click="deleteConfirm = false">キャンセル</v-btn>
-                    <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDelete">削除する</v-btn>
+                    <v-btn variant="text" :disabled="deleting" @click="deleteConfirm = false">{{ MESSAGES.boardUi.scheduleBlock.cancel }}</v-btn>
+                    <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDelete">{{ MESSAGES.boardUi.scheduleBlock.deleteSubmit }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>

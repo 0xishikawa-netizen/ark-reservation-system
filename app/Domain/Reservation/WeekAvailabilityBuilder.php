@@ -15,7 +15,15 @@ final class WeekAvailabilityBuilder
     private const DISPLAY_SLOT_MINUTES = 30;
 
     /** @var list<string> */
-    private const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+    private const WEEKDAY_KEYS = [
+        'messages.reporting.weekday_sunday',
+        'messages.reporting.weekday_monday',
+        'messages.reporting.weekday_tuesday',
+        'messages.reporting.weekday_wednesday',
+        'messages.reporting.weekday_thursday',
+        'messages.reporting.weekday_friday',
+        'messages.reporting.weekday_saturday',
+    ];
 
     public function __construct(
         private readonly AvailabilityService $availabilityService,
@@ -44,7 +52,7 @@ final class WeekAvailabilityBuilder
                     '%d/%d(%s)',
                     $date->month,
                     $date->day,
-                    self::WEEKDAYS[$date->dayOfWeek],
+                    __(self::WEEKDAY_KEYS[$date->dayOfWeek]),
                 ),
             ];
             $cells[$dateString] = [];

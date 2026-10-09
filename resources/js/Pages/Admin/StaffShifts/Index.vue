@@ -4,8 +4,29 @@ import { computed, reactive, ref, watch } from 'vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { DateField, EmptyValue, PageHeader, SectionCard, TimeField } from '@/components/ark';
 import { MESSAGES, confirmDeleteShiftMessage } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
+
+// 時刻入力の選択間隔（分）。
+const TIME_STEP_MINUTES = 5;
+// 勤怠時刻を素早く調整する候補（分）。
+const CLOCK_IN_NUDGE_MINUTES = [-30, -15, 15, 30] as const;
+const CLOCK_OUT_NUDGE_MINUTES = [-30, -15, 15, 30, 60] as const;
+// 手動勤務一覧を前後に移動する日数（6週間）。
+const PERIOD_SHIFT_DAYS = 42;
+// 直前予約のプリセット値（分）。
+const IMMEDIATE_LEAD_MINUTES = 0;
+const HALF_HOUR_LEAD_MINUTES = 30;
+const ONE_HOUR_LEAD_MINUTES = 60;
+const TWO_HOUR_LEAD_MINUTES = 120;
+// 翌月分を開放できる最大日。
+const MAX_MONTHLY_RELEASE_DAY = 28;
+// 率を百分率へ変換する倍率。
+const PERCENT_SCALE = 100;
+// 時刻計算に使う1時間の分数と1日の時間数。
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
 
 interface StaffOption {
     user_id: number;
@@ -152,12 +173,12 @@ const openEditor = (row: TimesheetRow): void => {
 const hhmmToMin = (value: string): number => {
     const [h, m] = value.split(':').map(Number);
 
-    return h * 60 + m;
+    return h * MINUTES_PER_HOUR + m;
 };
 const minToHhmm = (total: number): string => {
-    const clamped = Math.min(Math.max(total, 0), 24 * 60 - 1);
+    const clamped = Math.min(Math.max(total, 0), HOURS_PER_DAY * MINUTES_PER_HOUR - 1);
 
-    return `${String(Math.floor(clamped / 60)).padStart(2, '0')}:${String(clamped % 60).padStart(2, '0')}`;
+    return `${String(Math.floor(clamped / MINUTES_PER_HOUR)).padStart(2, '0')}:${String(clamped % MINUTES_PER_HOUR).padStart(2, '0')}`;
 };
 /** 出勤・退勤を ±分ずらす（遅出・早出・残業・早退を数字で素早く入れる）。 */
 const nudge = (field: 'clockIn' | 'clockOut', delta: number): void => {
@@ -186,9 +207,9 @@ const recordAsPlanned = (row: TimesheetRow): void => {
         breaks: row.planned.breaks.map((b) => ({ start_at: `${day}T${b.start}`, end_at: `${day}T${b.end}`, type: 'break', note: '' })),
     }, { preserveScroll: true });
 };
-const flagLabel = (flag: TimesheetFlag): string => `${MESSAGES.attendance.flags[flag.type]} ${flag.minutes}分`;
-const minutesLabel = (value: number): string => `${Math.floor(value / 60)}時間${String(value % 60).padStart(2, '0')}分`;
-const weekdayLabel = (iso: string): string => ['日', '月', '火', '水', '木', '金', '土'][new Date(`${iso}T00:00:00`).getDay()];
+const flagLabel = (flag: TimesheetFlag): string => `${MESSAGES.attendance.flags[flag.type]} ${fillMessage(MESSAGES.mastersUi.staffShifts.minutesValue, { minutes: String(flag.minutes) })}`;
+const minutesLabel = (value: number): string => fillMessage(MESSAGES.mastersUi.staffShifts.hoursMinutesValue, { hours: String(Math.floor(value / MINUTES_PER_HOUR)), minutes: String(value % MINUTES_PER_HOUR).padStart(2, '0') });
+const weekdayLabel = (iso: string): string => MESSAGES.mastersUi.staffShifts.weekdaysSundayFirst[new Date(`${iso}T00:00:00`).getDay()];
 const timesheetTotals = computed(() => props.timesheet.reduce((sum, row) => ({
     planned: sum.planned + Math.max((row.planned?.work_min ?? 0) - (row.planned?.break_min ?? 0), 0),
     actual: sum.actual + (row.attendance?.work_min ?? 0),
@@ -217,13 +238,13 @@ const saveAttendance = (): void => {
 
 // 月曜はじまりで表示（データ上は 0=日曜）。
 const WEEKDAYS: { value: number; label: string }[] = [
-    { value: 1, label: '月' },
-    { value: 2, label: '火' },
-    { value: 3, label: '水' },
-    { value: 4, label: '木' },
-    { value: 5, label: '金' },
-    { value: 6, label: '土' },
-    { value: 0, label: '日' },
+    { value: 1, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[0] },
+    { value: 2, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[1] },
+    { value: 3, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[2] },
+    { value: 4, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[3] },
+    { value: 5, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[4] },
+    { value: 6, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[5] },
+    { value: 0, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[6] },
 ];
 
 const staffId = ref<number | null>(props.selected_staff_id);
@@ -403,7 +424,7 @@ const addCustomShift = (): void => {
         onSuccess: () => {
             router.post(
                 '/admin/staff-shifts/exceptions',
-                { staff_id: staffId.value, exception_date: exceptionDate.value, is_off: false, note: '時間変更' },
+                { staff_id: staffId.value, exception_date: exceptionDate.value, is_off: false, note: MESSAGES.mastersUi.staffShifts.timeChangeNote },
                 { preserveScroll: true, preserveState: true },
             );
         },
@@ -457,15 +478,15 @@ const bookingForm = useForm({
 const bookingErrors = computed(() => bookingForm.errors as Record<string, string>);
 
 const leadPresets = [
-    { value: 0, title: '直前まで受付' },
-    { value: 30, title: '30分前まで' },
-    { value: 60, title: '1時間前まで' },
-    { value: 120, title: '2時間前まで' },
+    { value: IMMEDIATE_LEAD_MINUTES, title: MESSAGES.mastersUi.staffShifts.leadPresets.immediate },
+    { value: HALF_HOUR_LEAD_MINUTES, title: MESSAGES.mastersUi.staffShifts.leadPresets.halfHour },
+    { value: ONE_HOUR_LEAD_MINUTES, title: MESSAGES.mastersUi.staffShifts.leadPresets.oneHour },
+    { value: TWO_HOUR_LEAD_MINUTES, title: MESSAGES.mastersUi.staffShifts.leadPresets.twoHours },
 ];
 
 const leadIsPreset = computed(() => leadPresets.some((p) => p.value === bookingForm.min_lead_minutes));
 
-const releaseDayItems = Array.from({ length: 28 }, (_, i) => i + 1);
+const releaseDayItems = Array.from({ length: MAX_MONTHLY_RELEASE_DAY }, (_, i) => i + 1);
 
 const newClosedDate = ref('');
 
@@ -484,8 +505,10 @@ const removeClosedDate = (value: string): void => {
 /** 毎週の定休日（業務マスタの店舗カレンダーと同じ設定）。 */
 const closedWeekdaysForm = useForm({ weekdays: [...(props.booking.closed_weekdays ?? [])] });
 const weekdayOptions = [
-    { value: 1, label: '月' }, { value: 2, label: '火' }, { value: 3, label: '水' }, { value: 4, label: '木' },
-    { value: 5, label: '金' }, { value: 6, label: '土' }, { value: 7, label: '日' },
+    { value: 1, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[0] }, { value: 2, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[1] },
+    { value: 3, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[2] }, { value: 4, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[3] },
+    { value: 5, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[4] }, { value: 6, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[5] },
+    { value: 7, label: MESSAGES.mastersUi.staffShifts.weekdaysMondayFirst[6] },
 ];
 const saveClosedWeekdays = (): void => {
     closedWeekdaysForm.put('/admin/settings/business-masters/calendar/closed-weekdays', { preserveScroll: true, preserveState: true });
@@ -502,27 +525,27 @@ const formatJpDate = (iso: string | null): string => {
     }
     const [y, m, d] = iso.split('-').map(Number);
 
-    return `${y}年${m}月${d}日`;
+    return fillMessage(MESSAGES.mastersUi.staffShifts.yearMonthDay, { year: String(y), month: String(m), day: String(d) });
 };
 
 const horizonSummary = computed(() => {
     if (bookingForm.horizon_mode === 'monthly') {
-        return `毎月${bookingForm.release_day_of_month}日に翌月末までを開放します。`;
+        return fillMessage(MESSAGES.mastersUi.staffShifts.monthlySummary, { day: String(bookingForm.release_day_of_month) });
     }
     if (bookingForm.horizon_mode === 'rolling') {
-        return `今日から${bookingForm.horizon_days}日先まで予約できます。`;
+        return fillMessage(MESSAGES.mastersUi.staffShifts.rollingSummary, { days: String(bookingForm.horizon_days) });
     }
 
-    return '予約可能期間の制限なし（全期間受付）。';
+    return MESSAGES.mastersUi.staffShifts.unlimitedSummary;
 });
 </script>
 
 <template>
-    <Head title="勤務枠" />
+    <Head :title="MESSAGES.mastersUi.staffShifts.title" />
 
     <PageHeader
-        title="勤務枠"
-        subtitle="スタッフごとの勤務（いつもの勤務・特定の日の変更・出退勤）と、店舗全体の休業日・予約受付を設定します。"
+        :title="MESSAGES.mastersUi.staffShifts.title"
+        :subtitle="MESSAGES.mastersUi.staffShifts.subtitle"
     >
         <template #actions>
             <v-btn
@@ -531,7 +554,7 @@ const horizonSummary = computed(() => {
                 prepend-icon="mdi-calendar-month-outline"
                 href="/admin/schedule"
             >
-                ブッキングボード
+                {{ MESSAGES.mastersUi.staffShifts.bookingBoard }}
             </v-btn>
         </template>
     </PageHeader>
@@ -540,17 +563,17 @@ const horizonSummary = computed(() => {
          選択の強制（mandatory）を切る（切らないと片方の列が自分のタブを選び直してしまう）。 -->
     <div class="ark-shift-tabs mb-5">
         <div class="ark-shift-tabs__group">
-            <span class="ark-shift-tabs__label"><v-icon icon="mdi-account-outline" size="16" />スタッフごと</span>
+            <span class="ark-shift-tabs__label"><v-icon icon="mdi-account-outline" size="16" />{{ MESSAGES.mastersUi.staffShifts.perStaff }}</span>
             <v-tabs v-model="tab" color="primary" density="comfortable" :mandatory="false">
-                <v-tab value="basic">いつもの勤務（基本シフト）</v-tab>
-                <v-tab value="exceptions">特定の日だけ変える</v-tab>
+                <v-tab value="basic">{{ MESSAGES.mastersUi.staffShifts.basicTab }}</v-tab>
+                <v-tab value="exceptions">{{ MESSAGES.mastersUi.staffShifts.exceptionsTab }}</v-tab>
                 <v-tab value="attendance">{{ MESSAGES.attendance.tab }}</v-tab>
             </v-tabs>
         </div>
         <div class="ark-shift-tabs__group">
-            <span class="ark-shift-tabs__label"><v-icon icon="mdi-store-outline" size="16" />店舗全体</span>
+            <span class="ark-shift-tabs__label"><v-icon icon="mdi-store-outline" size="16" />{{ MESSAGES.mastersUi.staffShifts.wholeStore }}</span>
             <v-tabs v-model="tab" color="primary" density="comfortable" :mandatory="false">
-                <v-tab value="store">休業日・予約受付</v-tab>
+                <v-tab value="store">{{ MESSAGES.mastersUi.staffShifts.storeTab }}</v-tab>
             </v-tabs>
         </div>
     </div>
@@ -559,7 +582,7 @@ const horizonSummary = computed(() => {
     <div v-if="!isStoreTab" class="mb-4" style="max-width: 320px">
         <v-select
             v-model="staffId"
-            label="スタッフ"
+            :label="MESSAGES.mastersUi.staffShifts.staff"
             :items="staff"
             item-title="display_name"
             item-value="user_id"
@@ -568,7 +591,7 @@ const horizonSummary = computed(() => {
             <template #item="{ props: itemProps, item }">
                 <v-list-item
                     v-bind="itemProps"
-                    :subtitle="item.raw.is_bookable ? undefined : '予約受付停止中'"
+                    :subtitle="item.raw.is_bookable ? undefined : MESSAGES.mastersUi.staffShifts.bookingStopped"
                 />
             </template>
         </v-select>
@@ -585,7 +608,7 @@ const horizonSummary = computed(() => {
                         <div class="ts-total"><small>{{ MESSAGES.attendance.totalPlanned }}</small><strong>{{ minutesLabel(timesheetTotals.planned) }}</strong></div>
                         <div class="ts-total"><small>{{ MESSAGES.attendance.totalActual }}</small><strong>{{ minutesLabel(timesheetTotals.actual) }}</strong></div>
                         <div class="ts-total"><small>{{ MESSAGES.attendance.totalOvertime }}</small><strong>{{ minutesLabel(timesheetTotals.overtime) }}</strong></div>
-                        <div class="ts-total"><small>{{ MESSAGES.attendance.totalUtilization }}</small><strong>{{ timesheetTotals.available > 0 ? Math.round(timesheetTotals.booked / timesheetTotals.available * 100) : '-' }}<template v-if="timesheetTotals.available > 0">%</template></strong></div>
+                        <div class="ts-total"><small>{{ MESSAGES.attendance.totalUtilization }}</small><strong>{{ timesheetTotals.available > 0 ? Math.round(timesheetTotals.booked / timesheetTotals.available * PERCENT_SCALE) : MESSAGES.common.emptyValue }}<template v-if="timesheetTotals.available > 0">%</template></strong></div>
                     </div>
                     <p v-if="timesheet.length === 0" class="text-medium-emphasis">{{ MESSAGES.attendance.none }}</p>
                     <v-table v-else density="comfortable" class="ts-table">
@@ -605,14 +628,14 @@ const horizonSummary = computed(() => {
                                 <td>
                                     <template v-if="row.planned">
                                         <strong>{{ row.planned.start }}〜{{ row.planned.end }}</strong>
-                                        <small class="ts-sub">{{ MESSAGES.attendance.breakLabel }} {{ row.planned.break_min }}分 ・ 実働 {{ minutesLabel(Math.max(row.planned.work_min - row.planned.break_min, 0)) }}</small>
+                                        <small class="ts-sub">{{ MESSAGES.attendance.breakLabel }} {{ fillMessage(MESSAGES.mastersUi.staffShifts.minutesValue, { minutes: String(row.planned.break_min) }) }} ・ {{ MESSAGES.mastersUi.staffShifts.actualWork }} {{ minutesLabel(Math.max(row.planned.work_min - row.planned.break_min, 0)) }}</small>
                                     </template>
                                     <span v-else class="text-medium-emphasis">{{ MESSAGES.attendance.noShift }}</span>
                                 </td>
                                 <td>
                                     <template v-if="row.attendance">
                                         <strong>{{ row.attendance.clock_in ?? MESSAGES.common.notRecorded }}〜{{ row.attendance.clock_out ? row.attendance.clock_out.slice(-5) : MESSAGES.common.notRecorded }}</strong>
-                                        <small class="ts-sub">{{ MESSAGES.attendance.breakLabel }} {{ row.attendance.break_min }}分<template v-if="row.attendance.work_min !== null"> ・ 実働 {{ minutesLabel(row.attendance.work_min) }}</template>
+                                        <small class="ts-sub">{{ MESSAGES.attendance.breakLabel }} {{ fillMessage(MESSAGES.mastersUi.staffShifts.minutesValue, { minutes: String(row.attendance.break_min) }) }}<template v-if="row.attendance.work_min !== null"> ・ {{ MESSAGES.mastersUi.staffShifts.actualWork }} {{ minutesLabel(row.attendance.work_min) }}</template>
                                             <span v-if="row.attendance.status === 'draft'" class="ts-draft">{{ MESSAGES.attendance.draft }}</span></small>
                                     </template>
                                     <span v-else class="text-medium-emphasis">{{ MESSAGES.attendance.notRecorded }}</span>
@@ -624,7 +647,7 @@ const horizonSummary = computed(() => {
                                 <td class="text-right">
                                     <template v-if="row.utilization !== null">
                                         <strong>{{ row.utilization }}%</strong>
-                                        <small class="ts-sub">{{ MESSAGES.attendance.booked }} {{ row.booked_count }}件 {{ row.booked_min }}分</small>
+                                        <small class="ts-sub">{{ fillMessage(MESSAGES.mastersUi.staffShifts.bookedSummary, { count: String(row.booked_count), minutes: String(row.booked_min) }) }}</small>
                                     </template>
                                     <span v-else class="text-medium-emphasis">-</span>
                                 </td>
@@ -642,28 +665,28 @@ const horizonSummary = computed(() => {
                 <v-card v-if="editorRow">
                     <v-card-title>{{ editorRow.date }}（{{ weekdayLabel(editorRow.date) }}） {{ MESSAGES.attendance.editorTitle }}</v-card-title>
                     <v-card-text>
-                        <p v-if="editorRow.planned" class="ts-plan">{{ MESSAGES.attendance.planned }}：{{ editorRow.planned.start }}〜{{ editorRow.planned.end }}（{{ MESSAGES.attendance.breakLabel }} {{ editorRow.planned.break_min }}分）</p>
+                        <p v-if="editorRow.planned" class="ts-plan">{{ MESSAGES.attendance.planned }}：{{ editorRow.planned.start }}〜{{ editorRow.planned.end }}（{{ MESSAGES.attendance.breakLabel }} {{ fillMessage(MESSAGES.mastersUi.staffShifts.minutesValue, { minutes: String(editorRow.planned.break_min) }) }}）</p>
                         <div class="ark-att__row">
-                            <TimeField v-model="attendanceTimes.clockIn" :label="MESSAGES.attendance.clockIn" :step-minutes="5" />
+                            <TimeField v-model="attendanceTimes.clockIn" :label="MESSAGES.attendance.clockIn" :step-minutes="TIME_STEP_MINUTES" />
                             <span class="ark-weekgrid__sep">〜</span>
-                            <TimeField v-model="attendanceTimes.clockOut" :label="MESSAGES.attendance.clockOut" :step-minutes="5" clearable />
+                            <TimeField v-model="attendanceTimes.clockOut" :label="MESSAGES.attendance.clockOut" :step-minutes="TIME_STEP_MINUTES" clearable />
                         </div>
                         <!-- 遅出・早出・残業・早退を数字で素早く調整 -->
                         <div class="ts-nudge">
                             <span class="ts-nudge__label">{{ MESSAGES.attendance.clockIn }}</span>
-                            <v-btn v-for="d in [-30, -15, 15, 30]" :key="`in${d}`" size="x-small" variant="outlined" @click="nudge('clockIn', d)">{{ d > 0 ? '+' : '' }}{{ d }}</v-btn>
+                            <v-btn v-for="d in CLOCK_IN_NUDGE_MINUTES" :key="`in${d}`" size="x-small" variant="outlined" @click="nudge('clockIn', d)">{{ d > 0 ? '+' : '' }}{{ d }}</v-btn>
                             <span class="ts-nudge__hint">{{ MESSAGES.attendance.nudgeInHint }}</span>
                         </div>
                         <div class="ts-nudge">
                             <span class="ts-nudge__label">{{ MESSAGES.attendance.clockOut }}</span>
-                            <v-btn v-for="d in [-30, -15, 15, 30, 60]" :key="`out${d}`" size="x-small" variant="outlined" @click="nudge('clockOut', d)">{{ d > 0 ? '+' : '' }}{{ d }}</v-btn>
+                            <v-btn v-for="d in CLOCK_OUT_NUDGE_MINUTES" :key="`out${d}`" size="x-small" variant="outlined" @click="nudge('clockOut', d)">{{ d > 0 ? '+' : '' }}{{ d }}</v-btn>
                             <span class="ts-nudge__hint">{{ MESSAGES.attendance.nudgeOutHint }}</span>
                         </div>
                         <div v-for="(entry, index) in attendanceBreaks" :key="index" class="ark-att__row">
                             <span class="ark-att__breaklabel">{{ MESSAGES.attendance.breakLabel }}{{ index + 1 }}</span>
-                            <TimeField v-model="entry.start" :label="MESSAGES.attendance.breakStart" :step-minutes="5" />
+                            <TimeField v-model="entry.start" :label="MESSAGES.attendance.breakStart" :step-minutes="TIME_STEP_MINUTES" />
                             <span class="ark-weekgrid__sep">〜</span>
-                            <TimeField v-model="entry.end" :label="MESSAGES.attendance.breakEnd" :step-minutes="5" />
+                            <TimeField v-model="entry.end" :label="MESSAGES.attendance.breakEnd" :step-minutes="TIME_STEP_MINUTES" />
                             <v-btn variant="text" color="error" size="small" prepend-icon="mdi-close" @click="attendanceBreaks.splice(index, 1)">{{ MESSAGES.attendance.removeBreak }}</v-btn>
                         </div>
                         <v-btn variant="text" size="small" prepend-icon="mdi-plus" class="mb-3" @click="addAttendanceBreak">{{ MESSAGES.attendance.addBreak }}</v-btn>
@@ -684,8 +707,8 @@ const horizonSummary = computed(() => {
         <!-- ───────── タブ1：基本シフト ───────── -->
         <v-window-item value="basic">
             <SectionCard
-                title="曜日ごとの通常勤務時間"
-                subtitle="ここで決めた内容から、予約受付期間ぶんの勤務枠を毎朝自動で作成します。"
+                :title="MESSAGES.mastersUi.staffShifts.basicTitle"
+                :subtitle="MESSAGES.mastersUi.staffShifts.basicSubtitle"
             >
                 <p v-if="staffId === null" class="text-medium-emphasis">
                     {{ MESSAGES.staff.selectStaff }}
@@ -706,7 +729,7 @@ const horizonSummary = computed(() => {
                                 size="small"
                                 @click="toggleWorking(wd.value)"
                             >
-                                {{ days[wd.value].working ? '勤務' : '休み' }}
+                                {{ days[wd.value].working ? MESSAGES.mastersUi.staffShifts.working : MESSAGES.mastersUi.staffShifts.off }}
                             </v-btn>
                         </div>
 
@@ -716,14 +739,14 @@ const horizonSummary = computed(() => {
                                 :key="index"
                                 class="ark-weekgrid__range"
                             >
-                                <TimeField v-model="range.start" label="開始" :step-minutes="5" class="ark-weekgrid__time" />
+                                <TimeField v-model="range.start" :label="MESSAGES.mastersUi.staffShifts.start" :step-minutes="TIME_STEP_MINUTES" class="ark-weekgrid__time" />
                                 <span class="ark-weekgrid__sep">〜</span>
-                                <TimeField v-model="range.end" label="終了" :step-minutes="5" class="ark-weekgrid__time" />
+                                <TimeField v-model="range.end" :label="MESSAGES.mastersUi.staffShifts.end" :step-minutes="TIME_STEP_MINUTES" class="ark-weekgrid__time" />
                                 <v-btn
                                     icon="mdi-close"
                                     size="x-small"
                                     variant="text"
-                                    :aria-label="`${wd.label}曜日の時間帯を削除`"
+                                    :aria-label="fillMessage(MESSAGES.mastersUi.staffShifts.removeTimeRangeAria, { weekday: wd.label })"
                                     @click="removeRange(wd.value, index)"
                                 />
                             </div>
@@ -733,10 +756,10 @@ const horizonSummary = computed(() => {
                                 prepend-icon="mdi-plus"
                                 @click="addRange(wd.value)"
                             >
-                                時間帯を追加
+                                {{ MESSAGES.mastersUi.staffShifts.addTimeRange }}
                             </v-btn>
                         </template>
-                        <p v-else class="ark-weekgrid__offlabel">休み</p>
+                        <p v-else class="ark-weekgrid__offlabel">{{ MESSAGES.mastersUi.staffShifts.off }}</p>
                     </div>
                 </div>
 
@@ -744,7 +767,7 @@ const horizonSummary = computed(() => {
                     v-if="templateErrors.entries || Object.keys(templateErrors).some((k) => k.startsWith('entries.'))"
                     class="text-error text-body-2 mt-3"
                 >
-                    {{ templateErrors.entries ?? '時間帯の設定を確認してください（重複・逆転がないか）。' }}
+                    {{ templateErrors.entries ?? MESSAGES.mastersUi.staffShifts.invalidTimeRanges }}
                 </p>
 
                 <div v-if="staffId !== null" class="d-flex flex-wrap ga-3 mt-5">
@@ -754,7 +777,7 @@ const horizonSummary = computed(() => {
                         :loading="templatesForm.processing"
                         @click="saveTemplates"
                     >
-                        基本シフトを保存
+                        {{ MESSAGES.mastersUi.staffShifts.saveBasic }}
                     </v-btn>
                     <v-btn
                         variant="outlined"
@@ -763,7 +786,7 @@ const horizonSummary = computed(() => {
                         :loading="generating"
                         @click="generateNow"
                     >
-                        今すぐ勤務枠へ反映
+                        {{ MESSAGES.mastersUi.staffShifts.generateNow }}
                     </v-btn>
                 </div>
             </SectionCard>
@@ -773,8 +796,8 @@ const horizonSummary = computed(() => {
         <v-window-item value="exceptions">
             <div class="ark-exceptions">
                 <SectionCard
-                    title="特定の日だけ変える"
-                    subtitle="日付を選んで「休みにする」か「この日の勤務時間」を登録します。いつもの勤務（基本シフト）は変わりません。"
+                    :title="MESSAGES.mastersUi.staffShifts.exceptionsTitle"
+                    :subtitle="MESSAGES.mastersUi.staffShifts.exceptionsSubtitle"
                 >
                     <p v-if="staffId === null" class="text-medium-emphasis">
                         {{ MESSAGES.staff.selectStaff }}
@@ -782,20 +805,20 @@ const horizonSummary = computed(() => {
 
                     <template v-else>
                         <div style="max-width: 280px">
-                            <DateField v-model="exceptionDate" label="日付を選ぶ" :clearable="false" />
+                            <DateField v-model="exceptionDate" :label="MESSAGES.mastersUi.staffShifts.selectDate" :clearable="false" />
                         </div>
 
                         <div v-if="exceptionDate" class="ark-exceptions__detail mt-4">
                             <div class="ark-exceptions__row">
-                                <span class="ark-exceptions__key">通常シフト</span>
-                                <span v-if="selectedBaseRanges.length === 0" class="text-medium-emphasis">休み（基本シフトなし）</span>
+                                <span class="ark-exceptions__key">{{ MESSAGES.mastersUi.staffShifts.regularShift }}</span>
+                                <span v-if="selectedBaseRanges.length === 0" class="text-medium-emphasis">{{ MESSAGES.mastersUi.staffShifts.noBasicShift }}</span>
                                 <span v-else>
                                     {{ selectedBaseRanges.map((r) => `${r.start}〜${r.end}`).join(' / ') }}
                                 </span>
                             </div>
                             <div class="ark-exceptions__row">
-                                <span class="ark-exceptions__key">この日の勤務枠</span>
-                                <span v-if="selectedDayShifts.length === 0" class="text-medium-emphasis">なし</span>
+                                <span class="ark-exceptions__key">{{ MESSAGES.mastersUi.staffShifts.shiftsOnDate }}</span>
+                                <span v-if="selectedDayShifts.length === 0" class="text-medium-emphasis">{{ MESSAGES.mastersUi.staffShifts.none }}</span>
                                 <span v-else class="d-flex flex-wrap ga-2">
                                     <v-chip
                                         v-for="s in selectedDayShifts"
@@ -807,17 +830,17 @@ const horizonSummary = computed(() => {
                                         @click:close="deleteShift(s)"
                                     >
                                         {{ s.start_at }}〜{{ s.end_at }}
-                                        <span v-if="s.origin === 'manual'" class="ml-1 text-caption">個別</span>
+                                        <span v-if="s.origin === 'manual'" class="ml-1 text-caption">{{ MESSAGES.mastersUi.staffShifts.individual }}</span>
                                     </v-chip>
                                 </span>
                             </div>
                             <div v-if="selectedException" class="ark-exceptions__row">
-                                <span class="ark-exceptions__key">現在の設定</span>
+                                <span class="ark-exceptions__key">{{ MESSAGES.mastersUi.staffShifts.currentSetting }}</span>
                                 <v-chip size="small" :color="selectedException.is_off ? 'error' : 'warning'" variant="tonal">
-                                    {{ selectedException.is_off ? '休みに設定' : '時間変更に設定' }}
+                                    {{ selectedException.is_off ? MESSAGES.mastersUi.staffShifts.configuredOff : MESSAGES.mastersUi.staffShifts.configuredTimeChange }}
                                 </v-chip>
                                 <v-btn size="small" variant="text" @click="clearException(selectedException.id)">
-                                    通常シフトに戻す
+                                    {{ MESSAGES.mastersUi.staffShifts.backToRegular }}
                                 </v-btn>
                             </div>
 
@@ -828,13 +851,13 @@ const horizonSummary = computed(() => {
                                     prepend-icon="mdi-cancel"
                                     @click="markDayOff"
                                 >
-                                    この日を休みにする
+                                    {{ MESSAGES.mastersUi.staffShifts.markOff }}
                                 </v-btn>
 
                                 <div class="ark-exceptions__addshift">
-                                    <TimeField v-model="addShiftForm.start_at" label="開始" :step-minutes="5" class="ark-weekgrid__time" />
+                                    <TimeField v-model="addShiftForm.start_at" :label="MESSAGES.mastersUi.staffShifts.start" :step-minutes="TIME_STEP_MINUTES" class="ark-weekgrid__time" />
                                     <span class="ark-weekgrid__sep">〜</span>
-                                    <TimeField v-model="addShiftForm.end_at" label="終了" :step-minutes="5" class="ark-weekgrid__time" />
+                                    <TimeField v-model="addShiftForm.end_at" :label="MESSAGES.mastersUi.staffShifts.end" :step-minutes="TIME_STEP_MINUTES" class="ark-weekgrid__time" />
                                     <v-btn
                                         color="primary"
                                         variant="tonal"
@@ -842,7 +865,7 @@ const horizonSummary = computed(() => {
                                         :loading="addShiftForm.processing"
                                         @click="addCustomShift"
                                     >
-                                        この時間で出勤にする
+                                        {{ MESSAGES.mastersUi.staffShifts.addCustomShift }}
                                     </v-btn>
                                 </div>
                                 <p
@@ -856,17 +879,17 @@ const horizonSummary = computed(() => {
                     </template>
                 </SectionCard>
 
-                <SectionCard title="登録済みの「特定の日」" subtitle="今日以降に、休み・時間変更を登録した日です。" class="mt-5">
+                <SectionCard :title="MESSAGES.mastersUi.staffShifts.registeredExceptions" :subtitle="MESSAGES.mastersUi.staffShifts.registeredExceptionsSubtitle" class="mt-5">
                     <p v-if="exceptions.length === 0" class="text-medium-emphasis">
                         {{ MESSAGES.shift.noUpcomingExceptions }}
                     </p>
                     <v-table v-else density="comfortable">
                         <thead>
                             <tr>
-                                <th>日付</th>
-                                <th>内容</th>
-                                <th>メモ</th>
-                                <th class="text-right">操作</th>
+                                <th>{{ MESSAGES.mastersUi.staffShifts.date }}</th>
+                                <th>{{ MESSAGES.mastersUi.staffShifts.content }}</th>
+                                <th>{{ MESSAGES.mastersUi.staffShifts.note }}</th>
+                                <th class="text-right">{{ MESSAGES.mastersUi.staffShifts.operation }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -874,13 +897,13 @@ const horizonSummary = computed(() => {
                                 <td>{{ e.exception_date }}</td>
                                 <td>
                                     <v-chip size="small" :color="e.is_off ? 'error' : 'warning'" variant="tonal">
-                                        {{ e.is_off ? '休み' : '時間変更' }}
+                                        {{ e.is_off ? MESSAGES.mastersUi.staffShifts.off : MESSAGES.mastersUi.staffShifts.timeChange }}
                                     </v-chip>
                                 </td>
                                 <td class="text-medium-emphasis"><template v-if="e.note">{{ e.note }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></td>
                                 <td class="text-right">
                                     <v-btn size="small" variant="tonal" @click="clearException(e.id)">
-                                        いつもの勤務に戻す
+                                        {{ MESSAGES.mastersUi.staffShifts.restoreRegular }}
                                     </v-btn>
                                 </td>
                             </tr>
@@ -888,11 +911,11 @@ const horizonSummary = computed(() => {
                     </v-table>
                 </SectionCard>
 
-                <SectionCard title="手動で追加した勤務" subtitle="「この時間で出勤にする」で登録した勤務の一覧です（基本シフトから自動で作った勤務は含みません）。" class="mt-5">
+                <SectionCard :title="MESSAGES.mastersUi.staffShifts.manualShifts" :subtitle="MESSAGES.mastersUi.staffShifts.manualShiftsSubtitle" class="mt-5">
                     <div class="ark-period mb-2">
-                        <v-btn size="small" variant="outlined" prepend-icon="mdi-chevron-left" @click="periodShift(-42)">前の6週間</v-btn>
+                        <v-btn size="small" variant="outlined" prepend-icon="mdi-chevron-left" @click="periodShift(-PERIOD_SHIFT_DAYS)">{{ MESSAGES.mastersUi.staffShifts.previousSixWeeks }}</v-btn>
                         <span class="ark-period__label">{{ periodLabel }}</span>
-                        <v-btn size="small" variant="outlined" append-icon="mdi-chevron-right" @click="periodShift(42)">次の6週間</v-btn>
+                        <v-btn size="small" variant="outlined" append-icon="mdi-chevron-right" @click="periodShift(PERIOD_SHIFT_DAYS)">{{ MESSAGES.mastersUi.staffShifts.nextSixWeeks }}</v-btn>
                     </div>
                     <p v-if="upcomingManualShifts.length === 0" class="text-medium-emphasis">
                         {{ MESSAGES.shift.noIndividualShifts }}
@@ -904,7 +927,7 @@ const horizonSummary = computed(() => {
                                 <td>{{ s.start_at }}〜{{ s.end_at }}</td>
                                 <td class="text-right">
                                     <v-btn size="small" variant="text" color="error" @click="deleteShift(s)">
-                                        削除
+                                        {{ MESSAGES.mastersUi.staffShifts.delete }}
                                     </v-btn>
                                 </td>
                             </tr>
@@ -916,29 +939,29 @@ const horizonSummary = computed(() => {
 
         <!-- ───────── 店舗全体：休業日・予約受付 ───────── -->
         <v-window-item value="store">
-            <SectionCard title="定休日（毎週）" subtitle="店全体が毎週休む曜日です。この曜日は予約を受け付けず、勤務枠も作りません。" class="mb-5">
+            <SectionCard :title="MESSAGES.mastersUi.staffShifts.regularHolidayTitle" :subtitle="MESSAGES.mastersUi.staffShifts.regularHolidaySubtitle" class="mb-5">
                 <template v-if="canManageSettings">
                     <div class="d-flex flex-wrap align-center ga-3">
-                        <v-chip-group v-model="closedWeekdaysForm.weekdays" multiple column aria-label="定休日の曜日">
+                        <v-chip-group v-model="closedWeekdaysForm.weekdays" multiple column :aria-label="MESSAGES.mastersUi.staffShifts.regularHolidayAria">
                             <v-chip v-for="day in weekdayOptions" :key="day.value" :value="day.value" filter variant="outlined" selected-class="ark-closed-on">{{ day.label }}</v-chip>
                         </v-chip-group>
-                        <v-btn color="primary" variant="flat" prepend-icon="mdi-content-save-outline" :loading="closedWeekdaysForm.processing" @click="saveClosedWeekdays">定休日を保存</v-btn>
+                        <v-btn color="primary" variant="flat" prepend-icon="mdi-content-save-outline" :loading="closedWeekdaysForm.processing" @click="saveClosedWeekdays">{{ MESSAGES.mastersUi.staffShifts.saveRegularHoliday }}</v-btn>
                     </div>
                 </template>
-                <p v-else class="text-medium-emphasis">{{ (booking.closed_weekdays ?? []).length === 0 ? '定休日なし' : weekdayOptions.filter((d) => (booking.closed_weekdays ?? []).includes(d.value)).map((d) => d.label).join('・') }}</p>
+                <p v-else class="text-medium-emphasis">{{ (booking.closed_weekdays ?? []).length === 0 ? MESSAGES.mastersUi.staffShifts.noRegularHoliday : weekdayOptions.filter((d) => (booking.closed_weekdays ?? []).includes(d.value)).map((d) => d.label).join('・') }}</p>
             </SectionCard>
 
             <SectionCard
-                title="お客様がいつまで予約できるか"
-                subtitle="店舗全体の予約受付ルールです。管理者の手動予約はこの期間制限を受けません。"
+                :title="MESSAGES.mastersUi.staffShifts.horizonTitle"
+                :subtitle="MESSAGES.mastersUi.staffShifts.horizonSubtitle"
             >
                 <v-radio-group v-model="bookingForm.horizon_mode" hide-details>
                     <v-radio value="monthly">
                         <template #label>
                             <div>
-                                <div class="font-weight-medium">毎月決まった日に翌月分を開放（おすすめ）</div>
+                                <div class="font-weight-medium">{{ MESSAGES.mastersUi.staffShifts.monthlyMode }}</div>
                                 <div class="text-body-2 text-medium-emphasis">
-                                    例：毎月20日になると、翌月末までの予約を受け付けます。
+                                    {{ MESSAGES.mastersUi.staffShifts.monthlyExample }}
                                 </div>
                             </div>
                         </template>
@@ -947,18 +970,18 @@ const horizonSummary = computed(() => {
                         <v-select
                             v-model.number="bookingForm.release_day_of_month"
                             :items="releaseDayItems"
-                            label="翌月分の開放日"
+                            :label="MESSAGES.mastersUi.staffShifts.releaseDay"
                             hide-details
                             style="max-width: 200px"
-                            suffix="日"
+                            :suffix="MESSAGES.mastersUi.staffShifts.daySuffix"
                         />
                     </div>
 
                     <v-radio value="rolling" class="mt-2">
                         <template #label>
                             <div>
-                                <div class="font-weight-medium">今日から一定日数先まで</div>
-                                <div class="text-body-2 text-medium-emphasis">常に「◯日先まで」予約できます。</div>
+                                <div class="font-weight-medium">{{ MESSAGES.mastersUi.staffShifts.rollingMode }}</div>
+                                <div class="text-body-2 text-medium-emphasis">{{ MESSAGES.mastersUi.staffShifts.rollingDescription }}</div>
                             </div>
                         </template>
                     </v-radio>
@@ -966,18 +989,18 @@ const horizonSummary = computed(() => {
                         <v-text-field
                             v-model.number="bookingForm.horizon_days"
                             type="number"
-                            label="何日先まで"
+                            :label="MESSAGES.mastersUi.staffShifts.horizonDays"
                             hide-details
                             style="max-width: 200px"
-                            suffix="日先"
+                            :suffix="MESSAGES.mastersUi.staffShifts.daysAheadSuffix"
                         />
                     </div>
 
                     <v-radio value="none" class="mt-2">
                         <template #label>
                             <div>
-                                <div class="font-weight-medium">制限なし</div>
-                                <div class="text-body-2 text-medium-emphasis">いつの日付でも予約を受け付けます。</div>
+                                <div class="font-weight-medium">{{ MESSAGES.mastersUi.staffShifts.unlimitedMode }}</div>
+                                <div class="text-body-2 text-medium-emphasis">{{ MESSAGES.mastersUi.staffShifts.unlimitedDescription }}</div>
                             </div>
                         </template>
                     </v-radio>
@@ -986,19 +1009,19 @@ const horizonSummary = computed(() => {
                 <v-alert type="info" variant="tonal" density="compact" class="mt-4">
                     {{ horizonSummary }}
                     <template v-if="booking.enforced && booking.last_bookable_date">
-                        （現在の受付上限：{{ formatJpDate(booking.last_bookable_date) }}）
+                        {{ fillMessage(MESSAGES.mastersUi.staffShifts.currentLimit, { date: formatJpDate(booking.last_bookable_date) }) }}
                     </template>
                 </v-alert>
             </SectionCard>
 
-            <SectionCard title="直前予約の締切" class="mt-5">
+            <SectionCard :title="MESSAGES.mastersUi.staffShifts.leadTitle" class="mt-5">
                 <v-select
                     v-if="leadIsPreset"
                     v-model.number="bookingForm.min_lead_minutes"
                     :items="leadPresets"
                     item-title="title"
                     item-value="value"
-                    label="開始の何分前まで受け付けるか"
+                    :label="MESSAGES.mastersUi.staffShifts.leadSelect"
                     hide-details
                     style="max-width: 280px"
                 />
@@ -1006,31 +1029,31 @@ const horizonSummary = computed(() => {
                     <v-text-field
                         v-model.number="bookingForm.min_lead_minutes"
                         type="number"
-                        label="開始の何分前まで"
-                        suffix="分前"
+                        :label="MESSAGES.mastersUi.staffShifts.leadInput"
+                        :suffix="MESSAGES.mastersUi.staffShifts.minutesBeforeSuffix"
                         hide-details
                         style="max-width: 200px"
                     />
-                    <v-btn variant="text" size="small" @click="bookingForm.min_lead_minutes = 0">
-                        プリセットに戻す
+                    <v-btn variant="text" size="small" @click="bookingForm.min_lead_minutes = IMMEDIATE_LEAD_MINUTES">
+                        {{ MESSAGES.mastersUi.staffShifts.resetPreset }}
                     </v-btn>
                 </div>
                 <p class="text-body-2 text-medium-emphasis mt-2">
-                    {{ bookingForm.min_lead_minutes === 0
-                        ? '開始直前まで予約を受け付けます。'
-                        : `開始の ${bookingForm.min_lead_minutes} 分前で受付を締め切ります。` }}
+                    {{ bookingForm.min_lead_minutes === IMMEDIATE_LEAD_MINUTES
+                        ? MESSAGES.mastersUi.staffShifts.immediateLeadSummary
+                        : fillMessage(MESSAGES.mastersUi.staffShifts.leadSummary, { minutes: String(bookingForm.min_lead_minutes) }) }}
                 </p>
             </SectionCard>
 
             <SectionCard
-                title="臨時休業日（店全体）"
-                subtitle="店全体を休む日です。この日は全スタッフの予約（管理画面からの予約も含む）ができず、勤務枠も作りません。"
+                :title="MESSAGES.mastersUi.staffShifts.temporaryClosureTitle"
+                :subtitle="MESSAGES.mastersUi.staffShifts.temporaryClosureSubtitle"
                 class="mt-5"
             >
                 <div class="d-flex align-end ga-2" style="max-width: 360px">
-                    <DateField v-model="newClosedDate" label="休業日を追加" :clearable="false" />
+                    <DateField v-model="newClosedDate" :label="MESSAGES.mastersUi.staffShifts.addClosure" :clearable="false" />
                     <v-btn color="primary" variant="tonal" :disabled="!newClosedDate" @click="addClosedDate">
-                        追加
+                        {{ MESSAGES.mastersUi.staffShifts.add }}
                     </v-btn>
                 </div>
                 <div class="d-flex flex-wrap ga-2 mt-3">
@@ -1051,7 +1074,7 @@ const horizonSummary = computed(() => {
 
             <div class="mt-5">
                 <v-btn color="primary" variant="flat" :loading="bookingForm.processing" @click="saveBooking">
-                    予約受付設定を保存
+                    {{ MESSAGES.mastersUi.staffShifts.saveBooking }}
                 </v-btn>
                 <span v-if="Object.keys(bookingErrors).length" class="text-error text-body-2 ml-3">
                     {{ MESSAGES.common.checkInput }}

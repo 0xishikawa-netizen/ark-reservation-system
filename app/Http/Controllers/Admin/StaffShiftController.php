@@ -205,8 +205,8 @@ class StaffShiftController extends Controller
         return back()->with(
             'success',
             $result['created'] > 0
-                ? sprintf('勤務枠を%d件反映しました（%s まで）。', $result['created'], $result['through'])
-                : '新たに反映する勤務枠はありませんでした。',
+                ? __('messages.shift.generated', ['count' => $result['created'], 'through' => $result['through']])
+                : __('messages.shift.none_generated'),
         );
     }
 

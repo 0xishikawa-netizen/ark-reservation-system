@@ -18,9 +18,9 @@ interface CustomerProfile {
 const props = defineProps<{ customer: CustomerProfile }>();
 
 const genderOptions = [
-    { title: '男性', value: 'male' },
-    { title: '女性', value: 'female' },
-    { title: 'その他', value: 'other' },
+    { title: MESSAGES.customerUi.profile.genders.male, value: 'male' },
+    { title: MESSAGES.customerUi.profile.genders.female, value: 'female' },
+    { title: MESSAGES.customerUi.profile.genders.other, value: 'other' },
 ];
 
 const form = useForm({
@@ -37,9 +37,9 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Head title="プロフィール編集" />
+    <Head :title="MESSAGES.customerUi.profile.editTitle" />
 
-    <v-card title="プロフィール編集">
+    <v-card :title="MESSAGES.customerUi.profile.editTitle">
         <v-card-text>
             <v-alert type="info" variant="tonal" class="mb-5">
                 {{ MESSAGES.customer.emailNotEditable }}
@@ -47,28 +47,28 @@ const submit = (): void => {
 
             <v-text-field
                 :model-value="customer.email"
-                label="メールアドレス"
+                :label="MESSAGES.customerUi.profile.email"
                 readonly
             />
 
             <v-form @submit.prevent="submit">
                 <v-text-field class="ark-field-name"
                     v-model="form.name"
-                    label="氏名"
+                    :label="MESSAGES.customerUi.profile.name"
                     maxlength="255"
                     autocomplete="name"
                     :error-messages="form.errors.name"
                 />
                 <v-text-field class="ark-field-name"
                     v-model="form.kana"
-                    label="カナ"
+                    :label="MESSAGES.customerUi.profile.kana"
                     maxlength="100"
                     :error-messages="form.errors.kana"
                     required
                 />
                 <v-text-field
                     v-model="form.phone"
-                    label="電話番号"
+                    :label="MESSAGES.customerUi.profile.phone"
                     type="tel"
                     maxlength="20"
                     autocomplete="tel"
@@ -78,14 +78,14 @@ const submit = (): void => {
                 <v-text-field
                     v-model="form.birthday"
                     class="ark-field-date"
-                    label="生年月日"
+                    :label="MESSAGES.customerUi.profile.birthday"
                     type="date"
                     autocomplete="bday"
                     :error-messages="form.errors.birthday"
                 />
                 <v-select
                     v-model="form.gender"
-                    label="性別"
+                    :label="MESSAGES.customerUi.profile.gender"
                     :items="genderOptions"
                     clearable
                     :error-messages="form.errors.gender"
@@ -93,9 +93,9 @@ const submit = (): void => {
 
                 <div class="d-flex ga-3 flex-wrap">
                     <v-btn type="submit" color="primary" :loading="form.processing">
-                        保存
+                        {{ MESSAGES.customerUi.profile.save }}
                     </v-btn>
-                    <v-btn variant="text" href="/mypage/profile">キャンセル</v-btn>
+                    <v-btn variant="text" href="/mypage/profile">{{ MESSAGES.customerUi.profile.cancel }}</v-btn>
                 </div>
             </v-form>
         </v-card-text>

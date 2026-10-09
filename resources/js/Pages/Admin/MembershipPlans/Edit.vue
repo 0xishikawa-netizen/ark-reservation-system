@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { MoneyField } from '@/components/ark';
 import { Head, useForm } from '@inertiajs/vue3';
-import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -35,9 +36,9 @@ function submit(): void {
 </script>
 
 <template>
-    <Head :title="`${membershipPlan.name}を編集`" />
+    <Head :title="fillMessage(MESSAGES.mastersUi.membershipPlans.editHead, { name: membershipPlan.name })" />
 
-    <v-card max-width="760" title="月額プラン編集">
+    <v-card max-width="760" :title="MESSAGES.mastersUi.membershipPlans.editTitle">
         <v-card-text>
             <v-alert type="info" variant="tonal" class="mb-4">
                 {{ MESSAGES.membership.priceIdHint }}
@@ -45,7 +46,7 @@ function submit(): void {
             <v-form @submit.prevent="submit">
                 <v-text-field
                     v-model="form.name"
-                    label="プラン名"
+                    :label="MESSAGES.mastersUi.membershipPlans.name"
                     maxlength="100"
                     :error-messages="form.errors.name"
                     required
@@ -53,13 +54,13 @@ function submit(): void {
                 <div class="d-flex ga-4 flex-wrap">
                     <MoneyField
                         v-model="form.price"
-                        label="月額"
+                        :label="MESSAGES.mastersUi.membershipPlans.monthlyPrice"
                         :error-messages="form.errors.price"
                         required
                     />
                     <v-text-field
                         v-model.number="form.usage_count_per_period"
-                        label="月あたり回数"
+                        :label="MESSAGES.mastersUi.membershipPlans.countPerMonth"
                         type="number"
                         min="1"
                         max="999"
@@ -69,14 +70,14 @@ function submit(): void {
                 </div>
                 <v-select
                     v-model="form.billing_interval"
-                    label="請求間隔"
-                    :items="[{ title: '月ごと', value: 'month' }]"
+                    :label="MESSAGES.mastersUi.membershipPlans.billingInterval"
+                    :items="[{ title: MESSAGES.mastersUi.membershipPlans.monthlyInterval, value: 'month' }]"
                     :error-messages="form.errors.billing_interval"
                     required
                 />
                 <v-text-field
                     v-model="form.stripe_price_id"
-                    label="Stripe 価格ID"
+                    :label="MESSAGES.mastersUi.membershipPlans.stripePriceId"
                     maxlength="40"
                     placeholder="price_..."
                     :error-messages="form.errors.stripe_price_id"
@@ -84,20 +85,20 @@ function submit(): void {
                 />
                 <v-text-field
                     v-model.number="form.sort_order"
-                    label="表示順"
+                    :label="MESSAGES.mastersUi.membershipPlans.sortOrder"
                     type="number"
                     :error-messages="form.errors.sort_order"
                     required
                 />
                 <v-switch
                     v-model="form.is_active"
-                    label="有効"
+                    :label="MESSAGES.mastersUi.membershipPlans.active"
                     color="primary"
                     :error-messages="form.errors.is_active"
                 />
                 <div class="d-flex ga-3">
-                    <v-btn type="submit" color="primary" :loading="form.processing">更新</v-btn>
-                    <v-btn variant="text" href="/admin/membership-plans">キャンセル</v-btn>
+                    <v-btn type="submit" color="primary" :loading="form.processing">{{ MESSAGES.mastersUi.membershipPlans.update }}</v-btn>
+                    <v-btn variant="text" href="/admin/membership-plans">{{ MESSAGES.mastersUi.membershipPlans.cancel }}</v-btn>
                 </div>
             </v-form>
         </v-card-text>

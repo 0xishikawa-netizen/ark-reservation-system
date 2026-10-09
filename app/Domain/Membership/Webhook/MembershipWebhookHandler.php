@@ -48,13 +48,13 @@ final class MembershipWebhookHandler
         $object = $event['data']['object'] ?? null;
 
         if (! is_array($object)) {
-            return ['result' => 'ignored', 'membership_id' => null, 'note' => 'object を特定できませんでした。'];
+            return ['result' => 'ignored', 'membership_id' => null, 'note' => __('messages.webhook.object_unidentified')];
         }
 
         $subscriptionId = $this->subscriptionIdFrom($type, $object);
 
         if ($subscriptionId === null) {
-            return ['result' => 'ignored', 'membership_id' => null, 'note' => 'subscription を特定できませんでした。'];
+            return ['result' => 'ignored', 'membership_id' => null, 'note' => __('messages.webhook.subscription_unidentified')];
         }
 
         $membership = Membership::query()->where('stripe_subscription_id', $subscriptionId)->first();
@@ -66,7 +66,7 @@ final class MembershipWebhookHandler
         }
 
         if ($membership === null) {
-            return ['result' => 'ignored', 'membership_id' => null, 'note' => '対象の利用権が見つかりません。'];
+            return ['result' => 'ignored', 'membership_id' => null, 'note' => __('messages.webhook.membership_not_found')];
         }
 
         match ($type) {

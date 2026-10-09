@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
+import { MESSAGES } from '@/constants/messages';
 
 const form = useForm({
     password: '',
@@ -14,11 +15,11 @@ const submit = (): void => {
 </script>
 
 <template>
-    <AuthCard title="パスワードの確認" subtitle="この操作を続けるには、本人確認のためパスワードを入力してください。">
+    <AuthCard :title="MESSAGES.customerUi.auth.confirmPassword.title" :subtitle="MESSAGES.customerUi.auth.confirmPassword.subtitle">
         <v-form @submit.prevent="submit">
             <v-text-field
                 v-model="form.password"
-                label="パスワード"
+                :label="MESSAGES.customerUi.auth.password"
                 type="password"
                 autocomplete="current-password"
                 :error-messages="form.errors.password"
@@ -33,7 +34,7 @@ const submit = (): void => {
                 block
                 :loading="form.processing"
             >
-                確認する
+                {{ MESSAGES.customerUi.auth.confirm }}
             </v-btn>
         </v-form>
     </AuthCard>

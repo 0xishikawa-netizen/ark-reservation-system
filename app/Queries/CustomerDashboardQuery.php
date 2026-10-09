@@ -91,18 +91,18 @@ final class CustomerDashboardQuery
 
         foreach ($upcoming as $reservation) {
             if ($reservation['status'] === ReservationStatus::PendingPayment->value) {
-                $messages[] = 'お支払い手続き中のご予約があります。';
+                $messages[] = __('messages.customer_dashboard.attention_pending_reservation');
                 break;
             }
         }
 
         if ($membership !== null) {
             if ($membership['status'] === 'grace') {
-                $messages[] = '利用権のお支払いを確認中です。ご利用は継続できます。';
+                $messages[] = __('messages.customer_dashboard.attention_membership_grace');
             } elseif ($membership['status'] === 'paused') {
-                $messages[] = '利用権が一時停止中です。お支払い方法をご確認ください。';
+                $messages[] = __('messages.customer_dashboard.attention_membership_paused');
             } elseif ($membership['status'] === 'pending') {
-                $messages[] = '利用権のお申し込みを確認中です。';
+                $messages[] = __('messages.customer_dashboard.attention_membership_pending');
             }
         }
 
@@ -112,13 +112,13 @@ final class CustomerDashboardQuery
     private static function reservationStatusLabel(string $status): string
     {
         return match ($status) {
-            'pending_payment' => 'お支払い手続き中',
-            'pending_external_sync' => '確定処理中',
-            'confirmed' => '確定',
-            'completed' => '来店済み',
-            'no_show' => '来店なし',
-            'canceled' => 'キャンセル済み',
-            'expired' => '期限切れ',
+            'pending_payment' => __('messages.customer_dashboard.payment_pending'),
+            'pending_external_sync' => __('messages.customer_dashboard.reservation_pending_external_sync'),
+            'confirmed' => __('messages.customer_dashboard.reservation_confirmed'),
+            'completed' => __('messages.customer_dashboard.reservation_completed'),
+            'no_show' => __('messages.customer_dashboard.reservation_no_show'),
+            'canceled' => __('messages.customer_dashboard.reservation_canceled'),
+            'expired' => __('messages.customer_dashboard.reservation_expired'),
             default => $status,
         };
     }
@@ -126,25 +126,25 @@ final class CustomerDashboardQuery
     private static function paymentStatusLabel(string $status): string
     {
         return match ($status) {
-            'pending' => 'お支払い手続き中',
-            'authorized' => '予約確保中',
-            'succeeded', 'paid' => '支払い完了',
-            'failed' => 'お支払いに失敗',
-            'voided' => '取消済み',
-            'refunded' => '返金済み',
-            'partially_refunded' => '一部返金済み',
-            default => 'ー',
+            'pending' => __('messages.customer_dashboard.payment_pending'),
+            'authorized' => __('messages.customer_dashboard.payment_authorized'),
+            'succeeded', 'paid' => __('messages.customer_dashboard.payment_succeeded'),
+            'failed' => __('messages.customer_dashboard.payment_failed'),
+            'voided' => __('messages.customer_dashboard.payment_voided'),
+            'refunded' => __('messages.customer_dashboard.payment_refunded'),
+            'partially_refunded' => __('messages.customer_dashboard.payment_partially_refunded'),
+            default => __('messages.common.dash'),
         };
     }
 
     private static function paymentKindLabel(string $kind): string
     {
         return match ($kind) {
-            'single' => 'カード決済',
-            'single_addon' => '追加のお支払い',
-            'membership_invoice' => '利用権のお支払い',
-            'ticket_purchase' => '回数券のご購入',
-            default => 'お支払い',
+            'single' => __('messages.customer_dashboard.kind_single'),
+            'single_addon' => __('messages.customer_dashboard.kind_single_addon'),
+            'membership_invoice' => __('messages.customer_dashboard.kind_membership_invoice'),
+            'ticket_purchase' => __('messages.customer_dashboard.kind_ticket_purchase'),
+            default => __('messages.customer_dashboard.kind_default'),
         };
     }
 }

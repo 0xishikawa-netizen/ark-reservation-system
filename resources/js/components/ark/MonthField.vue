@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, useAttrs } from 'vue';
 import ArkMonthCalendar from './ArkMonthCalendar.vue';
+import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ inheritAttrs: false });
 
@@ -34,7 +36,9 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const menuOpen = ref(false);
 const displayValue = computed(() => {
     const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(props.modelValue);
-    return match ? `${match[1]}年${Number(match[2])}月` : '';
+    return match
+        ? fillMessage(MESSAGES.customerUi.calendar.yearMonth, { year: match[1], month: String(Number(match[2])) })
+        : '';
 });
 
 function selectMonth(value: string): void {

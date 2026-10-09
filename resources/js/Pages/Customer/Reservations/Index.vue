@@ -2,6 +2,8 @@
 import { Head } from '@inertiajs/vue3';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateTime } from '@/utils/dateFormat';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -21,36 +23,27 @@ interface GroupedReservations {
 
 defineProps<{ reservations: GroupedReservations }>();
 
-const statusLabels: Record<string, string> = {
-    confirmed: '予約確定',
-    completed: '完了',
-    no_show: '来店なし',
-    canceled: 'キャンセル',
-    expired: '期限切れ',
-};
+const statusLabels: Record<string, string> = MESSAGES.customerUi.reservations.statuses;
 
-function formatDateTime(value: string): string {
-    return new Intl.DateTimeFormat('ja-JP', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        weekday: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-    }).format(new Date(value.replace(' ', 'T')));
+function staffLabel(name: string | null): string {
+    return fillMessage(MESSAGES.customerUi.reservations.staff, { name: name ?? MESSAGES.customerUi.reservations.staffUndecided });
+}
+
+function pastSubtitle(reservation: ReservationListItem): string {
+    return fillMessage(MESSAGES.customerUi.reservations.pastSubtitle, { date: formatDateTime(reservation.starts_at, 'long'), staff: staffLabel(reservation.staff_name), status: statusLabels[reservation.status] ?? reservation.status });
 }
 </script>
 
 <template>
-    <Head title="予約一覧" />
+    <Head :title="MESSAGES.customerUi.reservations.title" />
 
     <div class="d-flex align-center justify-space-between mb-4 ga-3">
-        <h1 class="text-h5">予約一覧</h1>
-        <v-btn color="primary" href="/reserve">新しく予約する</v-btn>
+        <h1 class="text-h5">{{ MESSAGES.customerUi.reservations.title }}</h1>
+        <v-btn color="primary" href="/reserve">{{ MESSAGES.customerUi.reservations.newReservation }}</v-btn>
     </div>
 
     <section aria-labelledby="upcoming-heading" class="mb-8">
-        <h2 id="upcoming-heading" class="text-h6 mb-3">今後の予約</h2>
+        <h2 id="upcoming-heading" class="text-h6 mb-3">{{ MESSAGES.customerUi.reservations.upcoming }}</h2>
         <v-alert
             v-if="reservations.upcoming.length === 0"
             type="info"
@@ -66,12 +59,12 @@ function formatDateTime(value: string): string {
                 hover
             >
                 <v-card-title class="text-subtitle-1">
-                    {{ formatDateTime(reservation.starts_at) }}
+                    {{ formatDateTime(reservation.starts_at, 'long') }}
                 </v-card-title>
                 <v-card-text>
                     <div class="font-weight-medium">{{ reservation.service_name }}</div>
                     <div class="text-medium-emphasis">
-                        担当: {{ reservation.staff_name ?? '未定' }}
+                        {{ staffLabel(reservation.staff_name) }}
                     </div>
                     <v-chip size="small" color="primary" class="mt-2">
                         {{ statusLabels[reservation.status] ?? reservation.status }}
@@ -82,7 +75,7 @@ function formatDateTime(value: string): string {
     </section>
 
     <section aria-labelledby="past-heading">
-        <h2 id="past-heading" class="text-h6 mb-3">過去の予約</h2>
+        <h2 id="past-heading" class="text-h6 mb-3">{{ MESSAGES.customerUi.reservations.past }}</h2>
         <v-alert
             v-if="reservations.past.length === 0"
             type="info"
@@ -97,7 +90,7 @@ function formatDateTime(value: string): string {
                 :href="`/mypage/reservations/${reservation.id}`"
                 class="bg-white rounded mb-2"
                 :title="reservation.service_name"
-                :subtitle="`${formatDateTime(reservation.starts_at)} / 担当: ${reservation.staff_name ?? '未定'} / ${statusLabels[reservation.status] ?? reservation.status}`"
+                :subtitle="pastSubtitle(reservation)"
             />
         </v-list>
     </section>

@@ -5,6 +5,8 @@ import { MonthField, PageHeader, SectionCard } from '@/components/ark';
 import { MonthlyReportTabs, ReportFilterBar, ReportFilterField, ReportKpi, ReportSelect, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { changeAndReload } from '@/composables/reportNavigation';
 
 defineOptions({ layout: AdminLayout });
 
@@ -52,8 +54,8 @@ async function load(): Promise<void> {
     }
 }
 
-function changeMonth(value: string): void { if (value !== month.value) { month.value = value; void load(); } }
-function changeBasis(value: SalesBasis): void { if (value !== basis.value) { basis.value = value; void load(); } }
+function changeMonth(value: string): void { changeAndReload(month, value, load); }
+function changeBasis(value: SalesBasis): void { changeAndReload(basis, value, load); }
 function startEdit(row: Row): void { editing.value = rowKey(row); draftAmount.value = row.target_amount; }
 function saveTarget(row: Row, clear = false): void {
     router.put(props.targetEndpoint, {
@@ -96,7 +98,7 @@ function saveTarget(row: Row, clear = false): void {
             </thead>
             <tbody>
                 <tr v-for="row in report.rows" :key="rowKey(row)" :class="{ 'row-muted': !row.is_active }">
-                    <th class="is-sticky">{{ row.name }}<small v-if="!row.is_active" class="muted">（{{ labels.courseInactive }}）</small></th>
+                    <th class="is-sticky">{{ row.name }}<small v-if="!row.is_active" class="muted">{{ fillMessage(MESSAGES.reportsUi.shared.parenthesized, { value: labels.courseInactive }) }}</small></th>
                     <td>{{ typeLabel[row.course_type] }}</td>
                     <td class="num group-start"><ReportValue :value="row.sales_amount" format="money" /></td>
                     <td class="num"><ReportValue :value="row.sales_quantity" /></td>

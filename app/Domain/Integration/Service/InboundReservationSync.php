@@ -235,7 +235,7 @@ final class InboundReservationSync
                 return new InboundDecision(InboundDecision::NO_OP, (int) $reservation->id);
             }
 
-            $updated = $this->reservations->cancel($reservation, '外部予約でキャンセルされました', null);
+            $updated = $this->reservations->cancel($reservation, __('messages.integration.external_canceled_reason'), null);
             $this->finalizeMapping($mapping, $data, $updated, $canonical);
             $this->event($data, SyncOperation::Cancel, SyncEventStatus::Succeeded, (int) $reservation->id, $correlationId, $startedAt);
 

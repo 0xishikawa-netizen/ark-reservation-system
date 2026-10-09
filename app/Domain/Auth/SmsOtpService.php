@@ -336,7 +336,7 @@ final class SmsOtpService
 
         if ($recent) {
             throw ValidationException::withMessages([
-                'code' => "認証コードの再送は {$minInterval} 秒後に可能になります。",
+                'code' => __('messages.otp.resend_after', ['seconds' => $minInterval]),
             ]);
         }
 
@@ -377,7 +377,7 @@ final class SmsOtpService
 
         if ((clone $query)->where('sent_at', '>', now()->subSeconds($minInterval))->exists()) {
             throw ValidationException::withMessages([
-                'code' => "認証コードの再送は {$minInterval} 秒後に可能になります。",
+                'code' => __('messages.otp.resend_after', ['seconds' => $minInterval]),
             ]);
         }
 
@@ -440,7 +440,6 @@ final class SmsOtpService
 
     private function message(string $code): string
     {
-        return "【ARK Conditioning】認証コード: {$code}\n"
-            .'このコードは他人に教えないでください。';
+        return __('messages.otp.sms_body', ['code' => $code]);
     }
 }

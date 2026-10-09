@@ -2,6 +2,11 @@
 import { ref } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
+import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+
+/** 認証アプリの確認コードの桁数。 */
+const TOTP_CODE_LENGTH = 6;
 
 const props = defineProps<{
     trustedDeviceTtlDays: number;
@@ -23,35 +28,35 @@ const submit = (): void => {
 
 <template>
     <AuthCard
-        title="2段階認証"
+        :title="MESSAGES.customerUi.auth.twoFactor.title"
         :subtitle="
             useRecoveryCode
-                ? 'リカバリーコードを入力してください。'
-                : '認証アプリに表示されている6桁の確認コードを入力してください。'
+                ? MESSAGES.customerUi.auth.twoFactor.recoverySubtitle
+                : MESSAGES.customerUi.auth.twoFactor.codeSubtitle
         "
     >
         <v-form @submit.prevent="submit">
             <v-text-field
                 v-if="!useRecoveryCode"
                 v-model="form.code"
-                label="6桁コード"
+                :label="MESSAGES.customerUi.auth.twoFactor.code"
                 inputmode="numeric"
                 autocomplete="one-time-code"
-                maxlength="6"
+                :maxlength="TOTP_CODE_LENGTH"
                 :error-messages="form.errors.code"
                 autofocus
             />
             <v-text-field
                 v-else
                 v-model="form.recovery_code"
-                label="リカバリーコード"
+                :label="MESSAGES.customerUi.auth.twoFactor.recoveryCode"
                 autocomplete="one-time-code"
                 :error-messages="form.errors.recovery_code"
                 autofocus
             />
             <v-checkbox
                 v-model="form.trust_device"
-                :label="`この端末を${props.trustedDeviceTtlDays}日間信頼する（次回から2段階認証を省略）`"
+                :label="fillMessage(MESSAGES.customerUi.auth.twoFactor.trustDevice, { days: String(props.trustedDeviceTtlDays) })"
                 density="compact"
                 hide-details
                 class="mb-2"
@@ -64,13 +69,13 @@ const submit = (): void => {
                 block
                 :loading="form.processing"
             >
-                確認する
+                {{ MESSAGES.customerUi.auth.confirm }}
             </v-btn>
         </v-form>
 
         <template #footer>
             <v-btn variant="text" size="small" @click="useRecoveryCode = !useRecoveryCode">
-                {{ useRecoveryCode ? '認証コードを使う' : 'リカバリーコードを使う' }}
+                {{ useRecoveryCode ? MESSAGES.customerUi.auth.twoFactor.useCode : MESSAGES.customerUi.auth.twoFactor.useRecovery }}
             </v-btn>
         </template>
     </AuthCard>

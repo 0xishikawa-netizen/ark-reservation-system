@@ -5,6 +5,8 @@ import { DateField, EmptyValue, MonthField, PageHeader } from '@/components/ark'
 import { MonthlyReportTabs, ReportFilterBar, ReportFilterField, ReportKpi, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { changeAndReload } from '@/composables/reportNavigation';
 
 defineOptions({ layout: AdminLayout });
 
@@ -29,6 +31,7 @@ const selectedAsOf = ref(props.report.as_of_date);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const labels = MESSAGES.reporting;
+const M = MESSAGES.reportsUi.customers;
 const thresholds = ['2', '6', '10'] as const;
 const reachLabel = { '2': labels.customerReach2, '6': labels.customerReach6, '10': labels.customerReach10 } as const;
 
@@ -93,9 +96,7 @@ async function loadReport(): Promise<void> {
 }
 
 function changeMonth(value: string): void {
-    if (value === selectedMonth.value) return;
-    selectedMonth.value = value;
-    void loadReport();
+    changeAndReload(selectedMonth, value, loadReport);
 }
 
 function changeAsOf(value: string): void {
@@ -131,13 +132,13 @@ function changeAsOf(value: string): void {
     <div class="summary" :aria-busy="loading">
         <div class="summary__kpis">
             <ReportKpi :label="labels.customerNew" emphasis>
-                <span data-testid="new-count"><ReportValue :value="report.new_customers" /></span><small>人</small>
+                <span data-testid="new-count"><ReportValue :value="report.new_customers" /></span><small>{{ M.peopleUnit }}</small>
             </ReportKpi>
             <ReportKpi :label="labels.customerReturning">
-                <span data-testid="returning-count"><ReportValue :value="report.returning_customers" /></span><small>人</small>
+                <span data-testid="returning-count"><ReportValue :value="report.returning_customers" /></span><small>{{ M.peopleUnit }}</small>
             </ReportKpi>
             <ReportKpi :label="labels.customerChurn">
-                <span data-testid="churn-count"><ReportValue :value="report.churn_customers" :empty-label="MESSAGES.common.notCalculated" /></span><small v-if="report.churn_customers !== null">人</small>
+                <span data-testid="churn-count"><ReportValue :value="report.churn_customers" :empty-label="MESSAGES.common.notCalculated" /></span><small v-if="report.churn_customers !== null">{{ M.peopleUnit }}</small>
             </ReportKpi>
         </div>
 
@@ -150,13 +151,13 @@ function changeAsOf(value: string): void {
                 <li class="funnel__row funnel__row--base">
                     <span class="funnel__label">{{ labels.customerNew }}</span>
                     <span class="funnel__bar"><span :style="{ width: report.new_customers > 0 ? '100%' : '0%' }" /></span>
-                    <span class="funnel__count"><ReportValue :value="report.new_customers" />人</span>
+                    <span class="funnel__count"><ReportValue :value="report.new_customers" />{{ M.peopleUnit }}</span>
                     <span class="funnel__rate">100%</span>
                 </li>
                 <li v-for="threshold in thresholds" :key="threshold" class="funnel__row">
-                    <span class="funnel__label">{{ reachLabel[threshold].replace('到達率', '') }}</span>
+                    <span class="funnel__label">{{ reachLabel[threshold].replace(M.reachRateSuffix, '') }}</span>
                     <span class="funnel__bar"><span :style="{ width: funnelWidth(report.reach[threshold].numerator) }" /></span>
-                    <span class="funnel__count">{{ report.reach[threshold].numerator }}人</span>
+                    <span class="funnel__count">{{ fillMessage(M.people, { count: String(report.reach[threshold].numerator) }) }}</span>
                     <span class="funnel__rate" :data-testid="`reach-${threshold}`"><ReportValue :value="report.reach[threshold].rate" format="percent" :empty-label="MESSAGES.common.notCalculated" /></span>
                 </li>
             </ol>
@@ -175,7 +176,7 @@ function changeAsOf(value: string): void {
                     <div class="breakdown__head">
                         <h4>{{ labels.customerDimension[dimension] }}</h4>
                         <span v-if="report.breakdowns[dimension].status === 'available' && multiSelect(dimension)" class="breakdown__total">{{ labels.customerMultiSelect }}</span>
-                        <span v-else-if="report.breakdowns[dimension].status === 'available'" class="breakdown__total">計 {{ bucketTotal(dimension) }}人</span>
+                        <span v-else-if="report.breakdowns[dimension].status === 'available'" class="breakdown__total">{{ fillMessage(M.total, { count: String(bucketTotal(dimension)) }) }}</span>
                     </div>
                     <p v-if="report.breakdowns[dimension].status === 'not_captured'" class="breakdown__empty">
                         <EmptyValue :label="labels.customerNotCaptured" />
@@ -185,7 +186,7 @@ function changeAsOf(value: string): void {
                         <li v-for="bucket in sortedBuckets(dimension)" :key="bucket.value ?? 'unknown'" :class="{ 'is-unknown': bucket.value === null }">
                             <div class="breakdown__line">
                                 <span class="breakdown__label">{{ bucketLabel(dimension, bucket) }}</span>
-                                <strong class="breakdown__count"><ReportValue :value="bucket.count" />人</strong>
+                                <strong class="breakdown__count"><ReportValue :value="bucket.count" />{{ M.peopleUnit }}</strong>
                                 <span class="breakdown__share">{{ bucketShare(dimension, bucket) }}</span>
                             </div>
                             <span class="breakdown__bar" aria-hidden="true"><span :style="{ width: barWidth(dimension, bucket) }" /></span>

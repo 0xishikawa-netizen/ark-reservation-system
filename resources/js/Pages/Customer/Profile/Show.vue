@@ -2,6 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { PageHeader, SectionCard } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -18,47 +19,43 @@ interface CustomerProfile {
 
 defineProps<{ customer: CustomerProfile }>();
 
-const display = (value: string | null): string => value || '未登録';
+const display = (value: string | null): string => value || MESSAGES.customerUi.profile.notRegistered;
 
 const genderLabel = (value: string | null): string => {
-    const labels: Record<string, string> = {
-        male: '男性',
-        female: '女性',
-        other: 'その他',
-    };
+    const labels: Record<string, string> = MESSAGES.customerUi.profile.genders;
 
-    return value ? (labels[value] ?? value) : '未登録';
+    return value ? (labels[value] ?? value) : MESSAGES.customerUi.profile.notRegistered;
 };
 </script>
 
 <template>
-    <Head title="プロフィール" />
+    <Head :title="MESSAGES.customerUi.profile.title" />
 
     <PageHeader
-        title="プロフィール"
-        subtitle="ご登録いただいているお客様情報を確認できます。"
+        :title="MESSAGES.customerUi.profile.title"
+        :subtitle="MESSAGES.customerUi.profile.subtitle"
     />
 
-    <SectionCard title="登録情報">
+    <SectionCard :title="MESSAGES.customerUi.profile.registered">
         <v-list lines="two" class="profile-list">
-            <v-list-item title="氏名" :subtitle="customer.name" />
-            <v-list-item title="カナ" :subtitle="customer.kana" />
-            <v-list-item title="電話番号" :subtitle="display(customer.phone)" />
-            <v-list-item title="生年月日" :subtitle="display(customer.birthday)" />
-            <v-list-item title="性別" :subtitle="genderLabel(customer.gender)" />
-            <v-list-item title="メールアドレス" :subtitle="customer.email" />
+            <v-list-item :title="MESSAGES.customerUi.profile.name" :subtitle="customer.name" />
+            <v-list-item :title="MESSAGES.customerUi.profile.kana" :subtitle="customer.kana" />
+            <v-list-item :title="MESSAGES.customerUi.profile.phone" :subtitle="display(customer.phone)" />
+            <v-list-item :title="MESSAGES.customerUi.profile.birthday" :subtitle="display(customer.birthday)" />
+            <v-list-item :title="MESSAGES.customerUi.profile.gender" :subtitle="genderLabel(customer.gender)" />
+            <v-list-item :title="MESSAGES.customerUi.profile.email" :subtitle="customer.email" />
             <v-list-item
-                title="メール認証"
-                :subtitle="customer.email_verified ? '認証済み' : '未認証'"
+                :title="MESSAGES.customerUi.profile.emailVerification"
+                :subtitle="customer.email_verified ? MESSAGES.customerUi.profile.verified : MESSAGES.customerUi.profile.unverified"
             />
         </v-list>
 
         <div class="d-flex ga-3 flex-wrap mt-4">
             <v-btn color="primary" variant="flat" href="/mypage/profile/edit">
-                プロフィールを編集
+                {{ MESSAGES.customerUi.profile.edit }}
             </v-btn>
             <v-btn variant="outlined" href="/mypage/security" prepend-icon="mdi-shield-account-outline">
-                セキュリティ設定
+                {{ MESSAGES.customerUi.security.title }}
             </v-btn>
         </div>
     </SectionCard>

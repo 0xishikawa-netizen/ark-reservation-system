@@ -155,7 +155,7 @@ class CustomerController extends Controller
             ],
             'acquisitionChannels' => AcquisitionChannel::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->get(['id', 'name']),
             'visitPurposes' => VisitPurpose::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->get(['id', 'name']),
-            'prefectures' => Prefectures::ALL,
+            'prefectures' => Prefectures::all(),
             'canManageKarte' => request()->user()?->can('customers.manage') ?? false,
             'customerSearchEndpoint' => route('admin.reservations.customer-search'),
         ]);

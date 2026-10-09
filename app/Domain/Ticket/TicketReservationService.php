@@ -98,7 +98,7 @@ final class TicketReservationService
                     type: TicketTransactionType::Expire,
                     delta: -1,
                     dedupeKey: "expire:{$wallet->id}:resv:{$reservation->id}",
-                    reason: '期限切れ回数券の解放分を相殺',
+                    reason: __('messages.ticket.expired_release_offset'),
                 );
             }
 

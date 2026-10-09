@@ -7,11 +7,11 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Schedule\ScheduleBlockInput;
 use App\Domain\Schedule\ScheduleBlockService;
 use App\Enums\Schedule\ScheduleBlockType;
+use App\Http\Controllers\Concerns\ResolvesAuthenticatedUser;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreScheduleBlockRequest;
 use App\Http\Requests\Admin\UpdateScheduleBlockRequest;
 use App\Models\StaffScheduleBlock;
-use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,6 +22,8 @@ use Illuminate\Http\Request;
  */
 final class ScheduleBlockController extends Controller
 {
+    use ResolvesAuthenticatedUser;
+
     public function store(
         StoreScheduleBlockRequest $request,
         ScheduleBlockService $service,
@@ -162,16 +164,5 @@ final class ScheduleBlockController extends Controller
         $trimmed = trim($value);
 
         return $trimmed === '' ? null : $trimmed;
-    }
-
-    private function userFor(Request $request): User
-    {
-        $user = $request->user();
-
-        if (! $user instanceof User) {
-            abort(403);
-        }
-
-        return $user;
     }
 }

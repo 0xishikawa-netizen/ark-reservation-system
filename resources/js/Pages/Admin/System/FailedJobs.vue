@@ -3,6 +3,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -27,6 +28,8 @@ const props = defineProps<{
     count: number;
 }>();
 
+const M = MESSAGES.reportsUi.failedJobs;
+
 const currentPage = computed<number>({
     get: () => props.jobs.current_page,
     set: (page) => {
@@ -48,11 +51,11 @@ const currentPage = computed<number>({
 </script>
 
 <template>
-    <Head title="失敗ジョブ" />
+    <Head :title="M.title" />
 
     <div class="d-flex align-center ga-3 mb-6">
-        <h1 class="text-h4">失敗ジョブ</h1>
-        <v-chip color="error" variant="tonal">{{ count }} 件</v-chip>
+        <h1 class="text-h4">{{ M.title }}</h1>
+        <v-chip color="error" variant="tonal">{{ fillMessage(M.count, { count: String(count) }) }}</v-chip>
     </div>
 
     <v-card>
@@ -61,10 +64,10 @@ const currentPage = computed<number>({
                 <thead>
                     <tr>
                         <th>UUID</th>
-                        <th>接続先</th>
-                        <th>キュー</th>
-                        <th>失敗日時</th>
-                        <th>例外（1行目）</th>
+                        <th>{{ M.connection }}</th>
+                        <th>{{ M.queue }}</th>
+                        <th>{{ M.failedAt }}</th>
+                        <th>{{ M.exception }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -95,7 +98,7 @@ const currentPage = computed<number>({
         v-model="currentPage"
         :length="jobs.last_page"
         class="mt-6"
-        aria-label="失敗ジョブのページ"
+        :aria-label="M.pagination"
     />
 </template>
 

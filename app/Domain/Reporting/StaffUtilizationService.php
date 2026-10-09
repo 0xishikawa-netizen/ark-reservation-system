@@ -25,7 +25,7 @@ final class StaffUtilizationService
     public function forMonth(int $year, int $month, ?int $staffId = null, ?int $employmentTypeId = null, ?string $asOfDate = null): array
     {
         if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12) {
-            throw new InvalidArgumentException('年月の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.year_month_invalid'));
         }
         $start = CarbonImmutable::create($year, $month, 1, 0, 0, 0, $this->businessTime->timezone());
         $end = $start->endOfMonth()->startOfDay();
@@ -34,7 +34,7 @@ final class StaffUtilizationService
             : CarbonImmutable::createFromFormat('!Y-m-d', $asOfDate, $this->businessTime->timezone());
         if ($asOf === false || ($asOfDate !== null && $asOf->toDateString() !== $asOfDate)
             || $asOf->lt($start->subDay()) || $asOf->gt($end)) {
-            throw new InvalidArgumentException('as_of_dateは対象月内（未来月は月初前日も可）で指定してください。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.as_of_month_with_future_invalid'));
         }
 
         $staffOptions = Staff::query()->orderBy('sort_order')->orderBy('user_id')

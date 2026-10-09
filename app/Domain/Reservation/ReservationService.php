@@ -8,6 +8,7 @@ use App\Domain\Integration\Enum\SyncOperation;
 use App\Domain\Integration\Service\ReservationOutboxRecorder;
 use App\Domain\Membership\MembershipReservationService;
 use App\Domain\Payment\PaymentService;
+use App\Domain\Schedule\ResourceLock;
 use App\Domain\Ticket\TicketReservationService;
 use App\Domain\Visit\VisitCompletionService;
 use App\Enums\Payment\PaymentKind;
@@ -80,7 +81,7 @@ final class ReservationService
 
         try {
             $reservation = DB::transaction(function () use ($in, $endsAt, $slots, $boothId): Reservation {
-                $this->lockResources([$in->staffId], [$boothId]);
+                ResourceLock::forUpdate([$in->staffId], [$boothId]);
                 $this->assertNoScheduleBlockOverlap($in->staffId, $boothId, $in->startsAt, $endsAt);
 
                 // カード決済（single）は Stripe の与信が済むまで確定しない。
@@ -196,7 +197,7 @@ final class ReservationService
                 }
                 $endsAt = $in->startsAt->addMinutes($bookedMinutes + (int) $reservation->buffer_min);
                 $boothId = $this->resolveBooth($service, $in->boothId, $in->startsAt, $endsAt, (int) $reservation->id);
-                $this->lockResources(
+                ResourceLock::forUpdate(
                     [$reservation->staff_id, $in->staffId],
                     [$reservation->booth_id, $boothId],
                 );
@@ -305,7 +306,7 @@ final class ReservationService
                 $bookedMinutes = $reservation->bookedMinutes() + $minutes;
                 $startsAt = CarbonImmutable::parse($reservation->starts_at->format('Y-m-d H:i:s'));
                 $endsAt = $startsAt->addMinutes($bookedMinutes + (int) $reservation->buffer_min);
-                $this->lockResources([$reservation->staff_id], [$reservation->booth_id]);
+                ResourceLock::forUpdate([$reservation->staff_id], [$reservation->booth_id]);
                 $this->validateReservationDetails(
                     service: $baseService,
                     staffId: $reservation->staff_id,
@@ -473,7 +474,7 @@ final class ReservationService
                         $refund = $this->payments->refund(
                             $payment,
                             $amount,
-                            "キャンセルポリシーによる返金（{$percent}%）",
+                            __('messages.payment.cancellation_policy_refund_reason', ['percent' => $percent]),
                             $refundActor,
                         );
                     } catch (Throwable) {
@@ -519,7 +520,7 @@ final class ReservationService
 
             if ($freshPayment->failure_code === null) {
                 $changes['failure_code'] = 'cancel_refund_failed';
-                $changes['failure_message'] = 'キャンセルに伴う自動返金の確認が必要です。';
+                $changes['failure_message'] = __('messages.payment.cancel_refund_needs_confirmation');
             }
 
             $freshPayment->forceFill($changes)->save();
@@ -719,41 +720,6 @@ final class ReservationService
 
         if ($boothId !== null && $this->hasScheduleBlockOverlap('booth_id', $boothId, $startsAt, $endsAt)) {
             $this->throwValidation('booth_id', __('messages.reservation.booth_block_overlap'));
-        }
-    }
-
-    /**
-     * @param  list<int|null>  $staffIds
-     * @param  list<int|null>  $boothIds
-     */
-    private function lockResources(array $staffIds, array $boothIds): void
-    {
-        $staffIds = array_values(array_unique(array_map(
-            static fn (mixed $id): int => (int) $id,
-            array_filter($staffIds, static fn (mixed $id): bool => $id !== null),
-        )));
-        sort($staffIds);
-        $boothIds = array_values(array_unique(array_map(
-            static fn (mixed $id): int => (int) $id,
-            array_filter($boothIds, static fn (mixed $id): bool => $id !== null),
-        )));
-        sort($boothIds);
-
-        if ($staffIds !== []) {
-            Staff::withTrashed()
-                ->whereIn('user_id', $staffIds)
-                ->orderBy('user_id')
-                ->lockForUpdate()
-                ->get();
-        }
-
-        if ($boothIds !== []) {
-            Booth::withTrashed()
-                ->withoutGlobalScope('sort_order')
-                ->whereIn('id', $boothIds)
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get();
         }
     }
 

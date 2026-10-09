@@ -21,7 +21,7 @@ const emit = defineEmits<{
 
 <template>
     <PanelShell
-        title="ブッキングボード"
+        :title="MESSAGES.boardUi.customerSearch.boardTitle"
         icon="mdi-view-dashboard-outline"
         :show-back="canGoBack"
         @close="emit('close')"
@@ -40,7 +40,7 @@ const emit = defineEmits<{
             class="csp__createbtn"
             @click="emit('create')"
         >
-            新規予約を作成
+            {{ MESSAGES.boardUi.customerSearch.createReservation }}
         </v-btn>
     </PanelShell>
 </template>

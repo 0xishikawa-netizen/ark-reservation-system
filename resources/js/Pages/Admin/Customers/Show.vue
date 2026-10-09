@@ -5,6 +5,7 @@ import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip } from '@/c
 import { realEmail } from '@/utils/placeholderEmail';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -104,11 +105,7 @@ const nextReservation = computed<RecentReservation | null>(() => {
 
 
 const genderLabel = (value: string | null): string => {
-    const labels: Record<string, string> = {
-        male: '男性',
-        female: '女性',
-        other: 'その他',
-    };
+    const labels: Record<string, string> = MESSAGES.mastersUi.customerShow.genders;
 
     return value ? (labels[value] ?? value) : '';
 };
@@ -116,8 +113,8 @@ const genderLabel = (value: string | null): string => {
 const createdViaLabel = (value: string): string => {
     const labels: Record<string, string> = {
         web: 'Web',
-        admin: '管理画面',
-        migration: '移行',
+        admin: MESSAGES.mastersUi.customerShow.adminSource,
+        migration: MESSAGES.mastersUi.customerShow.migrationSource,
     };
 
     return labels[value] ?? value;
@@ -137,9 +134,9 @@ function formatShortDateTime(value: string): string {
 </script>
 
 <template>
-    <Head :title="`${customer.name}の顧客情報`" />
+    <Head :title="fillMessage(MESSAGES.mastersUi.customerShow.head, { name: customer.name })" />
 
-    <PageHeader title="顧客詳細" :subtitle="customer.name">
+    <PageHeader :title="MESSAGES.mastersUi.customerShow.title" :subtitle="customer.name">
         <template #actions>
             <v-btn
                 v-if="page.props.auth.can.customersManage"
@@ -148,55 +145,55 @@ function formatShortDateTime(value: string): string {
                 prepend-icon="mdi-pencil-outline"
                 :href="`/admin/customers/${customer.user_id}/edit`"
             >
-                編集
+                {{ MESSAGES.mastersUi.customerShow.edit }}
             </v-btn>
         </template>
     </PageHeader>
 
-    <SectionCard title="基本情報" class="basic-information-card">
+    <SectionCard :title="MESSAGES.mastersUi.customerShow.basicInformation" class="basic-information-card">
         <template #append>
-            <v-btn variant="text" href="/admin/customers">一覧へ戻る</v-btn>
+            <v-btn variant="text" href="/admin/customers">{{ MESSAGES.mastersUi.customerShow.backToList }}</v-btn>
         </template>
 
         <dl class="customer-profile-grid">
             <div class="customer-profile-item">
-                <dt>氏名</dt>
+                <dt>{{ MESSAGES.mastersUi.customerShow.name }}</dt>
                 <dd>{{ customer.name }}</dd>
             </div>
             <div class="customer-profile-item">
-                <dt>カナ</dt>
+                <dt>{{ MESSAGES.mastersUi.customerShow.kana }}</dt>
                 <dd><template v-if="customer.kana">{{ customer.kana }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item">
-                <dt>電話番号</dt>
+                <dt>{{ MESSAGES.mastersUi.customerShow.phone }}</dt>
                 <dd><template v-if="customer.phone">{{ customer.phone }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item">
-                <dt>生年月日</dt>
+                <dt>{{ MESSAGES.mastersUi.customerShow.birthday }}</dt>
                 <dd><template v-if="customer.birthday">{{ customer.birthday }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item">
-                <dt>性別</dt>
+                <dt>{{ MESSAGES.mastersUi.customerShow.gender }}</dt>
                 <dd><template v-if="genderLabel(customer.gender)">{{ genderLabel(customer.gender) }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item customer-profile-item--wide">
-                <dt>メールアドレス</dt>
+                <dt>{{ MESSAGES.mastersUi.customerShow.email }}</dt>
                 <dd><template v-if="realEmail(customer.email)">{{ realEmail(customer.email) }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item">
-                <dt>メール認証</dt>
-                <dd>{{ customer.email_verified ? '認証済み' : '未認証' }}</dd>
+                <dt>{{ MESSAGES.mastersUi.customerShow.emailVerification }}</dt>
+                <dd>{{ customer.email_verified ? MESSAGES.mastersUi.customerShow.verified : MESSAGES.mastersUi.customerShow.unverified }}</dd>
             </div>
             <div class="customer-profile-item">
-                <dt>登録経路</dt>
+                <dt>{{ MESSAGES.mastersUi.customerShow.source }}</dt>
                 <dd>{{ createdViaLabel(customer.created_via) }}</dd>
             </div>
             <div class="customer-profile-item">
-                <dt>登録日</dt>
+                <dt>{{ MESSAGES.mastersUi.customerShow.registeredAt }}</dt>
                 <dd><template v-if="customer.created_at">{{ customer.created_at }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
             <div class="customer-profile-item customer-profile-item--wide">
-                <dt>メモ</dt>
+                <dt>{{ MESSAGES.mastersUi.customerShow.note }}</dt>
                 <dd class="customer-note"><template v-if="customer.note">{{ customer.note }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></dd>
             </div>
         </dl>
@@ -205,7 +202,7 @@ function formatShortDateTime(value: string): string {
     <div class="overview-grid" :class="{ 'overview-grid--single': !nextReservation }">
         <SectionCard
             v-if="nextReservation"
-            title="次回の予約"
+            :title="MESSAGES.mastersUi.customerShow.nextReservation"
             class="next-reservation-card"
         >
             <div class="next-reservation-row">
@@ -215,7 +212,7 @@ function formatShortDateTime(value: string): string {
                     </div>
                     <div class="text-body-2 mt-1">{{ nextReservation.service_name }}</div>
                     <div class="text-caption text-medium-emphasis">
-                        担当: <template v-if="nextReservation.staff_name">{{ nextReservation.staff_name }}</template><EmptyValue v-else :label="MESSAGES.common.notSet" />
+                        {{ MESSAGES.mastersUi.customerShow.assignedStaff }}<template v-if="nextReservation.staff_name">{{ nextReservation.staff_name }}</template><EmptyValue v-else :label="MESSAGES.common.notSet" />
                     </div>
                     <StatusChip
                         :status="nextReservation.status"
@@ -231,13 +228,13 @@ function formatShortDateTime(value: string): string {
                     class="next-reservation-link"
                     :href="`/admin/schedule?date=${nextReservation.starts_at.slice(0, 10)}&reservation=${nextReservation.id}`"
                 >
-                    予約を見る
+                    {{ MESSAGES.mastersUi.customerShow.viewReservation }}
                 </v-btn>
             </div>
         </SectionCard>
 
         <div class="overview-secondary">
-            <SectionCard title="月額プラン" class="summary-card">
+            <SectionCard :title="MESSAGES.mastersUi.customerShow.membershipPlan" class="summary-card">
                 <template #append>
                     <StatusChip
                         v-if="overview.membership !== null"
@@ -255,16 +252,16 @@ function formatShortDateTime(value: string): string {
                             color="warning"
                             variant="outlined"
                         >
-                            期間末で終了
+                            {{ MESSAGES.mastersUi.customerShow.endingAtPeriodEnd }}
                         </v-chip>
                     </div>
                     <div class="summary-metrics mt-3">
                         <div>
-                            <span class="summary-metrics__label">当期残</span>
+                            <span class="summary-metrics__label">{{ MESSAGES.mastersUi.customerShow.remainingThisPeriod }}</span>
                             <strong>{{ overview.membership.available }}</strong>
                         </div>
                         <div>
-                            <span class="summary-metrics__label">当期終了</span>
+                            <span class="summary-metrics__label">{{ MESSAGES.mastersUi.customerShow.periodEnds }}</span>
                             <strong>
                                 <template v-if="overview.membership.current_period_end">{{ overview.membership.current_period_end }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" />
                             </strong>
@@ -277,25 +274,25 @@ function formatShortDateTime(value: string): string {
                         class="summary-link"
                         :href="`/admin/customers/${customer.user_id}/membership`"
                     >
-                        月額プラン
+                        {{ MESSAGES.mastersUi.customerShow.membershipPlan }}
                     </v-btn>
                 </template>
                 <p v-else class="text-body-2 text-medium-emphasis mb-0">
-                    加入なし
+                    {{ MESSAGES.mastersUi.customerShow.notSubscribed }}
                 </p>
             </SectionCard>
 
-            <SectionCard title="回数券" class="summary-card">
+            <SectionCard :title="MESSAGES.mastersUi.customerShow.tickets" class="summary-card">
                 <div class="ticket-summary">
                     <div>
                         <span class="ticket-summary__value">
                             {{ overview.tickets.active_wallet_count }}
                         </span>
-                        <span class="text-body-2 text-medium-emphasis">冊</span>
+                        <span class="text-body-2 text-medium-emphasis">{{ MESSAGES.mastersUi.customerShow.walletUnit }}</span>
                     </div>
                     <v-divider vertical />
                     <div>
-                        <span class="text-body-2 text-medium-emphasis">利用可能</span>
+                        <span class="text-body-2 text-medium-emphasis">{{ MESSAGES.mastersUi.customerShow.available }}</span>
                         <span class="ticket-summary__value ml-2">
                             {{ overview.tickets.total_available }}
                         </span>
@@ -309,22 +306,22 @@ function formatShortDateTime(value: string): string {
                     class="summary-link"
                     :href="`/admin/customers/${customer.user_id}/tickets`"
                 >
-                    回数券
+                    {{ MESSAGES.mastersUi.customerShow.tickets }}
                 </v-btn>
                 <p v-else class="text-body-2 text-medium-emphasis mb-0 mt-2">
-                    保有なし
+                    {{ MESSAGES.mastersUi.customerShow.noTickets }}
                 </p>
             </SectionCard>
         </div>
     </div>
 
     <SectionCard
-        title="予約履歴"
-        :subtitle="`予約 ${overview.reservation_totals.total} 件 / 今後 ${overview.reservation_totals.upcoming} 件`"
+        :title="MESSAGES.mastersUi.customerShow.reservationHistory"
+        :subtitle="fillMessage(MESSAGES.mastersUi.customerShow.reservationSummary, { total: String(overview.reservation_totals.total), upcoming: String(overview.reservation_totals.upcoming) })"
         class="history-card"
     >
         <template #append>
-            <v-btn variant="text" :href="`/admin/reservations?customer_id=${customer.user_id}`">予約一覧へ</v-btn>
+            <v-btn variant="text" :href="`/admin/reservations?customer_id=${customer.user_id}`">{{ MESSAGES.mastersUi.customerShow.reservationList }}</v-btn>
         </template>
 
         <v-list v-if="overview.recent_reservations.length > 0" lines="two" class="history-list">
@@ -337,7 +334,7 @@ function formatShortDateTime(value: string): string {
                         {{ reservation.starts_at }} ・ {{ reservation.service_name }}
                     </template>
                     <template #subtitle>
-                        担当: <template v-if="reservation.staff_name">{{ reservation.staff_name }}</template><EmptyValue v-else :label="MESSAGES.common.notSet" />
+                        {{ MESSAGES.mastersUi.customerShow.assignedStaff }}<template v-if="reservation.staff_name">{{ reservation.staff_name }}</template><EmptyValue v-else :label="MESSAGES.common.notSet" />
                     </template>
                     <template #append>
                         <StatusChip
@@ -352,19 +349,19 @@ function formatShortDateTime(value: string): string {
         <EmptyState
             v-else
             icon="mdi-calendar-blank-outline"
-            title="予約履歴はありません。"
+            :title="MESSAGES.reservation.noHistory"
         />
     </SectionCard>
 
     <SectionCard
-        title="支払い履歴"
+        :title="MESSAGES.mastersUi.customerShow.paymentHistory"
         :subtitle="overview.payments === null
             ? undefined
-            : `${overview.payments.total_count} 件 / 要対応 ${overview.payments.needs_attention_count} 件`"
+            : fillMessage(MESSAGES.mastersUi.customerShow.paymentSummary, { total: String(overview.payments.total_count), attention: String(overview.payments.needs_attention_count) })"
         class="history-card"
     >
         <template v-if="overview.payments !== null" #append>
-            <v-btn variant="text" :href="`/admin/payments?customer_id=${customer.user_id}`">支払い一覧へ</v-btn>
+            <v-btn variant="text" :href="`/admin/payments?customer_id=${customer.user_id}`">{{ MESSAGES.mastersUi.customerShow.paymentList }}</v-btn>
         </template>
 
         <p v-if="overview.payments === null" class="text-body-2 text-medium-emphasis mb-0">
@@ -398,7 +395,7 @@ function formatShortDateTime(value: string): string {
                                 size="x-small"
                                 variant="outlined"
                             >
-                                要対応
+                                {{ MESSAGES.mastersUi.customerShow.needsAttention }}
                             </v-chip>
                         </div>
                     </template>
@@ -409,7 +406,7 @@ function formatShortDateTime(value: string): string {
         <EmptyState
             v-else
             icon="mdi-credit-card-outline"
-            title="支払い履歴はありません。"
+            :title="MESSAGES.mastersUi.customerShow.noPaymentHistory"
         />
     </SectionCard>
 </template>

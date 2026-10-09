@@ -3,6 +3,7 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import { EmptyValue, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -52,6 +53,8 @@ defineProps<{
     recent_events: EventRow[];
 }>();
 
+const M = MESSAGES.reportsUi.integrations;
+
 const canManage = Boolean(usePage().props.auth?.can?.integrationsManage);
 
 // StatusChip は semantic key を色に写像する。日本語ステータスを key へ変換。
@@ -79,11 +82,11 @@ function retry(row: ActionableRow): void {
 </script>
 
 <template>
-    <Head title="外部予約連携" />
+    <Head :title="M.title" />
 
-    <PageHeader title="外部予約連携" subtitle="外部予約サービスとの同期状態を確認できます。" />
+    <PageHeader :title="M.title" :subtitle="M.subtitle" />
 
-    <SectionCard title="連携サービス" class="mb-6">
+    <SectionCard :title="M.providers" class="mb-6">
         <v-alert
             v-if="!active_provider"
             type="info"
@@ -101,22 +104,22 @@ function retry(row: ActionableRow): void {
                     <StatusChip :status="providerStatusKey(p.status)" :label="p.status" />
                 </div>
                 <v-list density="compact" class="bg-transparent">
-                    <v-list-item title="最終 Inbound" :subtitle="p.last_inbound_at ?? MESSAGES.common.notSynced" />
-                    <v-list-item title="最終 Outbound" :subtitle="p.last_outbound_at ?? MESSAGES.common.notSynced" />
-                    <v-list-item title="最終 Reconcile" :subtitle="p.last_reconcile_at ?? MESSAGES.common.notReconciled" />
-                    <v-list-item title="送信待ち" :subtitle="String(p.pending_outbox)" />
+                    <v-list-item :title="M.lastInbound" :subtitle="p.last_inbound_at ?? MESSAGES.common.notSynced" />
+                    <v-list-item :title="M.lastOutbound" :subtitle="p.last_outbound_at ?? MESSAGES.common.notSynced" />
+                    <v-list-item :title="M.lastReconcile" :subtitle="p.last_reconcile_at ?? MESSAGES.common.notReconciled" />
+                    <v-list-item :title="M.pendingOutbox" :subtitle="String(p.pending_outbox)" />
                     <v-list-item
-                        title="要対応（失敗 / 競合）"
+                        :title="M.failedConflicts"
                         :subtitle="`${p.failed_outbox} / ${p.open_conflicts}`"
                     />
                     <v-list-item
                         v-if="p.stuck_processing > 0"
-                        title="処理中で滞留"
-                        :subtitle="`${p.stuck_processing} 件（15 分以上）`"
+                        :title="M.stuckProcessing"
+                        :subtitle="fillMessage(M.stuckCount, { count: String(p.stuck_processing) })"
                     />
                 </v-list>
                 <v-chip v-if="p.needs_attention > 0" color="warning" size="small" class="mt-2">
-                    要確認 {{ p.needs_attention }} 件
+                    {{ fillMessage(M.needsAttentionCount, { count: String(p.needs_attention) }) }}
                 </v-chip>
             </v-card>
         </div>
@@ -125,7 +128,7 @@ function retry(row: ActionableRow): void {
     <SectionCard
         v-for="p in providers.filter((x) => x.actionable.length > 0)"
         :key="`act-${p.key}`"
-        :title="`要対応の送信キュー — ${p.label}`"
+        :title="fillMessage(M.actionableQueue, { label: p.label })"
         class="mb-6"
     >
         <v-alert
@@ -140,13 +143,13 @@ function retry(row: ActionableRow): void {
         <v-table density="compact">
             <thead>
                 <tr>
-                    <th>日時</th>
-                    <th>予約ID</th>
-                    <th>操作</th>
-                    <th>状態</th>
-                    <th>試行</th>
-                    <th>エラー</th>
-                    <th class="text-right">操作</th>
+                    <th>{{ M.datetime }}</th>
+                    <th>{{ M.reservationId }}</th>
+                    <th>{{ M.operation }}</th>
+                    <th>{{ M.status }}</th>
+                    <th>{{ M.attempts }}</th>
+                    <th>{{ M.error }}</th>
+                    <th class="text-right">{{ M.operation }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -165,7 +168,7 @@ function retry(row: ActionableRow): void {
                             :disabled="!canManage"
                             @click="retry(row)"
                         >
-                            再送
+                            {{ M.retry }}
                         </v-btn>
                     </td>
                 </tr>
@@ -173,7 +176,7 @@ function retry(row: ActionableRow): void {
         </v-table>
     </SectionCard>
 
-    <SectionCard title="最近の同期履歴">
+    <SectionCard :title="M.recentEvents">
         <v-alert
             v-if="recent_events.length === 0"
             type="info"
@@ -185,26 +188,26 @@ function retry(row: ActionableRow): void {
         <v-table v-else density="compact">
             <thead>
                 <tr>
-                    <th>日時</th>
-                    <th>サービス</th>
-                    <th>方向</th>
-                    <th>操作</th>
-                    <th>結果</th>
-                    <th>外部ID</th>
-                    <th>備考</th>
+                    <th>{{ M.datetime }}</th>
+                    <th>{{ M.service }}</th>
+                    <th>{{ M.direction }}</th>
+                    <th>{{ M.operation }}</th>
+                    <th>{{ M.result }}</th>
+                    <th>{{ M.externalId }}</th>
+                    <th>{{ M.note }}</th>
                 </tr>
             </thead>
             <tbody>
                 <tr v-for="e in recent_events" :key="e.id">
                     <td>{{ e.at ?? MESSAGES.common.notRecorded }}</td>
                     <td>{{ e.provider }}</td>
-                    <td>{{ e.direction === 'inbound' ? '取込' : '送信' }}</td>
+                    <td>{{ e.direction === 'inbound' ? M.inbound : M.outbound }}</td>
                     <td>{{ e.operation }}</td>
                     <td><StatusChip :status="e.status" :label="e.status" /></td>
                     <td>{{ e.external_id ?? MESSAGES.common.notLinked }}</td>
                     <td>
                         <span v-if="e.error_code" class="text-medium-emphasis">
-                            {{ e.error_category }} / {{ e.error_code }}（試行 {{ e.attempt }}）
+                            {{ fillMessage(M.errorDetail, { category: e.error_category ?? '', code: e.error_code ?? '', attempt: String(e.attempt) }) }}
                         </span>
                         <EmptyValue v-else />
                     </td>

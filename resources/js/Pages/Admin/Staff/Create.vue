@@ -2,13 +2,14 @@
 import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { ColorField, PageHeader, SectionCard } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
 const roles = [
-    { title: 'スタッフ', value: 'staff' },
-    { title: 'マネージャー', value: 'manager' },
-    { title: '管理者', value: 'admin' },
+    { title: MESSAGES.mastersUi.staff.roles.staff, value: 'staff' },
+    { title: MESSAGES.mastersUi.staff.roles.manager, value: 'manager' },
+    { title: MESSAGES.mastersUi.staff.roles.admin, value: 'admin' },
 ] as const;
 
 const form = useForm({
@@ -26,19 +27,19 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Head title="スタッフ作成" />
+    <Head :title="MESSAGES.mastersUi.staff.createHead" />
 
     <div class="ark-form-page">
         <PageHeader
-            title="スタッフを追加"
-            subtitle="作成後、入力したメールアドレスへパスワード設定リンクを送信します。"
+            :title="MESSAGES.mastersUi.staff.createTitle"
+            :subtitle="MESSAGES.mastersUi.staff.createSubtitle"
         />
 
         <v-form @submit.prevent="submit">
-            <SectionCard title="基本情報">
+            <SectionCard :title="MESSAGES.mastersUi.staff.basicInformation">
                 <v-text-field
                     v-model="form.name"
-                    label="氏名"
+                    :label="MESSAGES.mastersUi.staff.name"
                     autocomplete="name"
                     hide-details="auto"
                     class="ark-field-name mb-4"
@@ -47,7 +48,7 @@ const submit = (): void => {
                 />
                 <v-text-field
                     v-model="form.display_name"
-                    label="画面表示名"
+                    :label="MESSAGES.mastersUi.staff.screenDisplayName"
                     hide-details="auto"
                     class="ark-field-name mb-4"
                     :error-messages="form.errors.display_name"
@@ -55,7 +56,7 @@ const submit = (): void => {
                 />
                 <v-text-field
                     v-model="form.email"
-                    label="メールアドレス（ログインID）"
+                    :label="MESSAGES.mastersUi.staff.loginEmail"
                     type="email"
                     autocomplete="email"
                     hide-details="auto"
@@ -63,16 +64,16 @@ const submit = (): void => {
                     :error-messages="form.errors.email"
                     required
                 />
-                <ColorField v-model="form.color" label="表示色" />
+                <ColorField v-model="form.color" :label="MESSAGES.mastersUi.staff.displayColor" />
                 <div v-if="form.errors.color" class="text-error text-caption mt-1">
                     {{ form.errors.color }}
                 </div>
             </SectionCard>
 
-            <SectionCard title="予約設定" class="mt-4">
+            <SectionCard :title="MESSAGES.mastersUi.staff.reservationSettings" class="mt-4">
                 <v-select
                     v-model="form.role"
-                    label="ロール"
+                    :label="MESSAGES.mastersUi.staff.role"
                     :items="roles"
                     hide-details="auto"
                     style="max-width: 220px"
@@ -80,7 +81,7 @@ const submit = (): void => {
                 />
                 <v-switch
                     v-model="form.is_bookable"
-                    label="予約を受け付ける"
+                    :label="MESSAGES.mastersUi.staff.acceptsBookings"
                     color="primary"
                     hide-details
                     class="mt-2"
@@ -90,9 +91,9 @@ const submit = (): void => {
 
             <div class="ark-form-page__actions">
                 <v-spacer />
-                <v-btn variant="text" href="/admin/staff">キャンセル</v-btn>
+                <v-btn variant="text" href="/admin/staff">{{ MESSAGES.mastersUi.staff.cancel }}</v-btn>
                 <v-btn type="submit" color="primary" size="large" :loading="form.processing">
-                    作成してメールを送信
+                    {{ MESSAGES.mastersUi.staff.createAndSendEmail }}
                 </v-btn>
             </div>
         </v-form>

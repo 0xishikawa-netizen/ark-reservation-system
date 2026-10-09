@@ -9,16 +9,16 @@ final class AgeDecadeBucket
 {
     /** @var array<string, string> */
     public const LABELS = [
-        '0-9' => '0〜9歳',
-        '10-19' => '10代',
-        '20-29' => '20代',
-        '30-39' => '30代',
-        '40-49' => '40代',
-        '50-59' => '50代',
-        '60-69' => '60代',
-        '70-79' => '70代',
-        '80-89' => '80代',
-        '90+' => '90代以上',
+        '0-9' => 'messages.reporting.age_0_9',
+        '10-19' => 'messages.reporting.age_10_19',
+        '20-29' => 'messages.reporting.age_20_29',
+        '30-39' => 'messages.reporting.age_30_39',
+        '40-49' => 'messages.reporting.age_40_49',
+        '50-59' => 'messages.reporting.age_50_59',
+        '60-69' => 'messages.reporting.age_60_69',
+        '70-79' => 'messages.reporting.age_70_79',
+        '80-89' => 'messages.reporting.age_80_89',
+        '90+' => 'messages.reporting.age_90_plus',
     ];
 
     public static function codeFor(?int $age): ?string
@@ -36,6 +36,6 @@ final class AgeDecadeBucket
 
     public static function labelFor(?string $code): ?string
     {
-        return $code === null ? null : (self::LABELS[$code] ?? null);
+        return $code === null || ! isset(self::LABELS[$code]) ? null : __(self::LABELS[$code]);
     }
 }

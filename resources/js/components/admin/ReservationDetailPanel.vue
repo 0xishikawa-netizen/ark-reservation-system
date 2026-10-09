@@ -10,6 +10,19 @@ import type {
     PanelData,
 } from "@/components/admin/panels/reservationDetailTypes";
 
+import { fillMessage } from '@/utils/message';
+import { formatYenCurrency } from '@/utils/money';
+/** 予約延長の既定分数。 */
+const DEFAULT_EXTENSION_MINUTES = 30;
+/** 予約延長で選択できる分数。 */
+const EXTENSION_MINUTE_OPTIONS = [15, 30, 45, 60] as const;
+/** 顧客メモの省略表示を判定する許容ピクセル。 */
+const MEMO_OVERFLOW_TOLERANCE_PX = 2;
+/** 1時間あたりの分数。 */
+const MINUTES_PER_HOUR = 60;
+/** 2桁の時刻表示幅。 */
+const TIME_PART_WIDTH = 2;
+
 const props = withDefaults(
     defineProps<{
         reservationId: number | null;
@@ -56,7 +69,7 @@ const confirmMode = ref<null | "cancel" | "no_show" | "no_checkout" | "extend">(
     null,
 );
 // 延長（Task 11-29）：追加する分数と施術。空いていなければサーバーが保存しない。
-const extendMinutes = ref<number>(30);
+const extendMinutes = ref<number>(DEFAULT_EXTENSION_MINUTES);
 const extendServiceId = ref<number | null>(null);
 // 会計なしで来店完了にする理由（Task 11-27）。通常の施術は「来店・会計」で確定する。
 const exemptionReason = ref<string | null>(null);
@@ -138,7 +151,7 @@ async function load(): Promise<void> {
             await nextTick();
             memoOverflows.value =
                 !!memoEl.value &&
-                memoEl.value.scrollHeight - memoEl.value.clientHeight > 2;
+                memoEl.value.scrollHeight - memoEl.value.clientHeight > MEMO_OVERFLOW_TOLERANCE_PX;
         }
     } catch {
         if (requestedKey === key) {
@@ -185,7 +198,11 @@ function refetch(): void {
 const genderLabel = computed<string | null>(() => {
     const g = data.value?.customer?.gender;
 
-    return g === "male" ? "男" : g === "female" ? "女" : null;
+    return g === "male"
+        ? MESSAGES.boardUi.reservationDetailPanel.maleShort
+        : g === "female"
+          ? MESSAGES.boardUi.reservationDetailPanel.femaleShort
+          : null;
 });
 
 const timeRange = computed(() => {
@@ -197,8 +214,8 @@ const timeRange = computed(() => {
 
     // 予約（施術）の時間を出し、終了後インターバルは別に添える（Task 11-29）。
     const [h, m] = r.ends_at.slice(11, 16).split(":").map(Number);
-    const end = h * 60 + m - (r.buffer_min ?? 0);
-    const endLabel = `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
+    const end = h * MINUTES_PER_HOUR + m - (r.buffer_min ?? 0);
+    const endLabel = `${String(Math.floor(end / MINUTES_PER_HOUR)).padStart(TIME_PART_WIDTH, "0")}:${String(end % MINUTES_PER_HOUR).padStart(TIME_PART_WIDTH, "0")}`;
     const buffer =
         (r.buffer_min ?? 0) > 0
             ? `（${MESSAGES.visitCompletion.bufferAfter.replace("{min}", String(r.buffer_min))}）`
@@ -214,14 +231,6 @@ function fmtDay(iso: string): string {
     }).format(new Date(y, m - 1, d));
 
     return `${m}/${d}（${weekday}）`;
-}
-
-function money(value: number): string {
-    return new Intl.NumberFormat("ja-JP", {
-        style: "currency",
-        currency: "JPY",
-        maximumFractionDigits: 0,
-    }).format(value);
 }
 
 function goRow(row: HistoryRow): void {
@@ -337,7 +346,9 @@ function openNoCheckout(): void {
 }
 
 const panelTitle = computed(() =>
-    data.value?.reservation ? "予約詳細" : "顧客情報",
+    data.value?.reservation
+        ? MESSAGES.boardUi.reservationDetailPanel.reservationDetail
+        : MESSAGES.boardUi.reservationDetailPanel.customerInformation,
 );
 const panelIcon = computed(() =>
     data.value?.reservation
@@ -422,7 +433,7 @@ function submitConfirm(): void {
             <v-icon icon="mdi-alert-circle-outline" color="error" size="26" />
             <p class="text-body-2 mt-2">{{ MESSAGES.common.loadFailed }}</p>
             <v-btn variant="tonal" size="small" class="mt-2" @click="refetch"
-                >再読み込み</v-btn
+                >{{ MESSAGES.boardUi.reservationDetailPanel.reload }}</v-btn
             >
         </div>
 
@@ -455,7 +466,7 @@ function submitConfirm(): void {
                 <div
                     class="rdp__tabs"
                     role="tablist"
-                    aria-label="表示の切り替え"
+                    :aria-label="MESSAGES.boardUi.reservationDetailPanel.switchDisplay"
                 >
                     <button
                         v-if="data.reservation"
@@ -465,7 +476,7 @@ function submitConfirm(): void {
                         @click="viewCustomerDetail"
                     >
                         <v-icon icon="mdi-account-outline" size="16" />
-                        <span>顧客</span>
+                        <span>{{ MESSAGES.boardUi.reservationDetailPanel.customer }}</span>
                     </button>
                     <button
                         type="button"
@@ -476,13 +487,13 @@ function submitConfirm(): void {
                         @click="selectSection('history')"
                     >
                         <v-icon icon="mdi-history" size="16" />
-                        <span>履歴</span>
+                        <span>{{ MESSAGES.boardUi.reservationDetailPanel.history }}</span>
                         <v-icon
                             v-if="section === 'history'"
                             icon="mdi-close"
                             size="12"
                             class="rdp__tab-close"
-                            aria-label="履歴を閉じる"
+                            :aria-label="MESSAGES.boardUi.reservationDetailPanel.closeHistory"
                             @click.stop="section = 'default'"
                         />
                     </button>
@@ -495,13 +506,13 @@ function submitConfirm(): void {
                         @click="selectSection('upcoming')"
                     >
                         <v-icon icon="mdi-calendar-clock-outline" size="16" />
-                        <span>今後の予約</span>
+                        <span>{{ MESSAGES.boardUi.reservationDetailPanel.upcoming }}</span>
                         <v-icon
                             v-if="section === 'upcoming'"
                             icon="mdi-close"
                             size="12"
                             class="rdp__tab-close"
-                            aria-label="今後の予約を閉じる"
+                            :aria-label="MESSAGES.boardUi.reservationDetailPanel.closeUpcoming"
                             @click.stop="section = 'default'"
                         />
                     </button>
@@ -514,13 +525,13 @@ function submitConfirm(): void {
 
             <!-- 利用状況：数字を太字にして一瞬で分かるように（§10） -->
             <section v-if="data.customer" class="rdp__sec">
-                <h3 class="rdp__h">利用状況</h3>
+                <h3 class="rdp__h">{{ MESSAGES.boardUi.reservationDetailPanel.usage }}</h3>
                 <div class="rdp__stats">
                     <div class="rdp__stat">
-                        <span class="rdp__stat-label">来店</span>
+                        <span class="rdp__stat-label">{{ MESSAGES.boardUi.reservationDetailPanel.visits }}</span>
                         <span class="rdp__stat-value"
                             >{{ data.customer.visit_count
-                            }}<small>回</small></span
+                            }}<small>{{ MESSAGES.boardUi.reservationDetailPanel.times }}</small></span
                         >
                     </div>
                     <div
@@ -532,7 +543,7 @@ function submitConfirm(): void {
                             t.product_name
                         }}</span>
                         <span class="rdp__stat-value"
-                            >残り {{ t.available }}<small>回</small></span
+                            >{{ MESSAGES.boardUi.reservationDetailPanel.remaining }}{{ t.available }}<small>{{ MESSAGES.boardUi.reservationDetailPanel.times }}</small></span
                         >
                     </div>
                     <div v-if="data.membership" class="rdp__stat">
@@ -540,9 +551,9 @@ function submitConfirm(): void {
                             data.membership.plan_name
                         }}</span>
                         <span class="rdp__stat-value">
-                            月{{ data.membership.usage_count_per_period
-                            }}<small>回</small> ／ 残り
-                            {{ data.membership.available }}<small>回</small>
+                            {{ MESSAGES.boardUi.reservationDetailPanel.monthPrefix }}{{ data.membership.usage_count_per_period
+                            }}<small>{{ MESSAGES.boardUi.reservationDetailPanel.times }}</small>{{ MESSAGES.boardUi.reservationDetailPanel.remainingDivider
+                            }}{{ data.membership.available }}<small>{{ MESSAGES.boardUi.reservationDetailPanel.times }}</small>
                         </span>
                     </div>
                 </div>
@@ -551,14 +562,14 @@ function submitConfirm(): void {
             <!-- 顧客メモ：独立セクション（§9） -->
             <section v-if="data.customer" class="rdp__sec">
                 <div class="rdp__memo-head">
-                    <h3 class="rdp__h rdp__h--flush">顧客メモ</h3>
+                    <h3 class="rdp__h rdp__h--flush">{{ MESSAGES.boardUi.reservationDetailPanel.customerMemo }}</h3>
                     <button
                         v-if="!memoEditing && data.can.edit_customer"
                         type="button"
                         class="rdp__morebtn"
                         @click="startMemoEdit"
                     >
-                        {{ data.customer.note ? "編集" : "＋ メモを追加" }}
+                        {{ data.customer.note ? MESSAGES.boardUi.reservationDetailPanel.edit : MESSAGES.boardUi.reservationDetailPanel.addMemo }}
                     </button>
                 </div>
 
@@ -566,7 +577,7 @@ function submitConfirm(): void {
                     <template v-if="memoEditing">
                         <v-textarea
                             v-model="memoDraft"
-                            placeholder="例：着替え持参／施術時の注意点など、スタッフ間で共有したいことを書いてください"
+                            :placeholder="MESSAGES.boardUi.reservationDetailPanel.memoPlaceholder"
                             rows="3"
                             auto-grow
                             variant="outlined"
@@ -580,7 +591,7 @@ function submitConfirm(): void {
                                 :disabled="memoSaving"
                                 @click="cancelMemoEdit"
                             >
-                                やめる
+                                {{ MESSAGES.boardUi.reservationDetailPanel.stop }}
                             </v-btn>
                             <v-btn
                                 color="primary"
@@ -589,7 +600,7 @@ function submitConfirm(): void {
                                 :loading="memoSaving"
                                 @click="saveMemo"
                             >
-                                メモを保存
+                                {{ MESSAGES.boardUi.reservationDetailPanel.saveMemo }}
                             </v-btn>
                         </div>
                     </template>
@@ -608,7 +619,7 @@ function submitConfirm(): void {
                             class="rdp__morebtn"
                             @click="memoExpanded = !memoExpanded"
                         >
-                            {{ memoExpanded ? "閉じる" : "もっと見る" }}
+                            {{ memoExpanded ? MESSAGES.boardUi.reservationDetailPanel.closeMemo : MESSAGES.boardUi.reservationDetailPanel.showMore }}
                         </button>
                     </template>
 
@@ -623,7 +634,7 @@ function submitConfirm(): void {
                 v-if="data.reservation && section === 'default'"
                 class="rdp__sec rdp__sec--resv"
             >
-                <h3 class="rdp__h">今回の予約</h3>
+                <h3 class="rdp__h">{{ MESSAGES.boardUi.reservationDetailPanel.currentReservation }}</h3>
 
                 <div class="rdp__resv-when">
                     <span class="rdp__resv-time">{{ timeRange }}</span>
@@ -639,18 +650,18 @@ function submitConfirm(): void {
 
                 <dl class="rdp__facts">
                     <div class="rdp__facts-wide">
-                        <dt>メニュー</dt>
+                        <dt>{{ MESSAGES.boardUi.reservationDetailPanel.menu }}</dt>
                         <dd>{{ data.reservation.service_name }}</dd>
                     </div>
                     <div>
-                        <dt>担当</dt>
+                        <dt>{{ MESSAGES.boardUi.reservationDetailPanel.staff }}</dt>
                         <dd>
-                            {{ data.reservation.staff_name ?? "担当なし" }}
+                            {{ data.reservation.staff_name ?? MESSAGES.boardUi.schedule.unassignedStaff }}
                             <span
                                 v-if="data.reservation.is_staff_requested"
                                 class="rdp__nomination"
                             >
-                                指名
+                                {{ MESSAGES.boardUi.reservationDetailPanel.nomination }}
                             </span>
                             <span
                                 v-if="data.reservation.staff_gender_preference"
@@ -660,14 +671,14 @@ function submitConfirm(): void {
                                 {{
                                     data.reservation.staff_gender_preference ===
                                     "male"
-                                        ? "男性希望"
-                                        : "女性希望"
+                                        ? MESSAGES.boardUi.reservationDetailPanel.malePreference
+                                        : MESSAGES.boardUi.reservationDetailPanel.femalePreference
                                 }}
                             </span>
                         </dd>
                     </div>
                     <div>
-                        <dt>ブース</dt>
+                        <dt>{{ MESSAGES.boardUi.reservationDetailPanel.booth }}</dt>
                         <dd>
                             {{
                                 data.reservation.booth_name ??
@@ -680,26 +691,26 @@ function submitConfirm(): void {
                 <!-- 経路・支払い・金額は項目が少ないので、折りたたまず常に表示する。 -->
                 <dl class="rdp__facts rdp__facts--detail">
                     <div>
-                        <dt>経路</dt>
+                        <dt>{{ MESSAGES.boardUi.reservationDetailPanel.source }}</dt>
                         <dd>{{ data.reservation.source_label }}</dd>
                     </div>
                     <div>
-                        <dt>支払い</dt>
+                        <dt>{{ MESSAGES.boardUi.reservationDetailPanel.payment }}</dt>
                         <dd>{{ data.reservation.payment_method_label }}</dd>
                     </div>
                     <div>
-                        <dt>金額</dt>
-                        <dd>{{ money(data.reservation.amount) }}</dd>
+                        <dt>{{ MESSAGES.boardUi.reservationDetailPanel.amount }}</dt>
+                        <dd>{{ formatYenCurrency(data.reservation.amount) }}</dd>
                     </div>
                     <div v-if="data.reservation.notes" class="rdp__facts-wide">
-                        <dt>予約備考</dt>
+                        <dt>{{ MESSAGES.boardUi.reservationDetailPanel.reservationNote }}</dt>
                         <dd>{{ data.reservation.notes }}</dd>
                     </div>
                     <div
                         v-if="data.reservation.cancel_reason"
                         class="rdp__facts-wide"
                     >
-                        <dt>キャンセル理由</dt>
+                        <dt>{{ MESSAGES.boardUi.reservationDetailPanel.cancelReason }}</dt>
                         <dd>{{ data.reservation.cancel_reason }}</dd>
                     </div>
                 </dl>
@@ -707,7 +718,7 @@ function submitConfirm(): void {
 
             <!-- 今後の予約：「今後の予約」タブを押した時だけ表示（§タブ）。 -->
             <section v-if="section === 'upcoming'" class="rdp__sec">
-                <h3 class="rdp__h">今後の予約</h3>
+                <h3 class="rdp__h">{{ MESSAGES.boardUi.reservationDetailPanel.upcoming }}</h3>
                 <p v-if="!data.upcoming.length" class="rdp__muted">
                     {{ MESSAGES.reservation.noUpcoming }}
                 </p>
@@ -740,7 +751,7 @@ function submitConfirm(): void {
                             row.service_name
                         }}</span>
                         <span class="rdp__row-staff">{{
-                            row.staff_name ?? "担当なし"
+                            row.staff_name ?? MESSAGES.boardUi.schedule.unassignedStaff
                         }}</span>
                     </button>
                     <v-icon
@@ -753,7 +764,7 @@ function submitConfirm(): void {
 
             <!-- 来店履歴：「履歴」タブを押した時だけ表示（§タブ）。 -->
             <section v-if="section === 'history'" class="rdp__sec">
-                <h3 class="rdp__h">来店履歴</h3>
+                <h3 class="rdp__h">{{ MESSAGES.boardUi.reservationDetailPanel.visitHistory }}</h3>
                 <p v-if="!data.history.items.length" class="rdp__muted">
                     {{ MESSAGES.reservation.noVisitHistory }}
                 </p>
@@ -786,23 +797,23 @@ function submitConfirm(): void {
                             row.service_name
                         }}</span>
                         <span class="rdp__row-staff">{{
-                            row.staff_name ?? "担当なし"
+                            row.staff_name ?? MESSAGES.boardUi.schedule.unassignedStaff
                         }}</span>
                     </button>
-                    <v-tooltip text="この内容で再予約" location="left">
+                    <v-tooltip :text="MESSAGES.boardUi.reservationDetailPanel.rebookSame" location="left">
                         <template #activator="{ props: tip }">
                             <button
                                 v-bind="tip"
                                 type="button"
                                 class="rdp__rebookbtn"
-                                aria-label="この内容で再予約"
+                                :aria-label="MESSAGES.boardUi.reservationDetailPanel.rebookSame"
                                 @click="rebookRow(row)"
                             >
                                 <v-icon
                                     icon="mdi-calendar-refresh-outline"
                                     size="14"
                                 />
-                                <span>再予約</span>
+                                <span>{{ MESSAGES.boardUi.reservationDetailPanel.rebook }}</span>
                             </button>
                         </template>
                     </v-tooltip>
@@ -812,7 +823,7 @@ function submitConfirm(): void {
                     class="rdp__more"
                     :href="data.customer.detail_url"
                 >
-                    全 {{ data.history.total }} 件を顧客詳細で見る
+                    {{ fillMessage(MESSAGES.boardUi.reservationDetailPanel.historyMore, { count: String(data.history.total) }) }}
                 </a>
             </section>
         </div>
@@ -831,7 +842,7 @@ function submitConfirm(): void {
                         :loading="actionBusy"
                         @click="openVisitEntry"
                     >
-                        来店・会計
+                        {{ MESSAGES.boardUi.reservationDetailPanel.visitEntry }}
                     </v-btn>
                     <v-btn
                         v-if="data.can.manage"
@@ -840,7 +851,7 @@ function submitConfirm(): void {
                         variant="outlined"
                         size="small"
                     >
-                        予約編集
+                        {{ MESSAGES.boardUi.reservationDetailPanel.editReservation }}
                     </v-btn>
                 </template>
                 <template v-else>
@@ -851,7 +862,7 @@ function submitConfirm(): void {
                         prepend-icon="mdi-arrow-left"
                         @click="emit('back')"
                     >
-                        戻る
+                        {{ MESSAGES.boardUi.reservationDetailPanel.back }}
                     </v-btn>
                     <v-btn
                         v-if="data.can.manage"
@@ -860,7 +871,7 @@ function submitConfirm(): void {
                         size="small"
                         @click="emit('create')"
                     >
-                        新規予約
+                        {{ MESSAGES.boardUi.schedule.newReservation }}
                     </v-btn>
                 </template>
 
@@ -876,20 +887,20 @@ function submitConfirm(): void {
                             icon="mdi-dots-horizontal"
                             variant="text"
                             size="small"
-                            aria-label="その他の操作"
+                            :aria-label="MESSAGES.boardUi.reservationDetailPanel.otherActions"
                         />
                     </template>
                     <v-list density="compact">
                         <v-list-item
                             v-if="data.can.manage && data.reservation"
                             prepend-icon="mdi-calendar-refresh-outline"
-                            title="この内容で新規予約"
+                            :title="MESSAGES.boardUi.reservationDetailPanel.newReservationFromCurrent"
                             @click="rebookCurrent"
                         />
                         <v-list-item
                             v-if="data.can.manage"
                             prepend-icon="mdi-calendar-plus-outline"
-                            title="新規予約"
+                            :title="MESSAGES.boardUi.schedule.newReservation"
                             @click="emit('create')"
                         />
                         <v-list-item
@@ -898,7 +909,7 @@ function submitConfirm(): void {
                             :title="MESSAGES.schedule.extend"
                             data-testid="extend-reservation"
                             @click="
-                                extendMinutes = 30;
+                                extendMinutes = DEFAULT_EXTENSION_MINUTES;
                                 extendServiceId = null;
                                 confirmMode = 'extend';
                             "
@@ -914,19 +925,19 @@ function submitConfirm(): void {
                             v-if="data.reservation?.payment"
                             :href="data.reservation.payment.url"
                             prepend-icon="mdi-credit-card-outline"
-                            title="決済確認"
+                            :title="MESSAGES.boardUi.reservationDetailPanel.paymentCheck"
                         />
                         <v-list-item
                             v-if="data.reservation?.can_no_show"
                             prepend-icon="mdi-account-off-outline"
-                            title="無断キャンセル"
+                            :title="MESSAGES.boardUi.reservationDetailPanel.noShow"
                             class="rdp__menu-danger"
                             @click="confirmMode = 'no_show'"
                         />
                         <v-list-item
                             v-if="data.reservation?.can_cancel"
                             prepend-icon="mdi-close-circle-outline"
-                            title="キャンセル"
+                            :title="MESSAGES.boardUi.reservationDetailPanel.cancel"
                             class="rdp__menu-danger"
                             @click="confirmMode = 'cancel'"
                         />
@@ -949,12 +960,12 @@ function submitConfirm(): void {
                 <v-card-title class="text-subtitle-1 font-weight-bold">
                     {{
                         confirmMode === "cancel"
-                            ? "予約をキャンセルしますか？"
+                            ? MESSAGES.boardUi.reservationDetailPanel.cancelQuestion
                             : confirmMode === "no_checkout"
                               ? MESSAGES.visitCompletion.noCheckoutTitle
                               : confirmMode === "extend"
                                 ? MESSAGES.schedule.extendTitle
-                                : "無断キャンセルにしますか？"
+                                : MESSAGES.boardUi.reservationDetailPanel.noShowQuestion
                     }}
                 </v-card-title>
                 <v-card-text>
@@ -976,11 +987,11 @@ function submitConfirm(): void {
                             data-testid="extend-minutes"
                         >
                             <v-btn
-                                v-for="minutes in [15, 30, 45, 60]"
+                                v-for="minutes in EXTENSION_MINUTE_OPTIONS"
                                 :key="minutes"
                                 :value="minutes"
                                 size="small"
-                                >+{{ minutes }}分</v-btn
+                                >{{ fillMessage(MESSAGES.boardUi.reservationDetailPanel.extensionMinutes, { minutes: String(minutes) }) }}</v-btn
                             >
                         </v-btn-toggle>
                         <v-select
@@ -1019,7 +1030,7 @@ function submitConfirm(): void {
                     <v-textarea
                         v-if="confirmMode === 'cancel'"
                         v-model="cancelReason"
-                        label="キャンセル理由（任意）"
+                        :label="MESSAGES.boardUi.reservationDetailPanel.optionalCancelReason"
                         rows="2"
                         auto-grow
                         variant="outlined"
@@ -1033,7 +1044,7 @@ function submitConfirm(): void {
                         variant="text"
                         :disabled="actionBusy"
                         @click="confirmMode = null"
-                        >やめる</v-btn
+                        >{{ MESSAGES.boardUi.reservationDetailPanel.stop }}</v-btn
                     >
                     <v-btn
                         :color="confirmMode === 'cancel' ? 'error' : 'primary'"
@@ -1047,12 +1058,12 @@ function submitConfirm(): void {
                     >
                         {{
                             confirmMode === "cancel"
-                                ? "キャンセルする"
+                                ? MESSAGES.boardUi.reservationDetailPanel.cancelSubmit
                                 : confirmMode === "no_checkout"
                                   ? MESSAGES.visitCompletion.noCheckoutSubmit
                                   : confirmMode === "extend"
                                     ? MESSAGES.schedule.extendSubmit
-                                    : "無断キャンセルにする"
+                                    : MESSAGES.boardUi.reservationDetailPanel.noShowSubmit
                         }}
                     </v-btn>
                 </v-card-actions>

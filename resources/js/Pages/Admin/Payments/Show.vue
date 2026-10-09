@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { EmptyState, EmptyValue, PageHeader, SectionCard, StatusChip, MoneyField } from '@/components/ark';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -47,30 +48,10 @@ const props = defineProps<{
     can: { refund: boolean };
 }>();
 
-const statusLabels: Record<string, string> = {
-    pending: '手続き中',
-    authorized: '仮押さえ済',
-    succeeded: '支払い済み',
-    voided: '仮押さえ取消',
-    failed: '失敗',
-    partially_refunded: '一部返金済み',
-    refunded: '全額返金済み',
-};
-
-const captureMethodLabels: Record<string, string> = {
-    automatic: '即時請求',
-    manual: '後日請求',
-};
-
-const reservationStatusLabels: Record<string, string> = {
-    pending_payment: '支払い待ち',
-    pending_external_sync: '外部連携待ち',
-    confirmed: '予約確定',
-    completed: '完了（来店・施術済み）',
-    no_show: '無断キャンセル',
-    canceled: 'キャンセル',
-    expired: '期限切れ',
-};
+const M = MESSAGES.reportsUi.paymentShow;
+const statusLabels = M.statusLabels;
+const captureMethodLabels = M.captureMethodLabels;
+const reservationStatusLabels = M.reservationStatusLabels;
 
 const refundDialog = ref(false);
 
@@ -95,12 +76,12 @@ const syncFromStripe = (): void => {
 </script>
 
 <template>
-    <Head :title="`決済詳細 #${payment.id}`" />
+    <Head :title="fillMessage(M.title, { id: String(payment.id) })" />
 
     <v-container fluid class="ark-page py-4" style="max-width: 960px">
         <PageHeader
-            :title="`決済詳細 #${payment.id}`"
-            subtitle="決済内容を確認できます。"
+            :title="fillMessage(M.title, { id: String(payment.id) })"
+            :subtitle="M.subtitle"
         >
             <template #actions>
                 <StatusChip
@@ -108,7 +89,7 @@ const syncFromStripe = (): void => {
                     :label="statusLabels[payment.status] ?? payment.status"
                 />
                 <v-btn variant="text" size="small" prepend-icon="mdi-sync" @click="syncFromStripe">
-                    同期
+                    {{ M.sync }}
                 </v-btn>
             </template>
         </PageHeader>
@@ -120,39 +101,38 @@ const syncFromStripe = (): void => {
                 variant="tonal"
                 class="mb-4"
             >
-                <div class="font-weight-medium">要対応</div>
+                <div class="font-weight-medium">{{ M.needsAttention }}</div>
                 <div class="text-body-2">
-                    Stripe との結果が確定していない可能性があります（{{ payment.failure_code ?? MESSAGES.common.notRecorded }}）。
-                    「同期」ボタンで現在の状態を取り込んでから対応してください。
+                    {{ fillMessage(M.needsAttentionBody, { code: payment.failure_code ?? MESSAGES.common.notRecorded }) }}
                     <strong>{{ MESSAGES.payment.doNotRetryUnknown }}</strong>
                 </div>
             </v-alert>
 
             <v-row>
             <v-col cols="12" md="6">
-                <SectionCard title="決済情報" variant="outlined" height="100%" class="ark-table-section">
+                <SectionCard :title="M.paymentInfo" variant="outlined" height="100%" class="ark-table-section">
                     <v-table density="compact">
                         <tbody>
-                            <tr><td>決済額</td><td class="text-right">{{ payment.amount.toLocaleString() }} 円</td></tr>
-                            <tr><td>返金済額</td><td class="text-right">{{ payment.refunded_amount.toLocaleString() }} 円</td></tr>
-                            <tr><td>返金可能額</td><td class="text-right">{{ payment.refundable_amount.toLocaleString() }} 円</td></tr>
-                            <tr><td>請求方法</td><td class="text-right">{{ captureMethodLabels[payment.capture_method] ?? payment.capture_method }}</td></tr>
-                            <tr><td>仮押さえ日時</td><td class="text-right">{{ payment.authorized_at ?? MESSAGES.common.notRecorded }}</td></tr>
-                            <tr><td>請求日時</td><td class="text-right">{{ payment.paid_at ?? MESSAGES.common.notRecorded }}</td></tr>
-                            <tr><td>取消日時</td><td class="text-right">{{ payment.voided_at ?? MESSAGES.common.notRecorded }}</td></tr>
-                            <tr><td>最終同期日時</td><td class="text-right">{{ payment.last_synced_at ?? MESSAGES.common.notSynced }}</td></tr>
+                            <tr><td>{{ M.amount }}</td><td class="text-right">{{ fillMessage(M.yen, { amount: payment.amount.toLocaleString() }) }}</td></tr>
+                            <tr><td>{{ M.refundedAmount }}</td><td class="text-right">{{ fillMessage(M.yen, { amount: payment.refunded_amount.toLocaleString() }) }}</td></tr>
+                            <tr><td>{{ M.refundableAmount }}</td><td class="text-right">{{ fillMessage(M.yen, { amount: payment.refundable_amount.toLocaleString() }) }}</td></tr>
+                            <tr><td>{{ M.captureMethod }}</td><td class="text-right">{{ captureMethodLabels[payment.capture_method] ?? payment.capture_method }}</td></tr>
+                            <tr><td>{{ M.authorizedAt }}</td><td class="text-right">{{ payment.authorized_at ?? MESSAGES.common.notRecorded }}</td></tr>
+                            <tr><td>{{ M.paidAt }}</td><td class="text-right">{{ payment.paid_at ?? MESSAGES.common.notRecorded }}</td></tr>
+                            <tr><td>{{ M.voidedAt }}</td><td class="text-right">{{ payment.voided_at ?? MESSAGES.common.notRecorded }}</td></tr>
+                            <tr><td>{{ M.lastSyncedAt }}</td><td class="text-right">{{ payment.last_synced_at ?? MESSAGES.common.notSynced }}</td></tr>
                         </tbody>
                     </v-table>
                 </SectionCard>
             </v-col>
 
             <v-col cols="12" md="6">
-                <SectionCard title="予約情報" variant="outlined" height="100%" class="ark-table-section">
+                <SectionCard :title="M.reservationInfo" variant="outlined" height="100%" class="ark-table-section">
                     <v-table density="compact">
                         <tbody>
-                            <tr><td>顧客</td><td class="text-right"><template v-if="payment.customer_name">{{ payment.customer_name }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></td></tr>
+                            <tr><td>{{ M.customer }}</td><td class="text-right"><template v-if="payment.customer_name">{{ payment.customer_name }}</template><EmptyValue v-else :label="MESSAGES.common.notEntered" /></td></tr>
                             <tr>
-                                <td>予約</td>
+                                <td>{{ M.reservation }}</td>
                                 <td class="text-right">
                                     <span v-if="payment.reservation_id">
                                         #{{ payment.reservation_id }} / {{ payment.reservation_starts_at }}
@@ -160,13 +140,13 @@ const syncFromStripe = (): void => {
                                     <EmptyValue v-else :label="MESSAGES.common.notLinked" />
                                 </td>
                             </tr>
-                            <tr><td>予約状況</td><td class="text-right">{{ reservationStatusLabels[payment.reservation_status ?? ''] ?? payment.reservation_status ?? MESSAGES.common.notLinked }}</td></tr>
+                            <tr><td>{{ M.reservationStatus }}</td><td class="text-right">{{ reservationStatusLabels[payment.reservation_status ?? ''] ?? payment.reservation_status ?? MESSAGES.common.notLinked }}</td></tr>
                             <tr>
-                                <td>決済ID<br><span class="text-caption text-medium-emphasis">照会用</span></td>
+                                <td>{{ M.paymentId }}<br><span class="text-caption text-medium-emphasis">{{ M.forInquiry }}</span></td>
                                 <td class="text-right text-caption">{{ payment.stripe_payment_intent_id ?? MESSAGES.common.notRecorded }}</td>
                             </tr>
                             <tr>
-                                <td>請求ID<br><span class="text-caption text-medium-emphasis">返金対象</span></td>
+                                <td>{{ M.chargeId }}<br><span class="text-caption text-medium-emphasis">{{ M.refundTarget }}</span></td>
                                 <td class="text-right text-caption">{{ payment.stripe_charge_id ?? MESSAGES.common.notRecorded }}</td>
                             </tr>
                         </tbody>
@@ -175,7 +155,7 @@ const syncFromStripe = (): void => {
             </v-col>
             </v-row>
 
-            <SectionCard title="返金履歴" variant="outlined" class="ark-table-section">
+            <SectionCard :title="M.refundHistory" variant="outlined" class="ark-table-section">
                 <template #append>
                 <v-btn
                     v-if="can.refund && payment.refundable_amount > 0"
@@ -184,14 +164,14 @@ const syncFromStripe = (): void => {
                     size="small"
                     @click="refundDialog = true"
                 >
-                    返金する
+                    {{ M.refundAction }}
                 </v-btn>
                 </template>
                 <v-table density="compact">
                 <thead>
                     <tr>
-                        <th>ID</th><th class="text-right">返金額</th><th>状態</th>
-                        <th>理由</th><th>担当者</th><th>日時</th>
+                        <th>ID</th><th class="text-right">{{ M.refundAmount }}</th><th>{{ M.status }}</th>
+                        <th>{{ M.reason }}</th><th>{{ M.operator }}</th><th>{{ M.datetime }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -207,7 +187,7 @@ const syncFromStripe = (): void => {
                         <td colspan="6">
                             <EmptyState
                                 icon="mdi-cash-refund"
-                                title="返金履歴はありません。"
+                                :title="M.noRefunds"
                             />
                         </td>
                     </tr>
@@ -218,27 +198,27 @@ const syncFromStripe = (): void => {
 
         <v-dialog v-model="refundDialog" max-width="480">
             <v-card>
-                <v-card-title>返金</v-card-title>
+                <v-card-title>{{ M.refundDialogTitle }}</v-card-title>
                 <v-card-text>
                     <v-alert type="warning" variant="tonal" density="compact" class="mb-4">
                         {{ MESSAGES.payment.refundIrreversible }}
                     </v-alert>
                     <MoneyField
                         v-model="form.amount"
-                        label="返金額"
+                        :label="M.refundAmount"
                         :max="payment.refundable_amount"
                         :error-messages="form.errors.amount"
                     />
                     <v-textarea
                         v-model="form.reason"
-                        label="返金理由（必須・監査に記録されます）"
+                        :label="M.refundReason"
                         rows="3"
                         :error-messages="form.errors.reason"
                     />
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer />
-                    <v-btn variant="text" @click="refundDialog = false">キャンセル</v-btn>
+                    <v-btn variant="text" @click="refundDialog = false">{{ M.cancel }}</v-btn>
                     <v-btn
                         color="error"
                         variant="flat"
@@ -246,7 +226,7 @@ const syncFromStripe = (): void => {
                         :disabled="!form.reason || form.amount < 1"
                         @click="submitRefund"
                     >
-                        返金を実行
+                        {{ M.executeRefund }}
                     </v-btn>
                 </v-card-actions>
             </v-card>

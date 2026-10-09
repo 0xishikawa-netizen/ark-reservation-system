@@ -85,7 +85,55 @@ import type {
     DragClickGuard,
 } from "@/components/admin/schedule/types";
 
+import { fillMessage } from '@/utils/message';
 defineOptions({ layout: AdminLayout });
+
+/** 日表示で固定利用する1分あたりの幅。 */
+const FIXED_PIXELS_PER_MINUTE = 3.2;
+/** スタッフ／ブース区切り行の高さ。 */
+const SECTION_HEADER_HEIGHT = 28;
+/** 時間軸ヘッダーの高さ。 */
+const TIMELINE_HEADER_HEIGHT = 44;
+/** 時間軸のスクロールバー分として確保する高さ。 */
+const TIMELINE_SCROLLBAR_ALLOWANCE = 14;
+/** 左パネルの高さの下限。 */
+const PANEL_MIN_HEIGHT = 480;
+/** 左パネルの初期最大高さ。 */
+const INITIAL_PANEL_MAX_HEIGHT = "calc(100dvh - 140px)";
+/** ページ下部に残す余白。 */
+const PAGE_BOTTOM_PADDING_PX = 24;
+/** 台帳と日計の間隔。 */
+const DAILY_SUMMARY_GAP_PX = 8;
+/** パネルを全画面表示へ切り替える画面幅。 */
+const NARROW_SCREEN_MAX_WIDTH_PX = 1023;
+/** 未割当レーンを末尾へ置く並び順。 */
+const UNASSIGNED_SORT_ORDER = 32767;
+/** タイムライン全体の最小幅。 */
+const MIN_TIMELINE_WIDTH_PX = 1;
+/** 予約・予定バーの最小幅。 */
+const MIN_SCHEDULE_BAR_WIDTH_PX = 2;
+/** 予約枠の最小刻み。 */
+const MIN_SLOT_MINUTES = 5;
+/** カード強調表示を探す最大試行回数。 */
+const FLASH_MAX_ATTEMPTS = 30;
+/** カード強調表示の再試行間隔。 */
+const FLASH_RETRY_DELAY_MS = 120;
+/** カード強調表示を維持する時間。 */
+const HIGHLIGHT_DURATION_MS = 3200;
+/** 初回カード探索までの待機時間。 */
+const INITIAL_FLASH_DELAY_MS = 80;
+/** 現在時刻ラインの更新間隔。 */
+const CLOCK_TICK_INTERVAL_MS = 60000;
+/** 1時間あたりの分数。 */
+const MINUTES_PER_HOUR = 60;
+/** 日表示で移動する日数。 */
+const DAY_PERIOD_DAYS = 1;
+/** 週表示で移動する日数。 */
+const WEEK_PERIOD_DAYS = 7;
+/** マウス追従ラベルをポインターから離す距離。 */
+const CROSS_DATE_GHOST_OFFSET_PX = 14;
+/** D&Dエラーを表示する時間。 */
+const DND_ERROR_TIMEOUT_MS = 6000;
 
 const props = defineProps<{
     staff: Staff[];
@@ -130,12 +178,7 @@ const date = ref(props.filters.date);
 const staffId = ref<number | null>(props.filters.staff_id);
 const viewMode = ref<ScheduleView>(props.filters.view);
 const axisMode = ref<ScheduleAxis>(props.filters.axis);
-const FIXED_PIXELS_PER_MINUTE = 3.2;
-const sectionHeaderHeight = 28;
-
 // 日表示の行高（人数に応じて可変）の計算は scheduleLayout.ts。ここでは画面の空きを実測して渡す。
-const TIMELINE_HEADER_HEIGHT = 44;
-const TIMELINE_SCROLLBAR_ALLOWANCE = 14;
 const timelineShellEl = ref<HTMLElement | null>(null);
 const dailySummaryEl = ref<HTMLElement | null>(null);
 const availableTrackSpace = ref(0);
@@ -145,9 +188,6 @@ const timelineViewMode = ref<"now" | "fit">("fit");
 const timelineScrollEl = ref<HTMLElement | null>(null);
 const timelineScrollWidth = ref(0);
 let timelineResizeObserver: ResizeObserver | null = null;
-
-/** 左パネルの高さの下限（極端に低い画面でも検索・入力ができるように）。 */
-const PANEL_MIN_HEIGHT = 480;
 
 // 左パネルの高さ。右側（ツールバー〜台帳〜本日の集計）の下端にぴったり揃える。
 // ブース表示などで台帳が縦に長くなっても、紺の背景が「本日の集計」の下端まで伸びる。
@@ -165,7 +205,7 @@ const componentRootElement = (el: Element | ComponentPublicInstance | null): HTM
 
     return rootElement instanceof HTMLElement ? rootElement : null;
 };
-const panelMaxHeight = ref("calc(100dvh - 140px)");
+const panelMaxHeight = ref(INITIAL_PANEL_MAX_HEIGHT);
 
 /** 要素の上端のページ内位置（スクロール量に依存しない）。 */
 function documentTop(el: HTMLElement): number {
@@ -188,7 +228,7 @@ function recalcPanelMaxHeight(): void {
 
     if (panelTopEl !== null) {
         const top = documentTop(panelTopEl);
-        const screenHeight = window.innerHeight - top - 24;
+        const screenHeight = window.innerHeight - top - PAGE_BOTTOM_PADDING_PX;
         const bottomEl = dailySummaryEl.value ?? boardMainEl.value;
         const summaryHeight = bottomEl !== null
             ? bottomEl.getBoundingClientRect().bottom + window.scrollY - top
@@ -206,7 +246,7 @@ function recalcPanelMaxHeight(): void {
 
     const summaryHeight =
         dailySummaryEl.value !== null
-            ? dailySummaryEl.value.offsetHeight + 8
+            ? dailySummaryEl.value.offsetHeight + DAILY_SUMMARY_GAP_PX
             : 0;
     // ページ下余白（v-container の padding 24px）分も残し、ページ全体に余計な縦スクロールを出さない。
     availableTrackSpace.value =
@@ -215,7 +255,7 @@ function recalcPanelMaxHeight(): void {
         TIMELINE_HEADER_HEIGHT -
         TIMELINE_SCROLLBAR_ALLOWANCE -
         summaryHeight -
-        24;
+        PAGE_BOTTOM_PADDING_PX;
 }
 
 /**
@@ -237,7 +277,7 @@ onMounted(() => {
     }
 
     if (window.matchMedia) {
-        narrowQuery = window.matchMedia("(max-width: 1023px)");
+        narrowQuery = window.matchMedia(`(max-width: ${NARROW_SCREEN_MAX_WIDTH_PX}px)`);
         syncNarrowScreen(narrowQuery);
         narrowQuery.addEventListener("change", syncNarrowScreen);
     }
@@ -290,7 +330,7 @@ const { previewServiceId, previewLoading, previewService, menuSegments } =
     });
 
 const timelineWidth = computed(() =>
-    Math.max(durationMinutes.value * pixelsPerMinute.value, 1),
+    Math.max(durationMinutes.value * pixelsPerMinute.value, MIN_TIMELINE_WIDTH_PX),
 );
 const offStaff = computed<OffStaff[]>(() => props.off_staff ?? []);
 
@@ -309,9 +349,9 @@ function staffLanes(): ScheduleLane[] {
     ) {
         result.push({
             id: null,
-            display_name: "担当なし",
+            display_name: MESSAGES.boardUi.schedule.unassignedStaff,
             color: "rgb(var(--v-theme-secondary))",
-            sort_order: 32767,
+            sort_order: UNASSIGNED_SORT_ORDER,
             kind: "staff" as const,
         });
     }
@@ -333,9 +373,9 @@ function boothLanes(): ScheduleLane[] {
     ) {
         result.push({
             id: null,
-            display_name: "ブース未割当",
+            display_name: MESSAGES.boardUi.schedule.unassignedBooth,
             color: "rgb(var(--v-theme-secondary))",
-            sort_order: 32767,
+            sort_order: UNASSIGNED_SORT_ORDER,
             kind: "booth" as const,
         });
     }
@@ -369,14 +409,14 @@ const displayRows = computed<DisplayRow[]>(() => {
         {
             kind: "header" as const,
             sectionKind: "staff" as const,
-            label: "スタッフ",
+            label: MESSAGES.boardUi.schedule.staff,
             icon: "mdi-account-group-outline",
         },
         ...staffLanes().map((lane) => ({ kind: "lane" as const, lane })),
         {
             kind: "header" as const,
             sectionKind: "booth" as const,
-            label: "ブース",
+            label: MESSAGES.boardUi.schedule.booth,
             icon: "mdi-view-grid-outline",
         },
         ...boothLanes().map((lane) => ({ kind: "lane" as const, lane })),
@@ -392,7 +432,7 @@ const timelineTrackHeight = computed(() => {
     return scheduleTrackHeight(
         laneRows,
         displayRows.value.length - laneRows,
-        sectionHeaderHeight,
+        SECTION_HEADER_HEIGHT,
         availableTrackSpace.value,
         isNarrowScreen.value,
     );
@@ -414,7 +454,7 @@ function reservationStyle(
     const left = (visibleStart - openMinute.value) * pixelsPerMinute.value;
     const width = Math.max(
         (visibleEnd - visibleStart) * pixelsPerMinute.value,
-        2,
+        MIN_SCHEDULE_BAR_WIDTH_PX,
     );
 
     return {
@@ -480,7 +520,7 @@ function blockStyle(block: ScheduleBlock): Record<string, string> {
 
     return {
         left: `${(visibleStart - openMinute.value) * pixelsPerMinute.value}px`,
-        width: `${Math.max((visibleEnd - visibleStart) * pixelsPerMinute.value, 2)}px`,
+        width: `${Math.max((visibleEnd - visibleStart) * pixelsPerMinute.value, MIN_SCHEDULE_BAR_WIDTH_PX)}px`,
     };
 }
 
@@ -519,7 +559,7 @@ function onWeekCellClick(
             : 0;
     const rawMinute =
         openMinute.value + ratio * (closeMinute.value - openMinute.value);
-    const unit = Math.max(props.business_hours.slot_minutes, 5);
+    const unit = Math.max(props.business_hours.slot_minutes, MIN_SLOT_MINUTES);
     const snappedMinute = Math.min(
         Math.max(Math.round(rawMinute / unit) * unit, openMinute.value),
         closeMinute.value,
@@ -619,12 +659,14 @@ const slotPickGhostVisible = computed(
     () => slotPickActive.value && props.create_prefill.date === null,
 );
 const slotPickLabel = computed(() => {
-    const customer = reservationDraft.customer_name ?? "お客様";
+    const customer = reservationDraft.customer_name ?? MESSAGES.boardUi.schedule.defaultCustomer;
     const service =
         props.menu_options.find((m) => m.id === reservationDraft.service_id)
             ?.name ?? null;
 
-    return service === null ? `${customer}様` : `${customer}様 ／ ${service}`;
+    return service === null
+        ? fillMessage(MESSAGES.boardUi.schedule.customerHonorific, { name: customer })
+        : fillMessage(MESSAGES.boardUi.schedule.customerAndService, { customer: customer, service: service });
 });
 
 /**
@@ -1179,8 +1221,8 @@ function flashReservationCard(reservationId: number): void {
             scroller.scrollWidth > scroller.clientWidth;
 
         if (!ready) {
-            if (attempts++ < 30) {
-                setTimeout(tryFlash, 120);
+            if (attempts++ < FLASH_MAX_ATTEMPTS) {
+                setTimeout(tryFlash, FLASH_RETRY_DELAY_MS);
             }
 
             return;
@@ -1195,10 +1237,10 @@ function flashReservationCard(reservationId: number): void {
 
         highlightTimer = setTimeout(() => {
             highlightReservationId.value = null;
-        }, 3200);
+        }, HIGHLIGHT_DURATION_MS);
     };
 
-    void nextTick(() => setTimeout(tryFlash, 80));
+    void nextTick(() => setTimeout(tryFlash, INITIAL_FLASH_DELAY_MS));
 }
 
 // パネル対象が変わったら（初回表示・履歴遷移・戻る/進む）該当カードへスクロール＆強調。
@@ -1245,7 +1287,7 @@ onMounted(() => {
     void nextTick(() => recalcPanelMaxHeight());
     clockTimer = setInterval(() => {
         clockTick.value = Date.now();
-    }, 60000);
+    }, CLOCK_TICK_INTERVAL_MS);
 });
 onBeforeUnmount(() => {
     window.removeEventListener("keydown", onWindowKeydown);
@@ -1308,7 +1350,7 @@ function navigate(): void {
 function movePeriod(direction: number): void {
     const next = new Date(`${date.value}T12:00:00`);
     next.setDate(
-        next.getDate() + direction * (viewMode.value === "week" ? 7 : 1),
+        next.getDate() + direction * (viewMode.value === "week" ? WEEK_PERIOD_DAYS : DAY_PERIOD_DAYS),
     );
     const year = next.getFullYear();
     const month = String(next.getMonth() + 1).padStart(2, "0");
@@ -1342,7 +1384,7 @@ function onTrackClick(lane: ScheduleLane, event: MouseEvent): void {
     const rect = trackEl.getBoundingClientRect();
     const rawMinute =
         openMinute.value + (event.clientX - rect.left) / pixelsPerMinute.value;
-    const unit = Math.max(props.business_hours.slot_minutes, 5);
+    const unit = Math.max(props.business_hours.slot_minutes, MIN_SLOT_MINUTES);
     const snappedMinute = Math.min(
         Math.max(Math.round(rawMinute / unit) * unit, openMinute.value),
         closeMinute.value,
@@ -1418,7 +1460,7 @@ const currentTimeLeft = computed<number | null>(() => {
         return null;
     }
 
-    const minute = now.getHours() * 60 + now.getMinutes();
+    const minute = now.getHours() * MINUTES_PER_HOUR + now.getMinutes();
 
     if (minute < openMinute.value || minute > closeMinute.value) {
         return null;
@@ -1633,14 +1675,14 @@ const notificationSound = computed(() => {
 </script>
 
 <template>
-    <Head title="ブッキングボード" />
+    <Head :title="MESSAGES.boardUi.schedule.title" />
 
     <!-- 元々タイトル（予約台帳／10:00〜22:00）があった行。日付移動・日付選択・メニュー空き確認をここに配置する。
          サイドバーアイコンより上、画面の一番左から表示する（幅いっぱい）。 -->
     <div class="schedule-toolbar schedule-topbar mb-1">
-        <div class="toolbar-period" role="group" aria-label="表示期間を移動">
+        <div class="toolbar-period" role="group" :aria-label="MESSAGES.boardUi.schedule.movePeriod">
             <v-tooltip
-                :text="viewMode === 'week' ? '前週' : '前日'"
+                :text="viewMode === 'week' ? MESSAGES.boardUi.schedule.previousWeek : MESSAGES.boardUi.schedule.previousDay"
                 location="bottom"
             >
                 <template #activator="{ props: tip }">
@@ -1653,7 +1695,7 @@ const notificationSound = computed(() => {
                         "
                         icon="mdi-chevron-left"
                         variant="outlined"
-                        :aria-label="viewMode === 'week' ? '前週' : '前日'"
+                        :aria-label="viewMode === 'week' ? MESSAGES.boardUi.schedule.previousWeek : MESSAGES.boardUi.schedule.previousDay"
                         :class="{
                             'toolbar-daydrop--hover':
                                 dateDropHoverOffset === -1,
@@ -1676,13 +1718,13 @@ const notificationSound = computed(() => {
                     'toolbar-today--current': isViewingToday,
                     'toolbar-daydrop--hover': dateDropHoverOffset === 0,
                 }"
-                aria-label="今日"
+                :aria-label="MESSAGES.boardUi.schedule.today"
                 @click="goToToday"
             >
-                今日
+                {{ MESSAGES.boardUi.schedule.today }}
             </v-btn>
             <v-tooltip
-                :text="viewMode === 'week' ? '翌週' : '翌日'"
+                :text="viewMode === 'week' ? MESSAGES.boardUi.schedule.nextWeek : MESSAGES.boardUi.schedule.nextDay"
                 location="bottom"
             >
                 <template #activator="{ props: tip }">
@@ -1695,7 +1737,7 @@ const notificationSound = computed(() => {
                         "
                         icon="mdi-chevron-right"
                         variant="outlined"
-                        :aria-label="viewMode === 'week' ? '翌週' : '翌日'"
+                        :aria-label="viewMode === 'week' ? MESSAGES.boardUi.schedule.nextWeek : MESSAGES.boardUi.schedule.nextDay"
                         :class="{
                             'toolbar-daydrop--hover': dateDropHoverOffset === 1,
                         }"
@@ -1707,7 +1749,7 @@ const notificationSound = computed(() => {
         <DateField
             v-model="date"
             class="toolbar-field toolbar-date"
-            label="表示日"
+            :label="MESSAGES.boardUi.schedule.displayDate"
             density="compact"
             :clearable="false"
             @update:model-value="navigate"
@@ -1719,7 +1761,7 @@ const notificationSound = computed(() => {
             :items="menu_options"
             item-title="name"
             item-value="id"
-            label="メニューで空きを確認"
+            :label="MESSAGES.boardUi.schedule.previewAvailability"
             density="compact"
             clearable
             hide-details
@@ -1762,7 +1804,7 @@ const notificationSound = computed(() => {
                     isDraggable(cardContextMenuReservation)
                 "
                 prepend-icon="mdi-calendar-arrow-right"
-                title="日付を跨いで変更する"
+                :title="MESSAGES.boardUi.schedule.changeAcrossDates"
                 @click="startCrossDateMove"
             />
         </v-list>
@@ -1772,8 +1814,8 @@ const notificationSound = computed(() => {
         v-if="crossDateMoveReservation"
         class="cross-date-ghost"
         :style="{
-            left: `${crossDatePointer.x + 14}px`,
-            top: `${crossDatePointer.y + 14}px`,
+            left: `${crossDatePointer.x + CROSS_DATE_GHOST_OFFSET_PX}px`,
+            top: `${crossDatePointer.y + CROSS_DATE_GHOST_OFFSET_PX}px`,
         }"
     >
         <span>
@@ -1783,7 +1825,7 @@ const notificationSound = computed(() => {
         <button
             type="button"
             class="cross-date-ghost__close"
-            aria-label="日付跨ぎ移動をキャンセル"
+            :aria-label="MESSAGES.boardUi.schedule.cancelCrossDateMove"
             @click="cancelCrossDateMove"
         >
             ×
@@ -1794,8 +1836,8 @@ const notificationSound = computed(() => {
         v-if="slotPickGhostVisible && crossDateMove === null"
         class="cross-date-ghost"
         :style="{
-            left: `${crossDatePointer.x + 14}px`,
-            top: `${crossDatePointer.y + 14}px`,
+            left: `${crossDatePointer.x + CROSS_DATE_GHOST_OFFSET_PX}px`,
+            top: `${crossDatePointer.y + CROSS_DATE_GHOST_OFFSET_PX}px`,
         }"
     >
         <span>{{ slotPickLabel }}</span>
@@ -1808,18 +1850,15 @@ const notificationSound = computed(() => {
         role="status"
     >
         <v-icon icon="mdi-calendar-arrow-right" size="16" />
-        <span class="slot-pick-bar__label"
-            >{{ crossDateMoveReservation.customer_name }}様 ／
-            {{ crossDateMoveReservation.service_name }} の移動先を選択中</span
-        >
+        <span class="slot-pick-bar__label">{{ fillMessage(MESSAGES.boardUi.schedule.crossDateMoveSelecting, { customer: crossDateMoveReservation.customer_name, service: crossDateMoveReservation.service_name }) }}</span>
         <button
             type="button"
             class="slot-pick-bar__release"
-            aria-label="日付跨ぎ移動を解除"
+            :aria-label="MESSAGES.boardUi.schedule.releaseCrossDateMove"
             @click="cancelCrossDateMove"
         >
             <v-icon icon="mdi-close" size="14" />
-            <span>解除</span>
+            <span>{{ MESSAGES.boardUi.schedule.release }}</span>
         </button>
     </div>
 
@@ -1831,17 +1870,15 @@ const notificationSound = computed(() => {
         role="status"
     >
         <v-icon icon="mdi-calendar-cursor" size="16" />
-        <span class="slot-pick-bar__label"
-            >{{ slotPickLabel }} の日時を選択中</span
-        >
+        <span class="slot-pick-bar__label">{{ fillMessage(MESSAGES.boardUi.schedule.slotSelecting, { name: slotPickLabel }) }}</span>
         <button
             type="button"
             class="slot-pick-bar__release"
-            aria-label="枠選択を解除"
+            :aria-label="MESSAGES.boardUi.schedule.releaseSlotSelection"
             @click="releaseSlotPick"
         >
             <v-icon icon="mdi-close" size="14" />
-            <span>解除</span>
+            <span>{{ MESSAGES.boardUi.schedule.release }}</span>
         </button>
     </div>
 
@@ -1855,9 +1892,9 @@ const notificationSound = computed(() => {
         }"
     >
         <!-- パネル開閉・よく使う操作のアイコンレール。上のツールバー行の下から始まる。 -->
-        <nav class="panel-rail" aria-label="ブッキングボードのパネル操作">
+        <nav class="panel-rail" :aria-label="MESSAGES.boardUi.schedule.panelOperations">
             <v-tooltip
-                :text="panelCollapsed ? 'パネルを開く' : 'パネルを閉じる'"
+                :text="panelCollapsed ? MESSAGES.boardUi.schedule.openPanel : MESSAGES.boardUi.schedule.closePanel"
                 location="right"
             >
                 <template #activator="{ props: tip }">
@@ -1866,7 +1903,7 @@ const notificationSound = computed(() => {
                         type="button"
                         class="panel-rail__btn"
                         :aria-label="
-                            panelCollapsed ? 'パネルを開く' : 'パネルを閉じる'
+                            panelCollapsed ? MESSAGES.boardUi.schedule.openPanel : MESSAGES.boardUi.schedule.closePanel
                         "
                         @click="togglePanelCollapsed"
                     >
@@ -1881,26 +1918,26 @@ const notificationSound = computed(() => {
                     </button>
                 </template>
             </v-tooltip>
-            <v-tooltip text="新規予約" location="right">
+            <v-tooltip :text="MESSAGES.boardUi.schedule.newReservation" location="right">
                 <template #activator="{ props: tip }">
                     <button
                         v-bind="tip"
                         type="button"
                         class="panel-rail__btn"
-                        aria-label="新規予約"
+                        :aria-label="MESSAGES.boardUi.schedule.newReservation"
                         @click="railOpenReservation"
                     >
                         <v-icon icon="mdi-calendar-plus-outline" size="19" />
                     </button>
                 </template>
             </v-tooltip>
-            <v-tooltip text="顧客検索" location="right">
+            <v-tooltip :text="MESSAGES.boardUi.schedule.customerSearch" location="right">
                 <template #activator="{ props: tip }">
                     <button
                         v-bind="tip"
                         type="button"
                         class="panel-rail__btn"
-                        aria-label="顧客検索"
+                        :aria-label="MESSAGES.boardUi.schedule.customerSearch"
                         @click="railOpenCustomerSearch"
                     >
                         <v-icon icon="mdi-account-search-outline" size="19" />
@@ -2007,7 +2044,7 @@ const notificationSound = computed(() => {
             <v-card class="mb-2">
                 <v-card-text class="schedule-toolbar">
                     <div class="toolbar-mode">
-                        <span class="toolbar-label">表示</span>
+                        <span class="toolbar-label">{{ MESSAGES.boardUi.schedule.display }}</span>
                         <v-btn-toggle
                             v-model="viewMode"
                             class="toolbar-toggle"
@@ -2015,15 +2052,15 @@ const notificationSound = computed(() => {
                             color="primary"
                             variant="outlined"
                             density="compact"
-                            aria-label="表示期間"
+                            :aria-label="MESSAGES.boardUi.schedule.displayPeriod"
                             @update:model-value="navigate"
                         >
-                            <v-btn value="day">日</v-btn>
-                            <v-btn value="week">週</v-btn>
+                            <v-btn value="day">{{ MESSAGES.boardUi.schedule.day }}</v-btn>
+                            <v-btn value="week">{{ MESSAGES.boardUi.schedule.week }}</v-btn>
                         </v-btn-toggle>
                     </div>
                     <div class="toolbar-mode">
-                        <span class="toolbar-label">軸</span>
+                        <span class="toolbar-label">{{ MESSAGES.boardUi.schedule.axis }}</span>
                         <v-btn-toggle
                             v-model="axisMode"
                             class="toolbar-toggle"
@@ -2031,12 +2068,12 @@ const notificationSound = computed(() => {
                             color="primary"
                             variant="outlined"
                             density="compact"
-                            aria-label="表示軸"
+                            :aria-label="MESSAGES.boardUi.schedule.displayAxis"
                             @update:model-value="navigate"
                         >
-                            <v-btn value="staff">スタッフ</v-btn>
-                            <v-btn value="booth">ブース</v-btn>
-                            <v-btn value="both">両方</v-btn>
+                            <v-btn value="staff">{{ MESSAGES.boardUi.schedule.staff }}</v-btn>
+                            <v-btn value="booth">{{ MESSAGES.boardUi.schedule.booth }}</v-btn>
+                            <v-btn value="both">{{ MESSAGES.boardUi.schedule.both }}</v-btn>
                         </v-btn-toggle>
                     </div>
 
@@ -2061,7 +2098,7 @@ const notificationSound = computed(() => {
                                     size="16"
                                 />
                                 {{ MESSAGES.schedule.offStaffLabel }}
-                                {{ offStaff.length }}名
+                                {{ fillMessage(MESSAGES.boardUi.schedule.peopleCount, { count: String(offStaff.length) }) }}
                             </span>
                         </template>
                     </v-tooltip>
@@ -2074,7 +2111,7 @@ const notificationSound = computed(() => {
                         color="primary"
                         variant="outlined"
                         density="compact"
-                        aria-label="時間軸の表示切り替え"
+                        :aria-label="MESSAGES.boardUi.schedule.timelineDisplay"
                         @update:model-value="setTimelineViewMode"
                     >
                         <v-btn
@@ -2082,14 +2119,14 @@ const notificationSound = computed(() => {
                             prepend-icon="mdi-crosshairs-gps"
                             size="small"
                         >
-                            現在時刻
+                            {{ MESSAGES.boardUi.schedule.currentTime }}
                         </v-btn>
                         <v-btn
                             value="fit"
                             prepend-icon="mdi-arrow-expand-horizontal"
                             size="small"
                         >
-                            全体表示
+                            {{ MESSAGES.boardUi.schedule.fitView }}
                         </v-btn>
                     </v-btn-toggle>
                 </v-card-text>
@@ -2114,25 +2151,25 @@ const notificationSound = computed(() => {
                         <span
                             class="schedule-legend__swatch is-menu-available"
                             aria-hidden="true"
-                        />予約可能枠
+                        />{{ MESSAGES.boardUi.schedule.availableSlot }}
                     </span>
                     <span class="schedule-legend__item">
                         <span
                             class="schedule-legend__swatch is-menu-blocked"
                             aria-hidden="true"
-                        />予約不可
+                        />{{ MESSAGES.boardUi.schedule.unavailable }}
                     </span>
                     <span class="schedule-legend__item">
                         <span
                             class="schedule-legend__swatch is-closed"
                             aria-hidden="true"
-                        />出勤者なし
+                        />{{ MESSAGES.boardUi.schedule.noWorkingStaff }}
                     </span>
                     <span class="schedule-legend__item">
                         <span
                             class="schedule-legend__swatch is-full"
                             aria-hidden="true"
-                        />満枠
+                        />{{ MESSAGES.boardUi.schedule.full }}
                     </span>
                 </div>
 
@@ -2145,7 +2182,7 @@ const notificationSound = computed(() => {
                         <div class="timeline-lane-column">
                             <div class="timeline-corner">
                                 {{
-                                    axisMode === "booth" ? "ブース" : "スタッフ"
+                                    axisMode === "booth" ? MESSAGES.boardUi.schedule.booth : MESSAGES.boardUi.schedule.staff
                                 }}
                             </div>
                             <template
@@ -2160,7 +2197,7 @@ const notificationSound = computed(() => {
                                     v-if="row.kind === 'header'"
                                     class="timeline-section-header"
                                     :style="{
-                                        height: `${sectionHeaderHeight}px`,
+                                        height: `${SECTION_HEADER_HEIGHT}px`,
                                     }"
                                 >
                                     <v-icon :icon="row.icon" size="14" />
@@ -2187,7 +2224,7 @@ const notificationSound = computed(() => {
                                     :style="{
                                         height: `${timelineTrackHeight}px`,
                                     }"
-                                    :title="`${row.lane.display_name} の勤務枠を開く`"
+                                    :title="fillMessage(MESSAGES.boardUi.schedule.openStaffShifts, { name: row.lane.display_name })"
                                     @click="goToStaffShifts(row.lane.id)"
                                 >
                                     <span
@@ -2281,7 +2318,7 @@ const notificationSound = computed(() => {
                             ref="timelineScrollEl"
                             class="timeline-scroll"
                             tabindex="0"
-                            aria-label="時間軸。横方向にスクロールできます。"
+                            :aria-label="MESSAGES.boardUi.schedule.timelineScroll"
                         >
                             <div
                                 class="timeline-canvas"
@@ -2349,7 +2386,7 @@ const notificationSound = computed(() => {
                                         v-if="row.kind === 'header'"
                                         class="timeline-track-section-header"
                                         :style="{
-                                            height: `${sectionHeaderHeight}px`,
+                                            height: `${SECTION_HEADER_HEIGHT}px`,
                                         }"
                                         aria-hidden="true"
                                     />
@@ -2419,7 +2456,7 @@ const notificationSound = computed(() => {
                                                 left: `${segment.left}px`,
                                                 width: `${segment.width}px`,
                                             }"
-                                            :title="`${previewService?.name ?? ''}はこの時間から開始できます`"
+                                            :title="fillMessage(MESSAGES.boardUi.schedule.canStartAt, { name: previewService?.name ?? '' })"
                                         />
                                         <div
                                             v-for="(
@@ -2610,7 +2647,7 @@ const notificationSound = computed(() => {
                                     v-if="currentTimeLeft !== null"
                                     class="current-time-line"
                                     :style="{ left: `${currentTimeLeft}px` }"
-                                    aria-label="現在時刻"
+                                    :aria-label="MESSAGES.boardUi.schedule.currentTime"
                                 />
                             </div>
                         </div>
@@ -2678,7 +2715,7 @@ const notificationSound = computed(() => {
                                     }"
                                     role="button"
                                     tabindex="0"
-                                    :aria-label="`${dayLabel(day)} ${lane.display_name} の空き枠へ予約または予定を追加`"
+                                    :aria-label="fillMessage(MESSAGES.boardUi.schedule.weekCellAction, { date: dayLabel(day), name: lane.display_name })"
                                     @click="onWeekCellClick(lane, day, $event)"
                                     @keydown.enter="
                                         onWeekCellClick(
@@ -2776,9 +2813,7 @@ const notificationSound = computed(() => {
                                         v-if="reservationsFor(lane, day).length"
                                         class="week-board__count"
                                     >
-                                        {{
-                                            reservationsFor(lane, day).length
-                                        }}件
+                                        {{ fillMessage(MESSAGES.boardUi.schedule.reservationCount, { count: String(reservationsFor(lane, day).length) }) }}
                                     </span>
                                 </div>
                             </template>
@@ -2792,7 +2827,7 @@ const notificationSound = computed(() => {
                         :summary="summary"
                         :title="isViewingToday
                             ? MESSAGES.schedule.dailySummary.todayTitle
-                            : MESSAGES.schedule.dailySummary.dateTitle.replace('{date}', dayLabel(date))"
+                            : fillMessage(MESSAGES.schedule.dailySummary.dateTitle, { date: dayLabel(date) })"
                     />
                 </div>
             </template>
@@ -2846,7 +2881,7 @@ const notificationSound = computed(() => {
         :model-value="dndErrorToast !== null"
         color="error"
         location="bottom"
-        timeout="6000"
+        :timeout="DND_ERROR_TIMEOUT_MS"
         @update:model-value="
             (v) => {
                 if (!v) dndErrorToast = null;
@@ -2855,7 +2890,7 @@ const notificationSound = computed(() => {
     >
         {{ dndErrorToast }}
         <template #actions>
-            <v-btn variant="text" @click="dndErrorToast = null">閉じる</v-btn>
+            <v-btn variant="text" @click="dndErrorToast = null">{{ MESSAGES.boardUi.schedule.close }}</v-btn>
         </template>
     </v-snackbar>
 

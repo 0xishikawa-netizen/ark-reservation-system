@@ -3,6 +3,7 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { ColorField, PageHeader, SectionCard } from '@/components/ark';
 import { MESSAGES, confirmStaffUnbookableMessage } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -62,37 +63,37 @@ const deactivate = (): void => {
 </script>
 
 <template>
-    <Head :title="`${staff.display_name}を編集`" />
+    <Head :title="fillMessage(MESSAGES.mastersUi.staff.editHead, { name: staff.display_name })" />
 
     <div class="ark-form-page">
-        <PageHeader title="スタッフ編集" :subtitle="staff.name" />
+        <PageHeader :title="MESSAGES.mastersUi.staff.editTitle" :subtitle="staff.name" />
 
         <v-form @submit.prevent="submit">
-            <SectionCard title="基本情報">
+            <SectionCard :title="MESSAGES.mastersUi.staff.basicInformation">
                 <v-list density="compact" class="mb-2 bg-transparent">
-                    <v-list-item title="氏名" :subtitle="staff.name" />
-                    <v-list-item title="メールアドレス" :subtitle="staff.email" />
+                    <v-list-item :title="MESSAGES.mastersUi.staff.name" :subtitle="staff.name" />
+                    <v-list-item :title="MESSAGES.mastersUi.staff.email" :subtitle="staff.email" />
                 </v-list>
                 <v-text-field
                     v-model="form.display_name"
-                    label="表示名"
+                    :label="MESSAGES.mastersUi.staff.displayName"
                     maxlength="50"
                     hide-details="auto"
                     class="ark-field-name mb-4"
                     :error-messages="form.errors.display_name"
                     required
                 />
-                <ColorField v-model="form.color" label="表示色" />
+                <ColorField v-model="form.color" :label="MESSAGES.mastersUi.staff.displayColor" />
                 <div v-if="form.errors.color" class="text-error text-caption mt-1">
                     {{ form.errors.color }}
                 </div>
             </SectionCard>
 
-            <SectionCard title="予約設定" class="mt-4">
+            <SectionCard :title="MESSAGES.mastersUi.staff.reservationSettings" class="mt-4">
                 <div class="d-flex ga-4 flex-wrap">
                     <v-text-field
                         v-model.number="form.sort_order"
-                        label="表示順"
+                        :label="MESSAGES.mastersUi.staff.sortOrder"
                         type="number"
                         min="0"
                         hide-details="auto"
@@ -101,7 +102,7 @@ const deactivate = (): void => {
                     />
                     <v-select
                         v-model="form.role"
-                        label="ロール"
+                        :label="MESSAGES.mastersUi.staff.role"
                         :items="roles"
                         hide-details="auto"
                         style="max-width: 220px"
@@ -111,7 +112,7 @@ const deactivate = (): void => {
                 </div>
                 <v-switch
                     v-model="form.is_bookable"
-                    label="予約を受け付ける"
+                    :label="MESSAGES.mastersUi.staff.acceptsBookings"
                     color="primary"
                     hide-details
                     class="mt-2"
@@ -152,10 +153,10 @@ const deactivate = (): void => {
                 />
             </SectionCard>
 
-            <SectionCard title="ログイン" subtitle="この画面全体（管理画面）にログインできるかどうかを切り替えます。" class="mt-4">
+            <SectionCard :title="MESSAGES.mastersUi.staff.login" :subtitle="MESSAGES.mastersUi.staff.loginSubtitle" class="mt-4">
                 <v-switch
                     v-model="form.is_active"
-                    label="ログインを許可する"
+                    :label="MESSAGES.mastersUi.staff.allowLogin"
                     color="primary"
                     hide-details="auto"
                     :error-messages="form.errors.is_active"
@@ -172,8 +173,7 @@ const deactivate = (): void => {
             </SectionCard>
 
             <v-alert type="info" variant="tonal" class="mt-4">
-                スタッフ情報の保存には、直近のパスワード確認が必要です。最後の管理者は降格・ログイン無効化できません。
-                自分自身のログインは無効化できません。
+                {{ MESSAGES.mastersUi.staff.securityNotice }}
             </v-alert>
 
             <div class="ark-form-page__actions">
@@ -183,12 +183,12 @@ const deactivate = (): void => {
                     :disabled="!staff.is_bookable"
                     @click="deactivate"
                 >
-                    予約受付を無効化
+                    {{ MESSAGES.mastersUi.staff.disableBooking }}
                 </v-btn>
                 <v-spacer />
-                <v-btn variant="text" href="/admin/staff">キャンセル</v-btn>
+                <v-btn variant="text" href="/admin/staff">{{ MESSAGES.mastersUi.staff.cancel }}</v-btn>
                 <v-btn type="submit" color="primary" size="large" :loading="form.processing">
-                    保存
+                    {{ MESSAGES.mastersUi.staff.save }}
                 </v-btn>
             </div>
         </v-form>

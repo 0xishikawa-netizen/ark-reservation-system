@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { toIsoDate } from '@/utils/dateFormat';
 
 type AvailabilityStatus = 'open' | 'some' | 'full';
 
@@ -26,21 +28,26 @@ const emit = defineEmits<{
     'update:modelValue': [value: string | null];
 }>();
 
-const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'] as const;
+const WEEKDAYS = MESSAGES.customerUi.calendar.weekdays;
+
+/** 1週間の日数（1画面に並べる日数・週送りの日数）。 */
+const DAYS_PER_WEEK = 7;
+/** 条件変更後に週の空き状況を取りに行くまでの待ち時間（ミリ秒）。連続変更での多重取得を防ぐ。 */
+const WEEK_LOAD_DEBOUNCE_MS = 150;
 const todayDate = startOfDay(new Date());
-const todayIso = toIso(todayDate);
+const todayIso = toIsoDate(todayDate);
 const weekStart = ref(todayIso);
 const week = ref<WeekAvailabilityResponse>({ days: [], times: [], cells: {} });
 const loadingWeek = ref(false);
 const weekError = ref('');
 
-const previousDisabled = computed(() => addDays(weekStart.value, -7) < todayIso);
+const previousDisabled = computed(() => addDays(weekStart.value, -DAYS_PER_WEEK) < todayIso);
 const rangeLabel = computed(() => {
-    if (week.value.days.length === 7) {
-        return `${week.value.days[0].label} 〜 ${week.value.days[6].label}`;
+    if (week.value.days.length === DAYS_PER_WEEK) {
+        return rangeText(week.value.days[0].label, week.value.days[DAYS_PER_WEEK - 1].label);
     }
 
-    return `${dateLabel(weekStart.value)} 〜 ${dateLabel(addDays(weekStart.value, 6))}`;
+    return rangeText(dateLabel(weekStart.value), dateLabel(addDays(weekStart.value, DAYS_PER_WEEK - 1)));
 });
 
 let weekTimer: ReturnType<typeof setTimeout> | null = null;
@@ -65,16 +72,12 @@ onBeforeUnmount(() => {
     weekRequestId += 1;
 });
 
-function startOfDay(value: Date): Date {
-    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+function rangeText(start: string, end: string): string {
+    return fillMessage(MESSAGES.customerUi.weeklyAvailability.range, { start: start, end: end });
 }
 
-function toIso(value: Date): string {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, '0');
-    const day = String(value.getDate()).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
+function startOfDay(value: Date): Date {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }
 
 function parseIso(value: string): Date {
@@ -87,7 +90,7 @@ function addDays(value: string, amount: number): string {
     const date = parseIso(value);
     date.setDate(date.getDate() + amount);
 
-    return toIso(date);
+    return toIsoDate(date);
 }
 
 function dateLabel(value: string): string {
@@ -112,10 +115,10 @@ function statusSymbol(status: AvailabilityStatus): string {
 }
 
 function statusLabel(status: AvailabilityStatus): string {
-    if (status === 'open') return '空きあり';
-    if (status === 'some') return '残りわずか';
+    if (status === 'open') return MESSAGES.customerUi.calendar.statusOpen;
+    if (status === 'some') return MESSAGES.customerUi.calendar.statusSome;
 
-    return '空きなし';
+    return MESSAGES.customerUi.calendar.statusFull;
 }
 
 function resetForCriteriaChange(): void {
@@ -129,7 +132,7 @@ function scheduleWeekLoad(): void {
     loadingWeek.value = true;
     weekError.value = '';
     week.value = { days: [], times: [], cells: {} };
-    weekTimer = setTimeout(() => void loadWeekAvailability(), 150);
+    weekTimer = setTimeout(() => void loadWeekAvailability(), WEEK_LOAD_DEBOUNCE_MS);
 }
 
 async function loadWeekAvailability(): Promise<void> {
@@ -161,7 +164,7 @@ async function loadWeekAvailability(): Promise<void> {
 }
 
 function moveWeek(offset: number): void {
-    const next = addDays(weekStart.value, offset * 7);
+    const next = addDays(weekStart.value, offset * DAYS_PER_WEEK);
     if (next < todayIso) return;
     weekStart.value = next;
     emit('update:modelValue', null);
@@ -180,24 +183,24 @@ function selectCell(day: string, time: string, status: AvailabilityStatus): void
             <v-btn
                 variant="text" size="small" prepend-icon="mdi-chevron-left"
                 :disabled="previousDisabled" @click="moveWeek(-1)"
-            >前の週</v-btn>
+            >{{ MESSAGES.customerUi.weeklyAvailability.previousWeek }}</v-btn>
             <strong class="weekly-availability__range">{{ rangeLabel }}</strong>
             <v-btn
                 variant="text" size="small" append-icon="mdi-chevron-right"
                 @click="moveWeek(1)"
-            >次の週</v-btn>
+            >{{ MESSAGES.customerUi.weeklyAvailability.nextWeek }}</v-btn>
         </div>
 
         <p v-if="loadingWeek" class="text-body-2 text-medium-emphasis mb-3" aria-live="polite">
-            空き状況を確認しています…
+            {{ MESSAGES.customerUi.weeklyAvailability.loading }}
         </p>
         <v-alert v-if="weekError" type="error" variant="tonal" class="mb-4">{{ weekError }}</v-alert>
 
-        <div v-if="week.days.length === 7 && week.times.length > 0" class="weekly-availability__table-wrap">
+        <div v-if="week.days.length === DAYS_PER_WEEK && week.times.length > 0" class="weekly-availability__table-wrap">
             <table class="weekly-availability__table">
                 <thead>
                     <tr>
-                        <th class="weekly-availability__time-head" scope="col">時間</th>
+                        <th class="weekly-availability__time-head" scope="col">{{ MESSAGES.customerUi.weeklyAvailability.time }}</th>
                         <th v-for="day in week.days" :key="day.date" scope="col">
                             <span>{{ headerParts(day).date }}</span>
                             <span>{{ headerParts(day).weekday }}</span>
@@ -229,10 +232,10 @@ function selectCell(day: string, time: string, status: AvailabilityStatus): void
             {{ MESSAGES.availability.noneToShow }}
         </v-alert>
 
-        <div class="weekly-availability__legend text-body-2" aria-label="空き状況の凡例">
-            <span class="text-success">○ 空きあり</span>
-            <span class="text-warning">△ 残りわずか</span>
-            <span class="text-medium-emphasis">× 空きなし</span>
+        <div class="weekly-availability__legend text-body-2" :aria-label="MESSAGES.customerUi.weeklyAvailability.legend">
+            <span class="text-success">{{ MESSAGES.customerUi.weeklyAvailability.legendOpen }}</span>
+            <span class="text-warning">{{ MESSAGES.customerUi.weeklyAvailability.legendSome }}</span>
+            <span class="text-medium-emphasis">{{ MESSAGES.customerUi.weeklyAvailability.legendFull }}</span>
         </div>
     </div>
 </template>

@@ -21,8 +21,6 @@ use Illuminate\Validation\ValidationException;
 
 final class ReservationAdjustmentService
 {
-    private const REFUND_REASON = '施術内容変更による差額返金';
-
     public function __construct(
         private readonly PaymentService $payments,
         private readonly PaymentStateMachine $paymentStateMachine,
@@ -212,7 +210,7 @@ final class ReservationAdjustmentService
             $addon->refresh()->forceFill([
                 'needs_attention' => true,
                 'failure_code' => 'addon_void_failed',
-                'failure_message' => '追加決済の取消結果を確認できませんでした。',
+                'failure_message' => __('messages.payment.addon_cancel_unconfirmed'),
             ])->save();
             $this->auditLogger->log(
                 'reservation.addon_void_failed',
@@ -376,7 +374,7 @@ final class ReservationAdjustmentService
 
             try {
                 // Stripe HTTP: DB transaction 外。
-                $this->payments->refund($payment, $slice, self::REFUND_REASON, $adminActor);
+                $this->payments->refund($payment, $slice, __('messages.payment.adjustment_refund_reason'), $adminActor);
                 $refunded += $slice;
             } catch (PaymentGatewayException) {
                 $payment->refresh()->forceFill(['needs_attention' => true])->save();

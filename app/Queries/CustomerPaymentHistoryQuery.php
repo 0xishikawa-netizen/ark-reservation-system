@@ -50,25 +50,25 @@ final class CustomerPaymentHistoryQuery
     private static function statusLabel(string $status): string
     {
         return match ($status) {
-            'pending' => 'お支払い手続き中',
-            'authorized' => '予約確保中（確定処理中）',
-            'succeeded', 'paid' => '支払い完了',
-            'failed' => 'お支払いに失敗',
-            'voided' => '取消済み',
-            'refunded' => '返金済み',
-            'partially_refunded' => '一部返金済み',
-            default => 'ー',
+            'pending' => __('messages.customer_dashboard.payment_pending'),
+            'authorized' => __('messages.query_labels.customer_payment_authorized'),
+            'succeeded', 'paid' => __('messages.customer_dashboard.payment_succeeded'),
+            'failed' => __('messages.customer_dashboard.payment_failed'),
+            'voided' => __('messages.customer_dashboard.payment_voided'),
+            'refunded' => __('messages.customer_dashboard.payment_refunded'),
+            'partially_refunded' => __('messages.customer_dashboard.payment_partially_refunded'),
+            default => __('messages.common.dash'),
         };
     }
 
     private static function kindLabel(string $kind): string
     {
         return match ($kind) {
-            'single' => 'カード決済（予約）',
-            'single_addon' => '追加のお支払い',
-            'membership_invoice' => '利用権のお支払い',
-            'ticket_purchase' => '回数券のご購入',
-            default => 'お支払い',
+            'single' => __('messages.query_labels.customer_kind_single'),
+            'single_addon' => __('messages.customer_dashboard.kind_single_addon'),
+            'membership_invoice' => __('messages.customer_dashboard.kind_membership_invoice'),
+            'ticket_purchase' => __('messages.customer_dashboard.kind_ticket_purchase'),
+            default => __('messages.customer_dashboard.kind_default'),
         };
     }
 }

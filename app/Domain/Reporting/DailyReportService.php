@@ -12,7 +12,15 @@ use InvalidArgumentException;
 
 final class DailyReportService
 {
-    private const WEEKDAYS = [1 => '月', 2 => '火', 3 => '水', 4 => '木', 5 => '金', 6 => '土', 7 => '日'];
+    private const WEEKDAY_KEYS = [
+        1 => 'messages.reporting.weekday_monday',
+        2 => 'messages.reporting.weekday_tuesday',
+        3 => 'messages.reporting.weekday_wednesday',
+        4 => 'messages.reporting.weekday_thursday',
+        5 => 'messages.reporting.weekday_friday',
+        6 => 'messages.reporting.weekday_saturday',
+        7 => 'messages.reporting.weekday_sunday',
+    ];
 
     public function __construct(
         private readonly DailyReportQuery $query,
@@ -33,7 +41,7 @@ final class DailyReportService
         $start = $this->normalizeDate($from);
         $end = $this->normalizeDate($through);
         if ($end->lt($start)) {
-            throw new InvalidArgumentException('集計終了日は開始日以降で指定してください。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.range_end_invalid'));
         }
 
         $factsByDate = $this->query->fetchRange($start, $end->addDay());
@@ -63,7 +71,7 @@ final class DailyReportService
         return new DailyBusinessSummary(
             businessDate: $businessDate->toDateString(),
             weekdayIso: $businessDate->dayOfWeekIso,
-            weekday: self::WEEKDAYS[$businessDate->dayOfWeekIso],
+            weekday: __(self::WEEKDAY_KEYS[$businessDate->dayOfWeekIso]),
             paymentDateRevenue: $paymentDateRevenue,
             visitGross: $visits['visit_gross'],
             treatmentDateRevenue: $treatmentDateRevenue,
@@ -127,7 +135,7 @@ final class DailyReportService
 
         $parsed = CarbonImmutable::createFromFormat('!Y-m-d', $date, $timezone);
         if ($parsed === false || $parsed->format('Y-m-d') !== $date) {
-            throw new InvalidArgumentException('business dateはY-m-d形式で指定してください。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.business_date_format'));
         }
 
         return $parsed;

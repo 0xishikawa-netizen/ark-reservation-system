@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, useAttrs } from 'vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 /**
  * 対象年の入力欄。MonthField（ArkMonthCalendar）と同じ見た目のポップアップで12年分から選ぶ。
@@ -9,6 +10,9 @@ import { MESSAGES } from '@/constants/messages';
 defineOptions({ inheritAttrs: false });
 
 type FieldDensity = 'default' | 'comfortable' | 'compact';
+
+/** ポップアップの1ページに並べる年数。 */
+const YEARS_PER_PAGE = 12;
 
 const props = withDefaults(defineProps<{
     /** 幅いっぱいに広げる（ブッキングボードの左パネルなど、例外の画面だけで使う）。 */
@@ -36,20 +40,21 @@ const fieldAttrs = computed(() => {
 
 const emit = defineEmits<{ 'update:modelValue': [value: number] }>();
 const labels = MESSAGES.calendar;
+const formats = MESSAGES.customerUi.calendar;
 const menuOpen = ref(false);
 const currentYear = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', year: 'numeric' }).format(new Date()));
 
-const pageStartFor = (year: number): number => year - ((year - props.minYear) % 12);
+const pageStartFor = (year: number): number => year - ((year - props.minYear) % YEARS_PER_PAGE);
 const pageStart = ref(pageStartFor(props.modelValue));
 watch(() => props.modelValue, (year) => { pageStart.value = pageStartFor(year); });
 
-const years = computed(() => Array.from({ length: 12 }, (_, index) => pageStart.value + index)
+const years = computed(() => Array.from({ length: YEARS_PER_PAGE }, (_, index) => pageStart.value + index)
     .filter((year) => year >= props.minYear && year <= props.maxYear));
-const displayValue = computed(() => (Number.isInteger(props.modelValue) ? `${props.modelValue}年` : ''));
+const displayValue = computed(() => (Number.isInteger(props.modelValue) ? fillMessage(formats.year, { year: String(props.modelValue) }) : ''));
 
 function shiftPage(delta: number): void {
-    const next = pageStart.value + delta * 12;
-    if (next + 11 >= props.minYear && next <= props.maxYear) pageStart.value = next;
+    const next = pageStart.value + delta * YEARS_PER_PAGE;
+    if (next + YEARS_PER_PAGE - 1 >= props.minYear && next <= props.maxYear) pageStart.value = next;
 }
 
 function select(year: number): void {
@@ -77,12 +82,12 @@ function select(year: number): void {
             </template>
             <div class="ark-year-cal" role="group" :aria-label="labels.selectYear">
                 <header class="ark-year-cal__head">
-                    <span class="ark-year-cal__range">{{ years[0] }}〜{{ years[years.length - 1] }}年</span>
+                    <span class="ark-year-cal__range">{{ fillMessage(formats.yearRange, { start: String(years[0]), end: String(years[years.length - 1]) }) }}</span>
                     <div class="ark-year-cal__nav">
                         <button type="button" :aria-label="labels.previousYears" :disabled="pageStart <= minYear" @click="shiftPage(-1)">
                             <v-icon icon="mdi-chevron-left" size="20" />
                         </button>
-                        <button type="button" :aria-label="labels.nextYears" :disabled="pageStart + 12 > maxYear" @click="shiftPage(1)">
+                        <button type="button" :aria-label="labels.nextYears" :disabled="pageStart + YEARS_PER_PAGE > maxYear" @click="shiftPage(1)">
                             <v-icon icon="mdi-chevron-right" size="20" />
                         </button>
                     </div>

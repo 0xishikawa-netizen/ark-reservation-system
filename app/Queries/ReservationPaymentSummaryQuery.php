@@ -77,23 +77,23 @@ final class ReservationPaymentSummaryQuery
     public static function kindLabel(PaymentKind $kind): string
     {
         return match ($kind) {
-            PaymentKind::Single => '予約決済',
-            PaymentKind::SingleAddon => '追加のお支払い',
-            PaymentKind::TicketPurchase => '回数券購入',
-            PaymentKind::MembershipInvoice => '会員利用料',
+            PaymentKind::Single => __('messages.query_labels.kind_reservation'),
+            PaymentKind::SingleAddon => __('messages.customer_dashboard.kind_single_addon'),
+            PaymentKind::TicketPurchase => __('messages.query_labels.kind_ticket_purchase'),
+            PaymentKind::MembershipInvoice => __('messages.query_labels.kind_membership_fee'),
         };
     }
 
     public static function statusLabel(PaymentStatus $status): string
     {
         return match ($status) {
-            PaymentStatus::Pending => '手続き中',
-            PaymentStatus::Authorized => '与信済み（未確定）',
-            PaymentStatus::Succeeded => '支払い済み',
-            PaymentStatus::Voided => '取消済み',
-            PaymentStatus::Failed => '失敗',
-            PaymentStatus::PartiallyRefunded => '一部返金',
-            PaymentStatus::Refunded => '返金済み',
+            PaymentStatus::Pending => __('messages.query_labels.payment_pending'),
+            PaymentStatus::Authorized => __('messages.query_labels.payment_authorized'),
+            PaymentStatus::Succeeded => __('messages.query_labels.payment_succeeded'),
+            PaymentStatus::Voided => __('messages.customer_dashboard.payment_voided'),
+            PaymentStatus::Failed => __('messages.query_labels.payment_failed'),
+            PaymentStatus::PartiallyRefunded => __('messages.query_labels.payment_partially_refunded'),
+            PaymentStatus::Refunded => __('messages.customer_dashboard.payment_refunded'),
         };
     }
 }

@@ -2,6 +2,10 @@
 import { Head } from '@inertiajs/vue3';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateOnly, formatDateTime } from '@/utils/dateFormat';
+import { signed } from '@/utils/numberFormat';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -32,58 +36,27 @@ defineProps<{
     history: TicketHistoryItem[];
 }>();
 
-const statusLabels: Record<string, string> = {
-    active: '有効',
-    exhausted: '残数なし',
-    expired: '期限切れ',
-};
+const statusLabels: Record<string, string> = MESSAGES.customerUi.tickets.statuses;
 
-const transactionLabels: Record<string, string> = {
-    PURCHASE: '購入',
-    GRANT: '付与',
-    RESERVE_HOLD: '予約確保',
-    RESERVE_RELEASE: '予約解放',
-    CONSUME: '消化',
-    REVOKE: '取消',
-    EXPIRE: '失効',
-    ADJUST: '調整',
-};
+const transactionLabels: Record<string, string> = MESSAGES.customerUi.tickets.transactions;
 
-function formatDate(value: string): string {
-    return new Intl.DateTimeFormat('ja-JP', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    }).format(new Date(`${value}T00:00:00`));
-}
-
-function formatDateTime(value: string): string {
-    return new Intl.DateTimeFormat('ja-JP', {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    }).format(new Date(value.replace(' ', 'T')));
-}
-
-function signed(delta: number): string {
-    return delta > 0 ? `+${delta}` : String(delta);
+function times(count: number | string): string {
+    return fillMessage(MESSAGES.customerUi.format.times, { count: String(count) });
 }
 </script>
 
 <template>
-    <Head title="回数券" />
+    <Head :title="MESSAGES.customerUi.tickets.title" />
 
-    <PageHeader title="回数券" subtitle="回数券のご購入は店頭でご相談ください。" />
+    <PageHeader :title="MESSAGES.customerUi.tickets.title" :subtitle="MESSAGES.customerUi.tickets.subtitle" />
 
     <section aria-labelledby="wallets-heading" class="mb-8">
-        <h2 id="wallets-heading" class="text-h6 mb-3">保有回数券</h2>
+        <h2 id="wallets-heading" class="text-h6 mb-3">{{ MESSAGES.customerUi.tickets.wallets }}</h2>
         <EmptyState
             v-if="wallets.length === 0"
             icon="mdi-ticket-outline"
-            title="保有している回数券はありません"
-            description="回数券のご購入については、店頭でスタッフへご相談ください。"
+            :title="MESSAGES.customerUi.tickets.noWalletsTitle"
+            :description="MESSAGES.customerUi.tickets.noWalletsDescription"
         />
         <div v-else class="d-flex flex-column ga-3">
             <SectionCard v-for="wallet in wallets" :key="wallet.id" :title="wallet.product_name">
@@ -96,32 +69,32 @@ function signed(delta: number): string {
 
                 <div class="ticket-counts mb-4">
                     <div>
-                        <div class="text-caption text-medium-emphasis">利用可能</div>
-                        <div class="text-h5 text-primary">{{ wallet.available }}回</div>
+                        <div class="text-caption text-medium-emphasis">{{ MESSAGES.customerUi.tickets.available }}</div>
+                        <div class="text-h5 text-primary">{{ times(wallet.available) }}</div>
                     </div>
                     <div>
-                        <div class="text-caption text-medium-emphasis">予約中</div>
-                        <div class="text-h6">{{ wallet.held }}回</div>
+                        <div class="text-caption text-medium-emphasis">{{ MESSAGES.customerUi.tickets.held }}</div>
+                        <div class="text-h6">{{ times(wallet.held) }}</div>
                     </div>
                     <div>
-                        <div class="text-caption text-medium-emphasis">合計</div>
-                        <div class="text-h6">{{ wallet.total }}回</div>
+                        <div class="text-caption text-medium-emphasis">{{ MESSAGES.customerUi.tickets.total }}</div>
+                        <div class="text-h6">{{ times(wallet.total) }}</div>
                     </div>
                 </div>
                 <div class="text-body-2">
-                    有効期限：{{ formatDate(wallet.expires_at) }}
+                    {{ fillMessage(MESSAGES.customerUi.tickets.expiresAt, { date: formatDateOnly(wallet.expires_at, 'dateLong') }) }}
                 </div>
             </SectionCard>
         </div>
     </section>
 
     <section aria-labelledby="history-heading">
-        <h2 id="history-heading" class="text-h6 mb-3">利用履歴</h2>
+        <h2 id="history-heading" class="text-h6 mb-3">{{ MESSAGES.customerUi.tickets.history }}</h2>
         <EmptyState
             v-if="history.length === 0"
             icon="mdi-history"
-            title="利用履歴はありません"
-            description="回数券の購入や利用があると、こちらに履歴が表示されます。"
+            :title="MESSAGES.customerUi.tickets.noHistoryTitle"
+            :description="MESSAGES.customerUi.tickets.noHistoryDescription"
         />
         <v-card v-else variant="outlined">
             <v-list lines="two">
@@ -135,11 +108,11 @@ function signed(delta: number): string {
                                 class="ml-2 font-weight-bold"
                                 :class="item.delta > 0 ? 'text-success' : 'text-error'"
                             >
-                                {{ signed(item.delta) }}回
+                                {{ times(signed(item.delta)) }}
                             </span>
                         </template>
                         <template #subtitle>
-                            {{ formatDateTime(item.created_at) }}
+                            {{ formatDateTime(item.created_at, 'numeric') }}
                         </template>
                     </v-list-item>
                     <v-divider v-if="index < history.length - 1" />

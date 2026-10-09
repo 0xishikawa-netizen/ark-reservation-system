@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatYenCurrency } from '@/utils/money';
 
 interface MenuOption {
     id: number;
@@ -81,14 +83,6 @@ watch(() => props.modelValue, (open) => {
     }
 });
 
-function money(value: number): string {
-    return new Intl.NumberFormat('ja-JP', {
-        style: 'currency',
-        currency: 'JPY',
-        maximumFractionDigits: 0,
-    }).format(value);
-}
-
 function choose(service: MenuOption): void {
     emit('select', service.id);
     emit('update:modelValue', false);
@@ -106,14 +100,14 @@ function close(): void {
         scrollable
         @update:model-value="(v) => emit('update:modelValue', v)"
     >
-        <v-card class="mp" role="dialog" aria-label="メニューを選択">
+        <v-card class="mp" role="dialog" :aria-label="MESSAGES.boardUi.menuPicker.selectMenu">
             <div class="mp__head">
-                <span class="mp__title">メニューを選択</span>
+                <span class="mp__title">{{ MESSAGES.boardUi.menuPicker.selectMenu }}</span>
                 <v-btn
                     icon="mdi-close"
                     variant="text"
                     size="small"
-                    aria-label="閉じる"
+                    :aria-label="MESSAGES.boardUi.menuPicker.close"
                     @click="close"
                 />
             </div>
@@ -122,18 +116,18 @@ function close(): void {
                 <v-text-field
                     ref="searchFieldEl"
                     v-model="query"
-                    placeholder="メニューを検索"
+                    :placeholder="MESSAGES.boardUi.menuPicker.searchMenu"
                     prepend-inner-icon="mdi-magnify"
                     density="comfortable"
                     variant="outlined"
                     hide-details
                     clearable
-                    aria-label="メニューを検索"
+                    :aria-label="MESSAGES.boardUi.menuPicker.searchMenu"
                     autofocus
                 />
             </div>
 
-            <div v-if="categories.length" class="mp__cats" role="tablist" aria-label="カテゴリで絞り込み">
+            <div v-if="categories.length" class="mp__cats" role="tablist" :aria-label="MESSAGES.boardUi.menuPicker.filterByCategory">
                 <v-chip
                     :color="activeCategory === null ? 'primary' : undefined"
                     :variant="activeCategory === null ? 'flat' : 'outlined'"
@@ -142,7 +136,7 @@ function close(): void {
                     :aria-selected="activeCategory === null"
                     @click="activeCategory = null"
                 >
-                    すべて
+                    {{ MESSAGES.boardUi.menuPicker.all }}
                 </v-chip>
                 <v-chip
                     v-for="cat in categories"
@@ -163,7 +157,7 @@ function close(): void {
             <div class="mp__list">
                 <template v-if="showPopularSection">
                     <p class="mp__section-label">
-                        <v-icon icon="mdi-star" size="12" />よく使う
+                        <v-icon icon="mdi-star" size="12" />{{ MESSAGES.boardUi.menuPicker.popular }}
                     </p>
                     <button
                         v-for="service in popularServices"
@@ -177,11 +171,11 @@ function close(): void {
                         <span class="mp__row-main">
                             <span class="mp__row-name">{{ service.name }}</span>
                             <span class="mp__row-sub">
-                                {{ service.duration_min }}分
+                                {{ fillMessage(MESSAGES.boardUi.menuPicker.minutes, { minutes: String(service.duration_min) }) }}
                                 <span v-if="service.category" class="mp__row-cat">／ {{ service.category }}</span>
                             </span>
                         </span>
-                        <span class="mp__row-price">{{ money(service.price) }}</span>
+                        <span class="mp__row-price">{{ formatYenCurrency(service.price) }}</span>
                         <v-icon
                             v-if="service.id === selectedId"
                             icon="mdi-check-circle"
@@ -190,7 +184,7 @@ function close(): void {
                             class="mp__row-check"
                         />
                     </button>
-                    <p class="mp__section-label mp__section-label--all">すべてのメニュー</p>
+                    <p class="mp__section-label mp__section-label--all">{{ MESSAGES.boardUi.menuPicker.allMenus }}</p>
                 </template>
 
                 <p v-if="filtered.length === 0" class="mp__empty">{{ MESSAGES.menu.noneMatched }}</p>
@@ -206,11 +200,11 @@ function close(): void {
                     <span class="mp__row-main">
                         <span class="mp__row-name">{{ service.name }}</span>
                         <span class="mp__row-sub">
-                            {{ service.duration_min }}分
+                            {{ fillMessage(MESSAGES.boardUi.menuPicker.minutes, { minutes: String(service.duration_min) }) }}
                             <span v-if="service.category" class="mp__row-cat">／ {{ service.category }}</span>
                         </span>
                     </span>
-                    <span class="mp__row-price">{{ money(service.price) }}</span>
+                    <span class="mp__row-price">{{ formatYenCurrency(service.price) }}</span>
                     <v-icon
                         v-if="service.id === selectedId"
                         icon="mdi-check-circle"

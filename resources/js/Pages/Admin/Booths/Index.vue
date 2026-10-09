@@ -2,7 +2,10 @@
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { EmptyState, PageHeader, SectionCard, MasterDeleteButton, TrashedMasterList } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { useMasterActiveToggle } from '@/composables/masterActive';
 
 defineOptions({ layout: AdminLayout });
 
@@ -24,9 +27,9 @@ const props = defineProps<{
 }>();
 
 const headers = [
-    { title: 'ブース名', key: 'name' },
-    { title: '表示順', key: 'sort_order' },
-    { title: '有効', key: 'is_active', sortable: false },
+    { title: MESSAGES.mastersUi.booths.name, key: 'name' },
+    { title: MESSAGES.mastersUi.booths.sortOrder, key: 'sort_order' },
+    { title: MESSAGES.mastersUi.booths.active, key: 'is_active', sortable: false },
     { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
@@ -40,37 +43,32 @@ const applyFilters = (): void => {
     );
 };
 
-const toggleActive = (booth: BoothListItem): void => {
-    router.patch(
-        `/admin/booths/${booth.id}/active`,
-        { active: !booth.is_active },
-        { preserveScroll: true },
-    );
-};
+// 有効/無効の切替（送信中は同じ行を押せない。M-6）
+const { isPending: isActivePending, toggle: toggleActive } = useMasterActiveToggle('/admin/booths');
 </script>
 
 <template>
-    <Head title="ブース" />
+    <Head :title="MESSAGES.mastersUi.booths.title" />
 
-    <PageHeader title="ブース" subtitle="予約で使用するブースと表示順を管理します。">
+    <PageHeader :title="MESSAGES.mastersUi.booths.title" :subtitle="MESSAGES.mastersUi.booths.subtitle">
         <template #actions>
             <v-btn color="primary" href="/admin/booths/create">
-                ブースを追加
+                {{ MESSAGES.mastersUi.booths.add }}
             </v-btn>
         </template>
     </PageHeader>
 
-    <SectionCard title="ブース一覧" class="ark-table-section">
+    <SectionCard :title="MESSAGES.mastersUi.booths.list" class="ark-table-section">
         <div class="ark-table-section__filters">
             <v-form class="d-flex align-center ga-4" @submit.prevent="applyFilters">
                 <v-text-field
                     v-model="search"
-                    label="ブース名を検索"
+                    :label="MESSAGES.mastersUi.booths.searchLabel"
                     clearable
                     hide-details
                     max-width="420"
                 />
-                <v-btn type="submit" variant="tonal">検索</v-btn>
+                <v-btn type="submit" variant="tonal">{{ MESSAGES.mastersUi.booths.search }}</v-btn>
             </v-form>
         </div>
 
@@ -80,13 +78,13 @@ const toggleActive = (booth: BoothListItem): void => {
             :headers="headers"
             :items="booths"
             item-value="id"
-            no-data-text="該当するブースはありません。"
+            :no-data-text="MESSAGES.mastersUi.booths.noData"
         >
             <template #no-data>
                 <EmptyState
                     icon="mdi-door-open"
-                    title="該当するブースはありません"
-                    description="検索条件を変更するか、新しいブースを追加してください。"
+                    :title="MESSAGES.mastersUi.booths.emptyTitle"
+                    :description="MESSAGES.mastersUi.booths.emptyDescription"
                 />
             </template>
             <template #item.is_active="{ item }">
@@ -94,8 +92,9 @@ const toggleActive = (booth: BoothListItem): void => {
                     :model-value="item.is_active"
                     color="primary"
                     hide-details
-                    :aria-label="`${item.name}の有効状態`"
-                    @click.stop="toggleActive(item)"
+                    :aria-label="fillMessage(MESSAGES.mastersUi.booths.activeState, { name: item.name })"
+                    :disabled="isActivePending(item.id)"
+                    @update:model-value="toggleActive(item, $event)"
                 />
             </template>
             <template #item.actions="{ item }">
@@ -106,13 +105,13 @@ const toggleActive = (booth: BoothListItem): void => {
                     prepend-icon="mdi-pencil-outline"
                     :href="`/admin/booths/${item.id}/edit`"
                 >
-                    編集
+                    {{ MESSAGES.mastersUi.booths.edit }}
                 </v-btn>
-                <MasterDeleteButton type="booths" :id="item.id" :name="item.name" label="ブース" />
+                <MasterDeleteButton type="booths" :id="item.id" :name="item.name" :label="MESSAGES.mastersUi.booths.masterLabel" />
             </template>
         </v-data-table>
     </SectionCard>
-    <TrashedMasterList type="booths" label="ブース" :items="trashed ?? []" />
+    <TrashedMasterList type="booths" :label="MESSAGES.mastersUi.booths.masterLabel" :items="trashed ?? []" />
 </template>
 
 <style scoped>

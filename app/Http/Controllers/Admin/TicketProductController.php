@@ -82,7 +82,7 @@ class TicketProductController extends Controller
 
         return back()->with(
             'success',
-            $active ? '回数券商品を有効化しました。' : '回数券商品を無効化しました。',
+            $active ? __('messages.ticket.product_activated') : __('messages.ticket.product_deactivated'),
         );
     }
 }

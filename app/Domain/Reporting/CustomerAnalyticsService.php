@@ -21,7 +21,7 @@ final class CustomerAnalyticsService
     public function forMonth(int $year, int $month, CarbonInterface|string|null $asOfDate = null): MonthlyCustomerSummary
     {
         if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12) {
-            throw new InvalidArgumentException('年月の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.year_month_invalid'));
         }
         $start = CarbonImmutable::create($year, $month, 1, 0, 0, 0, $this->businessTime->timezone());
         $next = $start->addMonth();
@@ -141,7 +141,7 @@ final class CustomerAnalyticsService
             ? CarbonImmutable::instance($value)->setTimezone($this->businessTime->timezone())->startOfDay()
             : CarbonImmutable::createFromFormat('!Y-m-d', $value, $this->businessTime->timezone());
         if ($date === false || (is_string($value) && $date->toDateString() !== $value)) {
-            throw new InvalidArgumentException('as_of_dateの指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.as_of_date_invalid'));
         }
 
         return $date;

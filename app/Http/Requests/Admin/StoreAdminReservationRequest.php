@@ -4,19 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Concerns\ValidatesReservationInput;
 use App\Models\Service;
-use App\Models\Staff;
-use App\Support\SlotKey;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
-use Throwable;
 
 final class StoreAdminReservationRequest extends FormRequest
 {
+    use ValidatesReservationInput;
+
     public function authorize(): bool
     {
         return true;
@@ -52,45 +51,19 @@ final class StoreAdminReservationRequest extends FormRequest
             $service = $this->validatedService($validator);
             $this->validateStaff($validator, $service);
             $this->validateBooth($validator);
-            $this->validateBoundary($validator);
+            $this->validateBoundary($validator, (bool) config('reservation.allow_admin_free_time', false));
         });
-    }
-
-    private function validatedService(Validator $validator): ?Service
-    {
-        if ($validator->errors()->has('service_id')) {
-            return null;
-        }
-
-        return Service::query()->find((int) $this->input('service_id'));
     }
 
     private function validateStaff(Validator $validator, ?Service $service): void
     {
-        $staffId = $this->input('staff_id');
-
-        if ($service?->requires_staff && $staffId === null) {
+        if ($service?->requires_staff && $this->input('staff_id') === null) {
             $validator->errors()->add('staff_id', __('messages.reservation.staff_required'));
 
             return;
         }
 
-        if ($staffId === null || $validator->errors()->has('staff_id')) {
-            return;
-        }
-
-        $staff = Staff::query()->find((int) $staffId);
-        $assigned = $service !== null && DB::table('service_staff')
-            ->where('service_id', $service->id)
-            ->where('staff_id', (int) $staffId)
-            ->exists();
-
-        if ($staff === null || ! $staff->is_bookable || ! $assigned) {
-            $validator->errors()->add(
-                'staff_id',
-                __('messages.reservation.staff_not_assigned_to_selected'),
-            );
-        }
+        $this->validateStaffAssignable($validator, $service?->id, 'messages.reservation.staff_not_assigned_to_selected');
     }
 
     /** 指名と性別希望は同時に付けられない（指名は特定のスタッフ、希望は性別で、意味が重なるため）。 */
@@ -114,27 +87,6 @@ final class StoreAdminReservationRequest extends FormRequest
 
         if (! $active) {
             $validator->errors()->add('booth_id', __('messages.reservation.booth_unavailable'));
-        }
-    }
-
-    private function validateBoundary(Validator $validator): void
-    {
-        if ((bool) config('reservation.allow_admin_free_time', false)
-            || $validator->errors()->has('starts_at')) {
-            return;
-        }
-
-        try {
-            $startsAt = CarbonImmutable::parse((string) $this->input('starts_at'));
-        } catch (Throwable) {
-            return;
-        }
-
-        if (! SlotKey::fromSettings()->isBoundary($startsAt)) {
-            $validator->errors()->add(
-                'starts_at',
-                __('messages.reservation.non_boundary_start'),
-            );
         }
     }
 }

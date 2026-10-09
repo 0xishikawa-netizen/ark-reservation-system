@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Customer;
 
 use App\Actions\Customer\UpdateCustomerProfile;
+use App\Http\Controllers\Concerns\ResolvesAuthenticatedUser;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateCustomerProfileRequest;
 use App\Models\Customer;
-use App\Models\User;
 use App\Queries\CustomerProfileQuery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +17,8 @@ use Inertia\Response;
 
 class ProfileController extends Controller
 {
+    use ResolvesAuthenticatedUser;
+
     public function show(Request $request, CustomerProfileQuery $query): Response
     {
         $customer = $this->customerFor($request);
@@ -57,23 +59,6 @@ class ProfileController extends Controller
 
         return redirect()->route('mypage.profile.show')
             ->with('success', __('messages.customer.own_profile_updated'));
-    }
-
-    private function customerFor(Request $request): Customer
-    {
-        $user = $request->user();
-
-        if (! $user instanceof User) {
-            abort(403);
-        }
-
-        $customer = $user->customer;
-
-        if (! $customer instanceof Customer) {
-            abort(403);
-        }
-
-        return $customer;
     }
 
     /** @return array<string, mixed> */

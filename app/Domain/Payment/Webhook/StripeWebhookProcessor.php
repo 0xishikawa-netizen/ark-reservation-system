@@ -74,7 +74,7 @@ final class StripeWebhookProcessor
         $paymentIntentId = $this->paymentIntentIdFrom($event);
 
         if ($paymentIntentId === null) {
-            $this->finish($record, WebhookEventStatus::Ignored, 'PaymentIntent を特定できませんでした。');
+            $this->finish($record, WebhookEventStatus::Ignored, __('messages.webhook.payment_intent_unidentified'));
 
             return 'ignored';
         }
@@ -85,7 +85,7 @@ final class StripeWebhookProcessor
 
         if ($payment === null) {
             // 当システムが作っていない PaymentIntent。無視して良いが記録は残す。
-            $this->finish($record, WebhookEventStatus::Ignored, '対象の決済が見つかりません。');
+            $this->finish($record, WebhookEventStatus::Ignored, __('messages.webhook.payment_not_found'));
 
             return 'ignored';
         }

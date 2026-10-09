@@ -6,6 +6,7 @@ import { realEmail } from '@/utils/placeholderEmail';
 import CustomerPicker, { type PickedCustomer } from '@/components/checkout/CustomerPicker.vue';
 import { ref } from 'vue';
 import { PageHeader, SectionCard } from '@/components/ark';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -56,9 +57,9 @@ const saveKarte = (): void => {
 };
 
 const genderOptions = [
-    { title: '男性', value: 'male' },
-    { title: '女性', value: 'female' },
-    { title: 'その他', value: 'other' },
+    { title: MESSAGES.mastersUi.customerEdit.genders.male, value: 'male' },
+    { title: MESSAGES.mastersUi.customerEdit.genders.female, value: 'female' },
+    { title: MESSAGES.mastersUi.customerEdit.genders.other, value: 'other' },
 ];
 
 const form = useForm({
@@ -76,49 +77,49 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Head :title="`${customer.name}を編集`" />
+    <Head :title="fillMessage(MESSAGES.mastersUi.customerEdit.head, { name: customer.name })" />
 
-    <PageHeader title="顧客プロフィール編集" :subtitle="customer.name" />
+    <PageHeader :title="MESSAGES.mastersUi.customerEdit.title" :subtitle="customer.name" />
 
     <!-- 顧客詳細の「基本情報」と同じ並びで、値の部分だけ入力欄にする。 -->
-    <SectionCard title="基本情報" class="basic-information-card">
+    <SectionCard :title="MESSAGES.mastersUi.customerEdit.basicInformation" class="basic-information-card">
         <v-form @submit.prevent="submit">
             <dl class="customer-profile-grid">
                 <div class="customer-profile-item">
-                    <dt>氏名</dt>
-                    <dd><v-text-field v-model="form.name" aria-label="氏名" maxlength="255" hide-details="auto" :error-messages="form.errors.name" /></dd>
+                    <dt>{{ MESSAGES.mastersUi.customerEdit.name }}</dt>
+                    <dd><v-text-field v-model="form.name" :aria-label="MESSAGES.mastersUi.customerEdit.name" maxlength="255" hide-details="auto" :error-messages="form.errors.name" /></dd>
                 </div>
                 <div class="customer-profile-item">
-                    <dt>カナ</dt>
-                    <dd><v-text-field v-model="form.kana" aria-label="カナ" maxlength="100" hide-details="auto" required :error-messages="form.errors.kana" /></dd>
+                    <dt>{{ MESSAGES.mastersUi.customerEdit.kana }}</dt>
+                    <dd><v-text-field v-model="form.kana" :aria-label="MESSAGES.mastersUi.customerEdit.kana" maxlength="100" hide-details="auto" required :error-messages="form.errors.kana" /></dd>
                 </div>
                 <div class="customer-profile-item">
-                    <dt>電話番号</dt>
-                    <dd><v-text-field v-model="form.phone" aria-label="電話番号" type="tel" maxlength="20" hide-details="auto" :error-messages="form.errors.phone" /></dd>
+                    <dt>{{ MESSAGES.mastersUi.customerEdit.phone }}</dt>
+                    <dd><v-text-field v-model="form.phone" :aria-label="MESSAGES.mastersUi.customerEdit.phone" type="tel" maxlength="20" hide-details="auto" :error-messages="form.errors.phone" /></dd>
                 </div>
                 <div class="customer-profile-item">
-                    <dt>生年月日</dt>
-                    <dd><v-text-field v-model="form.birthday" class="ark-field-date" aria-label="生年月日" type="date" hide-details="auto" :error-messages="form.errors.birthday" /></dd>
+                    <dt>{{ MESSAGES.mastersUi.customerEdit.birthday }}</dt>
+                    <dd><v-text-field v-model="form.birthday" class="ark-field-date" :aria-label="MESSAGES.mastersUi.customerEdit.birthday" type="date" hide-details="auto" :error-messages="form.errors.birthday" /></dd>
                 </div>
                 <div class="customer-profile-item">
-                    <dt>性別</dt>
-                    <dd><v-select v-model="form.gender" aria-label="性別" :items="genderOptions" clearable hide-details="auto" :error-messages="form.errors.gender" /></dd>
+                    <dt>{{ MESSAGES.mastersUi.customerEdit.gender }}</dt>
+                    <dd><v-select v-model="form.gender" :aria-label="MESSAGES.mastersUi.customerEdit.gender" :items="genderOptions" clearable hide-details="auto" :error-messages="form.errors.gender" /></dd>
                 </div>
                 <div class="customer-profile-item customer-profile-item--wide">
-                    <dt>メールアドレス</dt>
+                    <dt>{{ MESSAGES.mastersUi.customerEdit.email }}</dt>
                     <dd>
-                        <v-text-field :model-value="realEmail(customer.email) ?? '-'" aria-label="メールアドレス" readonly hide-details="auto" :hint="MESSAGES.customer.emailNotEditable" persistent-hint />
+                        <v-text-field :model-value="realEmail(customer.email) ?? MESSAGES.common.emptyValue" :aria-label="MESSAGES.mastersUi.customerEdit.email" readonly hide-details="auto" :hint="MESSAGES.customer.emailNotEditable" persistent-hint />
                     </dd>
                 </div>
                 <div class="customer-profile-item customer-profile-item--wide">
-                    <dt>メモ</dt>
-                    <dd><v-textarea v-model="form.note" aria-label="メモ" maxlength="1000" counter rows="3" auto-grow hide-details="auto" :error-messages="form.errors.note" /></dd>
+                    <dt>{{ MESSAGES.mastersUi.customerEdit.note }}</dt>
+                    <dd><v-textarea v-model="form.note" :aria-label="MESSAGES.mastersUi.customerEdit.note" maxlength="1000" counter rows="3" auto-grow hide-details="auto" :error-messages="form.errors.note" /></dd>
                 </div>
             </dl>
 
             <div class="d-flex ga-3 flex-wrap mt-4">
-                <v-btn type="submit" color="primary" :loading="form.processing">保存</v-btn>
-                <v-btn variant="text" :href="`/admin/customers/${customer.user_id}`">キャンセル</v-btn>
+                <v-btn type="submit" color="primary" :loading="form.processing">{{ MESSAGES.mastersUi.customerEdit.save }}</v-btn>
+                <v-btn variant="text" :href="`/admin/customers/${customer.user_id}`">{{ MESSAGES.mastersUi.customerEdit.cancel }}</v-btn>
             </div>
         </v-form>
     </SectionCard>

@@ -4,20 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Booking;
 
+use App\Http\Requests\Concerns\ValidatesReservationInput;
 use App\Models\Service;
-use App\Models\Staff;
 use App\Models\User;
 use App\Rules\JapanesePhoneNumber;
-use App\Support\SlotKey;
-use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
-use Throwable;
 
 final class StoreGuestReservationRequest extends FormRequest
 {
+    use ValidatesReservationInput;
+
     public function authorize(): bool
     {
         return true;
@@ -67,53 +65,8 @@ final class StoreGuestReservationRequest extends FormRequest
         });
     }
 
-    private function validatedService(Validator $validator): ?Service
-    {
-        if ($validator->errors()->has('service_id')) {
-            return null;
-        }
-
-        return Service::query()->find((int) $this->input('service_id'));
-    }
-
     private function validateStaff(Validator $validator, ?Service $service): void
     {
-        if ($this->input('staff_id') === null || $validator->errors()->has('staff_id')) {
-            return;
-        }
-
-        $staffId = (int) $this->input('staff_id');
-        $staff = Staff::query()->find($staffId);
-        $isAssigned = $service !== null && DB::table('service_staff')
-            ->where('service_id', $service->id)
-            ->where('staff_id', $staffId)
-            ->exists();
-
-        if ($staff === null || ! $staff->is_bookable || ! $isAssigned) {
-            $validator->errors()->add(
-                'staff_id',
-                __('messages.reservation.staff_not_assigned_to_selected'),
-            );
-        }
-    }
-
-    private function validateBoundary(Validator $validator): void
-    {
-        if ($validator->errors()->has('starts_at')) {
-            return;
-        }
-
-        try {
-            $startsAt = CarbonImmutable::parse((string) $this->input('starts_at'));
-        } catch (Throwable) {
-            return;
-        }
-
-        if (! SlotKey::fromSettings()->isBoundary($startsAt)) {
-            $validator->errors()->add(
-                'starts_at',
-                __('messages.reservation.non_boundary_start'),
-            );
-        }
+        $this->validateStaffAssignable($validator, $service?->id, 'messages.reservation.staff_not_assigned_to_selected');
     }
 }

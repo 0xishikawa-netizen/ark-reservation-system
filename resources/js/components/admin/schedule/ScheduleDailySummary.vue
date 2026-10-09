@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { DailySummary } from '@/components/admin/schedule/types';
 import { MESSAGES } from '@/constants/messages';
+import { formatYenSign } from '@/utils/money';
 
 /**
  * 予約台帳の下に出す、その日の集計（§23-24, §48）。巨大なKPIカードは並べず、
@@ -12,8 +13,6 @@ const props = defineProps<{
     /** 見出し（例：本日の集計／10/5(日)の集計）。 */
     title: string;
 }>();
-
-const yen = (value: number): string => `¥${value.toLocaleString('ja-JP')}`;
 
 const futureRate = computed(() => {
     const rate = props.summary.future_reservation.rate;
@@ -66,12 +65,12 @@ const showMoney = computed(() => props.summary.revenue !== null);
         <!-- 売上（権限がある時だけ） -->
         <div v-if="showMoney" class="daily-summary__row daily-summary__row--sub">
             <span class="daily-summary__section">{{ MESSAGES.schedule.dailySummary.revenue }}</span>
-            <span class="daily-summary__money daily-summary__money--total">{{ yen(summary.revenue ?? 0) }}</span>
-            <span v-if="summary.average_spend !== null" class="daily-summary__chip">{{ MESSAGES.schedule.dailySummary.averageSpend }}<strong>{{ yen(summary.average_spend) }}</strong></span>
-            <span class="daily-summary__chip">{{ MESSAGES.schedule.dailySummary.treatment }}<strong>{{ yen(summary.treatment_revenue ?? 0) }}</strong></span>
-            <span class="daily-summary__chip">{{ MESSAGES.schedule.dailySummary.retail }}<strong>{{ yen(summary.retail_revenue ?? 0) }}</strong></span>
+            <span class="daily-summary__money daily-summary__money--total">{{ formatYenSign(summary.revenue ?? 0) }}</span>
+            <span v-if="summary.average_spend !== null" class="daily-summary__chip">{{ MESSAGES.schedule.dailySummary.averageSpend }}<strong>{{ formatYenSign(summary.average_spend) }}</strong></span>
+            <span class="daily-summary__chip">{{ MESSAGES.schedule.dailySummary.treatment }}<strong>{{ formatYenSign(summary.treatment_revenue ?? 0) }}</strong></span>
+            <span class="daily-summary__chip">{{ MESSAGES.schedule.dailySummary.retail }}<strong>{{ formatYenSign(summary.retail_revenue ?? 0) }}</strong></span>
             <span v-for="method in summary.payment_methods" :key="method.name" class="daily-summary__chip">
-                {{ method.name }}<strong>{{ yen(method.amount) }}</strong>
+                {{ method.name }}<strong>{{ formatYenSign(method.amount) }}</strong>
             </span>
         </div>
     </v-card>

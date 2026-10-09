@@ -1,5 +1,8 @@
 import { MESSAGES } from '@/constants/messages';
 
+/** 集計メニューのグループ名。 */
+const REPORTS_GROUP = MESSAGES.customerUi.navigation.groups.reports;
+
 interface ReportPermissions {
     reportsView: boolean;
     salesView: boolean;
@@ -22,7 +25,7 @@ export interface ReportNavigationItem {
     href: string;
     disabled: false;
     icon: string;
-    group: '集計';
+    group: typeof REPORTS_GROUP;
 }
 
 export function reportNavigationItems(can: ReportPermissions, routes: ReportRoutes): ReportNavigationItem[] {
@@ -35,19 +38,19 @@ export function reportNavigationItems(can: ReportPermissions, routes: ReportRout
     // 概要は売上を含むため、売上権限が無い場合は従来どおり売上を含まない画面を個別に出す。
     if (can.salesView && routes.overview) {
         return [
-            { title: MESSAGES.monthlyHub.title, href: routes.overview, disabled: false, icon: 'mdi-chart-box-outline', group: '集計' },
-            { title: MESSAGES.reporting.annualTitle, href: routes.annual, disabled: false, icon: 'mdi-calendar-range', group: '集計' },
+            { title: MESSAGES.monthlyHub.title, href: routes.overview, disabled: false, icon: 'mdi-chart-box-outline', group: REPORTS_GROUP },
+            { title: MESSAGES.reporting.annualTitle, href: routes.annual, disabled: false, icon: 'mdi-calendar-range', group: REPORTS_GROUP },
         ];
     }
 
     return [
-        { title: MESSAGES.reporting.dailyNotesTitle, href: routes.dailyNotes, disabled: false, icon: 'mdi-text-box-edit-outline', group: '集計' },
+        { title: MESSAGES.reporting.dailyNotesTitle, href: routes.dailyNotes, disabled: false, icon: 'mdi-text-box-edit-outline', group: REPORTS_GROUP },
         ...(can.salesView ? [
-            { title: '月計', href: routes.monthly, disabled: false as const, icon: 'mdi-chart-box-outline', group: '集計' as const },
-            { title: MESSAGES.reporting.annualTitle, href: routes.annual, disabled: false as const, icon: 'mdi-calendar-range', group: '集計' as const },
+            { title: MESSAGES.customerUi.navigation.items.monthly, href: routes.monthly, disabled: false as const, icon: 'mdi-chart-box-outline', group: REPORTS_GROUP },
+            { title: MESSAGES.reporting.annualTitle, href: routes.annual, disabled: false as const, icon: 'mdi-calendar-range', group: REPORTS_GROUP },
         ] : []),
-        { title: MESSAGES.reporting.customerTitle, href: routes.customers, disabled: false, icon: 'mdi-account-group-outline', group: '集計' },
-        { title: MESSAGES.reporting.staffTitle, href: routes.staffUtilization, disabled: false, icon: 'mdi-chart-timeline-variant', group: '集計' },
-        { title: MESSAGES.reporting.bandTitle, href: routes.timeBands, disabled: false, icon: 'mdi-clock-outline', group: '集計' },
+        { title: MESSAGES.reporting.customerTitle, href: routes.customers, disabled: false, icon: 'mdi-account-group-outline', group: REPORTS_GROUP },
+        { title: MESSAGES.reporting.staffTitle, href: routes.staffUtilization, disabled: false, icon: 'mdi-chart-timeline-variant', group: REPORTS_GROUP },
+        { title: MESSAGES.reporting.bandTitle, href: routes.timeBands, disabled: false, icon: 'mdi-clock-outline', group: REPORTS_GROUP },
     ];
 }

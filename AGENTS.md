@@ -58,3 +58,10 @@
 - Laravel Pint / ESLint に従える構成にする（設定は生成物のデフォルト＋最小限）。
 - コメントは必要な箇所に日本語で簡潔に。
 - 画面に出すメッセージ（エラー・完了・確認・注意・空の時の表示）は直書きしない。サーバーは `lang/ja/messages.php`（`__('messages.<グループ>.<キー>')`）、画面は `resources/js/constants/messages.ts`（`MESSAGES.<グループ>.<キー>`）に追加して参照する。
+
+## 文言・共通処理の置き場所（Task 11-34 追記）
+
+- 画面の文言は `resources/js/constants/messages.ts` と領域別の `resources/js/constants/messages/{board,masters,reports,customer}.ts`（`MESSAGES.boardUi` / `mastersUi` / `reportsUi` / `customerUi`）。既存キーに同じ文言があれば再利用する。
+- 差し込み値のある文言は `{名前}` で書き、`fillMessage()`（`resources/js/utils/message.ts`）で埋める。`String.replace('{x}', 値)` は値の `$&` 等で表示が崩れるため使わない。
+- 日時・金額などの整形は `resources/js/utils/{dateFormat,money,numberFormat}.ts`、マスタの有効/無効切替は `composables/masterActive.ts` を使う。画面ごとに同じ関数を書き直さない。
+- 予約の FormRequest は `App\Http\Requests\Concerns\ValidatesReservationInput`、ログイン利用者の取得は `App\Http\Controllers\Concerns\ResolvesAuthenticatedUser`、予約・予定ブロックの同時作成の直列化は `App\Domain\Schedule\ResourceLock` を使う。

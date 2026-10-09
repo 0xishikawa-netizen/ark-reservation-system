@@ -121,7 +121,7 @@ class PaymentController extends Controller
         } catch (PaymentGatewayException) {
             return back()->with(
                 'error',
-                '返金結果を確認できませんでした。要対応として記録しました。payments:reconcile で確認してください。',
+                __('messages.payment.refund_result_unconfirmed'),
             );
         }
 

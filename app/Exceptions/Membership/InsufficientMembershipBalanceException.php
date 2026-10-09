@@ -7,9 +7,9 @@ namespace App\Exceptions\Membership;
 final class InsufficientMembershipBalanceException extends \RuntimeException
 {
     public function __construct(
-        string $message = '当期の利用可能回数が不足しています',
+        ?string $message = null,
         ?\Throwable $previous = null,
     ) {
-        parent::__construct($message, 0, $previous);
+        parent::__construct($message ?? __('messages.membership.insufficient_balance_exception'), 0, $previous);
     }
 }

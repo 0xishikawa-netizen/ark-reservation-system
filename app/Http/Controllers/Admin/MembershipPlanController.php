@@ -81,7 +81,7 @@ class MembershipPlanController extends Controller
 
         return back()->with(
             'success',
-            $active ? '月額プランを有効化しました。' : '月額プランを無効化しました。',
+            $active ? __('messages.membership.plan_activated') : __('messages.membership.plan_deactivated'),
         );
     }
 }

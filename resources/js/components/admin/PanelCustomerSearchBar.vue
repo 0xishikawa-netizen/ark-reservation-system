@@ -2,6 +2,11 @@
 import { computed, ref, watch } from 'vue';
 import { MESSAGES } from '@/constants/messages';
 
+/** 顧客検索を開始するまでの入力待機時間。 */
+const SEARCH_DEBOUNCE_MS = 300;
+/** 検索結果クリックを受け付けるためのフォーカス解除待機時間。 */
+const BLUR_DELAY_MS = 150;
+
 interface SearchResult {
     user_id: number;
     name: string;
@@ -59,7 +64,7 @@ watch(query, () => {
     if (timer !== null) {
         clearTimeout(timer);
     }
-    timer = setTimeout(() => void runSearch(), 300);
+    timer = setTimeout(() => void runSearch(), SEARCH_DEBOUNCE_MS);
 });
 
 function onFocus(): void {
@@ -72,7 +77,7 @@ function onFocus(): void {
 
 // クリックのmousedownより先にblurが発火して結果が消えてしまわないよう、少し待ってから閉じる。
 function onBlur(): void {
-    blurTimer = setTimeout(() => { focused.value = false; }, 150);
+    blurTimer = setTimeout(() => { focused.value = false; }, BLUR_DELAY_MS);
 }
 
 function selectResult(row: SearchResult): void {
@@ -109,7 +114,7 @@ defineExpose({ restoreFocus, closeDropdown });
         <v-text-field
             v-else
             v-model="query"
-            :placeholder="highlight ? '顧客を検索して選んでください' : '氏名・カナ・電話番号・会員番号で検索'"
+            :placeholder="highlight ? MESSAGES.boardUi.customerSearch.selectPlaceholder : MESSAGES.boardUi.customerSearch.searchPlaceholder"
             prepend-inner-icon="mdi-magnify"
             density="compact"
             variant="solo"

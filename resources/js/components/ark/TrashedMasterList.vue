@@ -2,6 +2,7 @@
 import { router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 /**
  * 削除済みマスタの一覧と復元（admin 専用）。一覧画面の下に折りたたんで置く。
@@ -32,19 +33,19 @@ function restore(id: number): void {
         <v-expansion-panel>
             <v-expansion-panel-title>
                 <v-icon icon="mdi-delete-restore" size="18" class="mr-2" />
-                {{ MESSAGES.masters.trashedTitle.replace('{label}', label).replace('{count}', String(items.length)) }}
+                {{ fillMessage(MESSAGES.masters.trashedTitle, { label: label, count: String(items.length) }) }}
             </v-expansion-panel-title>
             <v-expansion-panel-text>
                 <v-table density="compact">
                     <thead>
-                        <tr><th>名称</th><th>削除日時</th><th class="text-end" /></tr>
+                        <tr><th>{{ MESSAGES.customerUi.trashedMasters.name }}</th><th>{{ MESSAGES.customerUi.trashedMasters.deletedAt }}</th><th class="text-end" /></tr>
                     </thead>
                     <tbody>
                         <tr v-for="item in items" :key="item.id">
                             <td>{{ item.name }}</td>
                             <td>{{ item.deleted_at ?? '' }}</td>
                             <td class="text-end">
-                                <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-restore" :loading="restoringId === item.id" @click="restore(item.id)">復元</v-btn>
+                                <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-restore" :loading="restoringId === item.id" @click="restore(item.id)">{{ MESSAGES.customerUi.trashedMasters.restore }}</v-btn>
                             </td>
                         </tr>
                     </tbody>

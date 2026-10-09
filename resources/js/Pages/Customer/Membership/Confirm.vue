@@ -3,6 +3,9 @@ import { Head, router } from '@inertiajs/vue3';
 import { onMounted, ref } from 'vue';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatYenCurrency } from '@/utils/money';
+import { loadStripeJsReusingScript } from '@/composables/stripeJs';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -12,8 +15,6 @@ interface ConfirmProps {
 }
 
 const props = defineProps<ConfirmProps>();
-
-const STRIPE_JS = 'https://js.stripe.com/v3';
 
 type PaymentIntentStatus =
     | 'succeeded'
@@ -37,35 +38,6 @@ const stripeWindow = window as unknown as { Stripe?: (key: string) => StripeInst
 const phase = ref<'authenticating' | 'syncing' | 'error'>('authenticating');
 const message = ref<string>(MESSAGES.membership.threeDsInProgress);
 
-function yen(value: number): string {
-    return new Intl.NumberFormat('ja-JP', {
-        style: 'currency',
-        currency: 'JPY',
-        maximumFractionDigits: 0,
-    }).format(value);
-}
-
-const loadStripeJs = (): Promise<void> =>
-    new Promise((resolve, reject) => {
-        if (stripeWindow.Stripe) {
-            resolve();
-
-            return;
-        }
-        const existing = document.querySelector<HTMLScriptElement>(`script[src="${STRIPE_JS}"]`);
-        if (existing) {
-            existing.addEventListener('load', () => resolve(), { once: true });
-            existing.addEventListener('error', () => reject(new Error('stripe-js')), { once: true });
-
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = STRIPE_JS;
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('stripe-js'));
-        document.head.appendChild(script);
-    });
-
 function goToSync(): void {
     phase.value = 'syncing';
     message.value = MESSAGES.membership.confirmingPayment;
@@ -80,12 +52,12 @@ function fail(text: string): void {
 
 onMounted(async () => {
     try {
-        await loadStripeJs();
+        await loadStripeJsReusingScript();
         const stripe = stripeWindow.Stripe
             ? stripeWindow.Stripe(props.stripe.publishable_key)
             : null;
         if (!stripe || !props.stripe.client_secret) {
-            fail('お支払い画面を読み込めませんでした。時間をおいて再度お試しください。');
+            fail(MESSAGES.customerUi.membershipConfirm.loadFailed);
 
             return;
         }
@@ -110,20 +82,20 @@ onMounted(async () => {
         }
 
         // requires_payment_method / requires_action 未解決など
-        fail('お支払いを完了できませんでした。お支払い方法をご確認のうえ、もう一度お試しください。');
+        fail(MESSAGES.customerUi.membershipConfirm.notCompleted);
     } catch {
-        fail('お支払い画面でエラーが発生しました。時間をおいて再度お試しください。');
+        fail(MESSAGES.customerUi.membershipConfirm.unexpectedError);
     }
 });
 </script>
 
 <template>
-    <Head title="お支払いの確認" />
+    <Head :title="MESSAGES.customerUi.membershipConfirm.title" />
 
     <header class="ark-page-header mb-6">
-        <h1 class="text-h5 text-sm-h4">お支払いの確認</h1>
+        <h1 class="text-h5 text-sm-h4">{{ MESSAGES.customerUi.membershipConfirm.title }}</h1>
         <p class="text-body-2 text-medium-emphasis mt-1 mb-0">
-            {{ props.plan.name }}（{{ yen(props.plan.price) }} / 月）のお申し込み
+            {{ fillMessage(MESSAGES.customerUi.membershipConfirm.subtitle, { name: props.plan.name, price: formatYenCurrency(props.plan.price) }) }}
         </p>
     </header>
 
@@ -133,7 +105,7 @@ onMounted(async () => {
                 <div class="payment-status-card__indicator mb-5" aria-hidden="true">
                     <v-progress-circular indeterminate color="primary" :size="44" :width="3" />
                 </div>
-                <div class="text-overline text-primary mb-2">本人認証中</div>
+                <div class="text-overline text-primary mb-2">{{ MESSAGES.customerUi.membershipConfirm.authenticating }}</div>
                 <p class="text-body-1 font-weight-medium mb-0">{{ message }}</p>
                 <p class="text-caption text-medium-emphasis mt-3 mb-0">
                     {{ MESSAGES.membership.waitOnThisScreen }}
@@ -145,7 +117,7 @@ onMounted(async () => {
                 </div>
                 <p class="text-body-1 font-weight-medium mb-5">{{ message }}</p>
                 <v-btn color="primary" variant="flat" size="large" @click="router.visit('/mypage/membership')">
-                    会員ページへ戻る
+                    {{ MESSAGES.customerUi.membershipConfirm.backToMembership }}
                 </v-btn>
             </template>
         </v-card-text>

@@ -149,17 +149,14 @@ final class BookingWindow
             $minutes = $this->minLeadMinutes();
 
             return $minutes >= 60 && $minutes % 60 === 0
-                ? sprintf('予約は%d時間前までにお願いします。', intdiv($minutes, 60))
-                : sprintf('予約は%d分前までにお願いします。', $minutes);
+                ? __('messages.reservation.lead_hours', ['hours' => intdiv($minutes, 60)])
+                : __('messages.reservation.lead_minutes', ['minutes' => $minutes]);
         }
 
         $last = $this->lastBookableDate($now);
 
         if ($last !== null && $startsAt->startOfDay()->greaterThan($last)) {
-            return sprintf(
-                '現在ご予約いただけるのは %s までです。',
-                $last->format('n月j日'),
-            );
+            return __('messages.reservation.horizon_end', ['date' => $last->format(__('messages.reservation.short_date_format'))]);
         }
 
         return null;

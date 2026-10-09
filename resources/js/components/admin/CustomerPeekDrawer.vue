@@ -3,6 +3,7 @@ import { router } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
 import { statusColor } from '@/design/tokens';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 interface RecentReservation {
     id: number;
@@ -51,8 +52,8 @@ let requestedId: number | null = null;
 
 // 性別は「男 / 女」のみ。未登録・その他は表示しない（推測しない）。
 const genderLabel = (value: string | null): string | null => {
-    if (value === 'male') return '男';
-    if (value === 'female') return '女';
+    if (value === 'male') return MESSAGES.boardUi.customerPeekDrawer.maleShort;
+    if (value === 'female') return MESSAGES.boardUi.customerPeekDrawer.femaleShort;
 
     return null;
 };
@@ -149,12 +150,12 @@ function openReservation(id: number): void {
     >
         <div class="peek">
             <div class="peek__bar">
-                <span class="text-subtitle-2 font-weight-bold">顧客カード</span>
+                <span class="text-subtitle-2 font-weight-bold">{{ MESSAGES.boardUi.customerPeekDrawer.title }}</span>
                 <v-btn
                     icon="mdi-close"
                     variant="text"
                     size="small"
-                    aria-label="閉じる"
+                    :aria-label="MESSAGES.boardUi.customerPeekDrawer.close"
                     @click="close"
                 />
             </div>
@@ -173,7 +174,7 @@ function openReservation(id: number): void {
                     class="mt-3"
                     @click="load(customerId)"
                 >
-                    再読み込み
+                    {{ MESSAGES.boardUi.customerPeekDrawer.reload }}
                 </v-btn>
             </div>
 
@@ -210,15 +211,15 @@ function openReservation(id: number): void {
                 <div class="peek__stats">
                     <div class="peek__stat">
                         <span class="peek__stat-value">{{ summary.overview.reservation_totals.total }}</span>
-                        <span class="peek__stat-label">来店・予約</span>
+                        <span class="peek__stat-label">{{ MESSAGES.boardUi.customerPeekDrawer.visitsAndReservations }}</span>
                     </div>
                     <div class="peek__stat">
                         <span class="peek__stat-value">{{ summary.overview.reservation_totals.upcoming }}</span>
-                        <span class="peek__stat-label">今後の予約</span>
+                        <span class="peek__stat-label">{{ MESSAGES.boardUi.customerPeekDrawer.upcoming }}</span>
                     </div>
                     <div class="peek__stat">
                         <span class="peek__stat-value">{{ summary.overview.tickets.total_available }}</span>
-                        <span class="peek__stat-label">回数券残</span>
+                        <span class="peek__stat-label">{{ MESSAGES.boardUi.customerPeekDrawer.ticketBalance }}</span>
                     </div>
                 </div>
 
@@ -228,7 +229,7 @@ function openReservation(id: number): void {
                 </div>
 
                 <div class="peek__section">
-                    <span class="peek__section-title">直近の予約</span>
+                    <span class="peek__section-title">{{ MESSAGES.boardUi.customerPeekDrawer.recentReservations }}</span>
                     <p
                         v-if="summary.overview.recent_reservations.length === 0"
                         class="text-body-2 text-medium-emphasis"
@@ -245,12 +246,12 @@ function openReservation(id: number): void {
                     >
                         <span class="peek__row-main">
                             <span class="peek__row-when">
-                                <span v-if="isToday(reservation.starts_at)" class="peek__today">本日</span>
+                                <span v-if="isToday(reservation.starts_at)" class="peek__today">{{ MESSAGES.boardUi.customerPeekDrawer.today }}</span>
                                 {{ formatWhen(reservation.starts_at) }}
                             </span>
                             <span class="peek__row-service">{{ reservation.service_name }}</span>
                             <span v-if="reservation.staff_name" class="peek__row-staff">
-                                担当: {{ reservation.staff_name }}
+                                {{ fillMessage(MESSAGES.boardUi.customerPeekDrawer.staff, { name: reservation.staff_name ?? '' }) }}
                             </span>
                         </span>
                         <v-chip :color="statusColor(reservation.status)" size="x-small" variant="tonal">
@@ -267,7 +268,7 @@ function openReservation(id: number): void {
                         prepend-icon="mdi-account-details-outline"
                         @click="openCustomer"
                     >
-                        顧客ページを開く
+                        {{ MESSAGES.boardUi.customerPeekDrawer.openCustomer }}
                     </v-btn>
                 </div>
             </template>

@@ -41,39 +41,39 @@ final class RolePermissionController extends Controller
 
     /** 画面上でチェックボックスとして出す権限とラベル（責務ごとにグループ化）。 */
     private const PERMISSION_GROUPS = [
-        '店舗運営' => [
-            'staff.manage' => 'スタッフ管理',
-            'services.manage' => 'メニュー管理',
-            'booths.manage' => 'ブース管理',
-            'shifts.manage' => '勤務枠管理',
+        'messages.roles.group_store_operations' => [
+            'staff.manage' => 'messages.roles.permission_staff_manage',
+            'services.manage' => 'messages.roles.permission_services_manage',
+            'booths.manage' => 'messages.roles.permission_booths_manage',
+            'shifts.manage' => 'messages.roles.permission_shifts_manage',
         ],
-        '顧客' => [
-            'customers.view' => '顧客閲覧',
-            'customers.manage' => '顧客編集',
+        'messages.roles.group_customers' => [
+            'customers.view' => 'messages.roles.permission_customers_view',
+            'customers.manage' => 'messages.roles.permission_customers_manage',
         ],
-        '予約・決済' => [
-            'reservations.view' => '予約閲覧',
-            'reservations.manage' => '予約管理',
-            'refund.execute' => '返金実行',
+        'messages.roles.group_reservations_payments' => [
+            'reservations.view' => 'messages.roles.permission_reservations_view',
+            'reservations.manage' => 'messages.roles.permission_reservations_manage',
+            'refund.execute' => 'messages.roles.permission_refund_execute',
         ],
-        '回数券・月額プラン' => [
-            'ticket.grant' => '回数券付与',
-            'ticket_products.manage' => '回数券商品管理',
-            'ticket_policy.manage' => '回数券運用設定',
-            'membership.manage' => '月額プラン管理',
+        'messages.roles.group_tickets_memberships' => [
+            'ticket.grant' => 'messages.roles.permission_ticket_grant',
+            'ticket_products.manage' => 'messages.roles.permission_ticket_products_manage',
+            'ticket_policy.manage' => 'messages.roles.permission_ticket_policy_manage',
+            'membership.manage' => 'messages.roles.permission_membership_manage',
         ],
-        'レポート' => [
-            'reports.view' => 'レポート閲覧',
-            'sales.view' => '売上閲覧',
-            'reports.export' => 'Excel出力',
-            'reports.manage' => '日報編集',
-            'reports.reconcile' => '帳票照合',
-            'historical_data.import' => '過去データ取込',
+        'messages.roles.group_reports' => [
+            'reports.view' => 'messages.roles.permission_reports_view',
+            'sales.view' => 'messages.roles.permission_sales_view',
+            'reports.export' => 'messages.roles.permission_reports_export',
+            'reports.manage' => 'messages.roles.permission_reports_manage',
+            'reports.reconcile' => 'messages.roles.permission_reports_reconcile',
+            'historical_data.import' => 'messages.roles.permission_historical_data_import',
         ],
-        '連携・システム' => [
-            'integrations.view' => '外部連携閲覧',
-            'failed_jobs.view' => '失敗ジョブ閲覧',
-            'audit_logs.view' => '監査ログ閲覧',
+        'messages.roles.group_integrations_system' => [
+            'integrations.view' => 'messages.roles.permission_integrations_view',
+            'failed_jobs.view' => 'messages.roles.permission_failed_jobs_view',
+            'audit_logs.view' => 'messages.roles.permission_audit_logs_view',
         ],
     ];
 
@@ -88,11 +88,11 @@ final class RolePermissionController extends Controller
         return Inertia::render('Admin/Settings/Roles', [
             'groups' => collect(self::PERMISSION_GROUPS)
                 ->map(fn (array $permissions, string $label): array => [
-                    'label' => $label,
+                    'label' => __($label),
                     'permissions' => collect($permissions)
                         ->map(fn (string $label, string $name): array => [
                             'name' => $name,
-                            'label' => $label,
+                            'label' => __($label),
                         ])
                         ->values()
                         ->all(),

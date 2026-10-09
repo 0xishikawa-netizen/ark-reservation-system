@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { toIsoDate } from '@/utils/dateFormat';
 
 type DayStatus = 'open' | 'some' | 'full';
 
@@ -25,15 +27,14 @@ const emit = defineEmits<{
     'month-change': [value: string];
 }>();
 
-const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'] as const;
+const WEEKDAYS = MESSAGES.customerUi.calendar.weekdays;
 
-const toIso = (date: Date): string => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-
-    return `${y}-${m}-${d}`;
-};
+/** 1週間の日数。 */
+const DAYS_PER_WEEK = 7;
+/** 月表示のグリッドに並べる日数（6週分）。 */
+const GRID_DAYS = DAYS_PER_WEEK * 6;
+/** グリッドの最大行数（最終行が翌月だけなら削る）。 */
+const MAX_WEEK_ROWS = 6;
 
 const parseIso = (value: string): Date | null => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -47,7 +48,7 @@ const parseIso = (value: string): Date | null => {
 };
 
 const today = new Date();
-const todayIso = toIso(today);
+const todayIso = toIsoDate(today);
 
 const viewDate = ref<Date>(
     (() => {
@@ -68,8 +69,8 @@ watch(
     },
 );
 
-const headYear = computed(() => `${viewDate.value.getFullYear()}年`);
-const headMonth = computed(() => `${viewDate.value.getMonth() + 1}月`);
+const headYear = computed(() => fillMessage(MESSAGES.customerUi.calendar.year, { year: String(viewDate.value.getFullYear()) }));
+const headMonth = computed(() => fillMessage(MESSAGES.customerUi.calendar.month, { month: String(viewDate.value.getMonth() + 1) }));
 
 interface DayCell {
     iso: string;
@@ -107,9 +108,9 @@ const statusSymbol = (status: DayStatus | null): string => {
 };
 
 const statusLabel = (status: DayStatus | null): string => {
-    if (status === 'open') return '空きあり';
-    if (status === 'some') return '残りわずか';
-    if (status === 'full') return '空きなし';
+    if (status === 'open') return MESSAGES.customerUi.calendar.statusOpen;
+    if (status === 'some') return MESSAGES.customerUi.calendar.statusSome;
+    if (status === 'full') return MESSAGES.customerUi.calendar.statusFull;
     return '';
 };
 
@@ -121,13 +122,13 @@ const weeks = computed<DayCell[][]>(() => {
 
     const cells: DayCell[] = [];
 
-    for (let i = 0; i < 42; i += 1) {
+    for (let i = 0; i < GRID_DAYS; i += 1) {
         const date = new Date(
             gridStart.getFullYear(),
             gridStart.getMonth(),
             gridStart.getDate() + i,
         );
-        const iso = toIso(date);
+        const iso = toIsoDate(date);
 
         const inMonth = date.getMonth() === month;
         const status = props.dayStatuses[iso] ?? null;
@@ -146,11 +147,11 @@ const weeks = computed<DayCell[][]>(() => {
 
     const rows: DayCell[][] = [];
 
-    for (let i = 0; i < cells.length; i += 7) {
-        rows.push(cells.slice(i, i + 7));
+    for (let i = 0; i < cells.length; i += DAYS_PER_WEEK) {
+        rows.push(cells.slice(i, i + DAYS_PER_WEEK));
     }
 
-    if (rows.length === 6 && rows[5].every((cell) => !cell.inMonth)) {
+    if (rows.length === MAX_WEEK_ROWS && rows[MAX_WEEK_ROWS - 1].every((cell) => !cell.inMonth)) {
         rows.pop();
     }
 
@@ -163,7 +164,7 @@ const shiftMonth = (delta: number): void => {
         viewDate.value.getMonth() + delta,
         1,
     );
-    emit('month-change', toIso(viewDate.value).slice(0, 7));
+    emit('month-change', toIsoDate(viewDate.value).slice(0, 7));
 };
 
 const goToday = (): void => {
@@ -175,7 +176,7 @@ const goToday = (): void => {
     }
 };
 
-onMounted(() => emit('month-change', toIso(viewDate.value).slice(0, 7)));
+onMounted(() => emit('month-change', toIsoDate(viewDate.value).slice(0, 7)));
 
 const select = (cell: DayCell): void => {
     if (!cell.disabled) {
@@ -185,17 +186,17 @@ const select = (cell: DayCell): void => {
 </script>
 
 <template>
-    <div class="ark-cal" role="group" aria-label="日付を選択">
+    <div class="ark-cal" role="group" :aria-label="MESSAGES.customerUi.calendar.selectDate">
         <header class="ark-cal__head">
             <div class="ark-cal__headline">
                 <span class="ark-cal__year">{{ headYear }}</span>
                 <span class="ark-cal__month">{{ headMonth }}</span>
             </div>
             <div class="ark-cal__nav">
-                <button type="button" aria-label="前の月" @click="shiftMonth(-1)">
+                <button type="button" :aria-label="MESSAGES.customerUi.calendar.previousMonth" @click="shiftMonth(-1)">
                     <v-icon icon="mdi-chevron-left" size="20" />
                 </button>
-                <button type="button" aria-label="次の月" @click="shiftMonth(1)">
+                <button type="button" :aria-label="MESSAGES.customerUi.calendar.nextMonth" @click="shiftMonth(1)">
                     <v-icon icon="mdi-chevron-right" size="20" />
                 </button>
             </div>
@@ -244,7 +245,7 @@ const select = (cell: DayCell): void => {
         </div>
 
         <footer class="ark-cal__foot">
-            <span v-if="loading" class="ark-cal__loading">空き状況を確認中…</span>
+            <span v-if="loading" class="ark-cal__loading">{{ MESSAGES.customerUi.calendar.loadingAvailability }}</span>
             <button type="button" class="ark-cal__today" @click="goToday">
                 {{ MESSAGES.calendar.today }}
             </button>

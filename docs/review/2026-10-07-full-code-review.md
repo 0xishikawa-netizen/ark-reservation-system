@@ -157,7 +157,7 @@
 | L-1 | **Fixed** | 顧客コンテキストの推定は `admin.access` を持たない操作者に限定 |
 | L-2 | **Fixed** | 延長で追加するメニューが無効なら拒否 |
 | L-3 | **Deferred** | 来店完了・無断キャンセルの外部連携 Outbox 記録は、外部予約サービスの実 API 仕様が未確定のため見送り（連携は既定で無効） |
-| L-4 | **Deferred**（一部 Fixed） | 既存の直書き文言の全面移行は無関係な大量変更になるため見送り。今回新規・変更した文言（予約台帳の日次集計、バックアップ、会計取消、無断キャンセル）は `messages.php` / `messages.ts` に置いた |
+| L-4 | **Fixed**（Task 11-34、2026-10-09） | 画面（約 180 ファイル）とサーバー（約 60 ファイル）の利用者向け直書き文言を `constants/messages*`・`lang/ja/messages.php` へ移した（表示文字列は不変を照合スクリプトで確認）。対象外：Excel 原本のセル・見出し、旧帳票の照合キー、監査ログ・コマンド出力、開発者向け例外、区切り記号 |
 | L-5 | **Fixed** | `Schedule/Index.vue` の `any` を型の絞り込みヘルパーに置換（ビルド型エラー 0） |
 | L-6 | **Deferred** | 巨大ファイルの分割は動作変更のリスクに見合わないため見送り |
 | L-7 | **Fixed**（一部 Accepted） | 日次集計の戻り値を配列 shape で型付けし、分析分類名は必要な時だけ取得。`online`（`source ≠ ADMIN`）は新着予約通知と同じ既存定義なので維持 |
@@ -175,3 +175,12 @@
 | バックアップ保存先 `storage/backups/` が Git 管理対象になり、個人情報を含むダンプをコミットし得た | `.gitignore` に追記 |
 | `league/commonmark` 2.10.1 の既知脆弱性 2 件（既存依存。アプリでは未使用） | 2.10.3 へパッチ更新（`composer audit` 0 件） |
 | `OPERATIONS.md` に実在しないコマンドが多数 | 実在コマンドへ置換 |
+
+### Task 11-34（2026-10-09）で追加で直したもの
+
+| 内容 | 対応 |
+|---|---|
+| 文言の差し込みに `String.replace('{x}', 値)` を使っており、値に `$&`・`$1` などが含まれると表示が崩れる（顧客名・メニュー名など） | 共通関数 `fillMessage()`（置換関数を使う）へ 218 か所を置換・単体テスト |
+| ブース・メニュー・回数券商品・月額プランの一覧の有効/無効スイッチに M-6 と同じ二重送信の余地 | 共通の `useMasterActiveToggle`（目標値送信・送信中 disabled）に統一（商品一覧も同じ実装へ） |
+| 重複実装：予約 FormRequest 5 本の入力検証、コントローラーのログイン利用者取得 5 本、予約・予定ブロックのリソースロック 2 本、画面の日時・金額・符号・Stripe.js 読込・帳票の月切替など | `ValidatesReservationInput` / `ResolvesAuthenticatedUser` / `ResourceLock`、`utils/dateFormat.ts`・`money.ts`・`numberFormat.ts`、`composables/stripeJs.ts`・`masterActive.ts`・`reportNavigation.ts` へ集約。出力が違うものは名前付き書式として残し、表示は変えていない |
+| 共通化しなかったもの | 出力や不正値時の挙動が画面ごとに違う `genderLabel`・一部の `fmtDay`・`applyFilters`・帳票の金額表示（`Math.round`） |

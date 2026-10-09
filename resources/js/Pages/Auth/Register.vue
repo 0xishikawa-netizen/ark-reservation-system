@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
+import { MESSAGES } from '@/constants/messages';
 
 const form = useForm({
     name: '',
@@ -18,25 +19,25 @@ const submit = (): void => {
 </script>
 
 <template>
-    <AuthCard title="新規登録" subtitle="ARK の予約・回数券・会員をご利用いただけます。">
+    <AuthCard :title="MESSAGES.customerUi.auth.register.title" :subtitle="MESSAGES.customerUi.auth.register.subtitle">
         <v-form @submit.prevent="submit">
             <v-text-field class="ark-field-name"
                 v-model="form.name"
-                label="お名前"
+                :label="MESSAGES.customerUi.auth.register.name"
                 autocomplete="name"
                 :error-messages="form.errors.name"
                 required
             />
             <v-text-field class="ark-field-name"
                 v-model="form.kana"
-                label="フリガナ"
+                :label="MESSAGES.customerUi.auth.register.kana"
                 autocomplete="off"
                 :error-messages="form.errors.kana"
                 required
             />
             <v-text-field
                 v-model="form.email"
-                label="メールアドレス"
+                :label="MESSAGES.customerUi.auth.email"
                 type="email"
                 autocomplete="email"
                 :error-messages="form.errors.email"
@@ -44,7 +45,7 @@ const submit = (): void => {
             />
             <v-text-field
                 v-model="form.password"
-                label="パスワード"
+                :label="MESSAGES.customerUi.auth.password"
                 type="password"
                 autocomplete="new-password"
                 :error-messages="form.errors.password"
@@ -52,7 +53,7 @@ const submit = (): void => {
             />
             <v-text-field
                 v-model="form.password_confirmation"
-                label="パスワード（確認）"
+                :label="MESSAGES.customerUi.auth.passwordConfirmation"
                 type="password"
                 autocomplete="new-password"
                 required
@@ -65,12 +66,12 @@ const submit = (): void => {
                 block
                 :loading="form.processing"
             >
-                登録する
+                {{ MESSAGES.customerUi.auth.register.submit }}
             </v-btn>
         </v-form>
 
-        <div class="ark-auth-divider my-5" role="separator" aria-label="または">
-            <span>または</span>
+        <div class="ark-auth-divider my-5" role="separator" :aria-label="MESSAGES.customerUi.auth.or">
+            <span>{{ MESSAGES.customerUi.auth.or }}</span>
         </div>
 
         <v-btn href="/auth/google/redirect" variant="outlined" size="large" block class="ark-google-btn">
@@ -82,12 +83,12 @@ const submit = (): void => {
                     <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
                 </svg>
             </span>
-            Google で登録
+            {{ MESSAGES.customerUi.auth.register.google }}
         </v-btn>
 
         <template #footer>
-            <span class="text-body-2 text-medium-emphasis">すでにアカウントをお持ちの方は</span>
-            <a href="/login" class="text-body-2 font-weight-medium ml-1">ログイン</a>
+            <span class="text-body-2 text-medium-emphasis">{{ MESSAGES.customerUi.auth.register.hasAccount }}</span>
+            <a href="/login" class="text-body-2 font-weight-medium ml-1">{{ MESSAGES.customerUi.auth.login.title }}</a>
         </template>
     </AuthCard>
 </template>

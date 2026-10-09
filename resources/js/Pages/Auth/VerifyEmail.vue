@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineProps<{
     status?: string | null;
@@ -20,8 +21,8 @@ const logout = (): void => {
 
 <template>
     <AuthCard
-        title="メールアドレスの確認"
-        subtitle="ご登録のメールアドレスへ確認リンクを送信しました。リンクを開いて登録を完了してください。"
+        :title="MESSAGES.customerUi.auth.verifyEmail.title"
+        :subtitle="MESSAGES.customerUi.auth.verifyEmail.subtitle"
     >
         <v-alert v-if="status" type="success" variant="tonal" density="comfortable" class="mb-4">
             {{ status }}
@@ -34,12 +35,12 @@ const logout = (): void => {
             :loading="resendForm.processing"
             @click="resend"
         >
-            確認メールを再送信
+            {{ MESSAGES.customerUi.auth.verifyEmail.resend }}
         </v-btn>
 
         <template #footer>
             <v-btn variant="text" size="small" :loading="logoutForm.processing" @click="logout">
-                ログアウト
+                {{ MESSAGES.customerUi.auth.verifyEmail.logout }}
             </v-btn>
         </template>
     </AuthCard>

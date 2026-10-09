@@ -35,11 +35,11 @@ final class StaffSalesService
     public function forMonth(int $year, int $month, SalesBasis|string $basis = SalesBasis::PaymentDate): array
     {
         if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12) {
-            throw new InvalidArgumentException('年月の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.year_month_invalid'));
         }
         $salesBasis = $basis instanceof SalesBasis ? $basis : SalesBasis::tryFrom($basis);
         if ($salesBasis === null) {
-            throw new InvalidArgumentException('売上基準の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.revenue_basis_invalid'));
         }
         $start = CarbonImmutable::create($year, $month, 1, 0, 0, 0, $this->businessTime->timezone());
         $end = $start->addMonth();

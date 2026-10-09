@@ -41,11 +41,11 @@ final class CourseSalesService
     public function forMonth(int $year, int $month, SalesBasis|string $basis = SalesBasis::PaymentDate): array
     {
         if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12) {
-            throw new InvalidArgumentException('年月の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.year_month_invalid'));
         }
         $salesBasis = $basis instanceof SalesBasis ? $basis : SalesBasis::tryFrom($basis);
         if ($salesBasis === null) {
-            throw new InvalidArgumentException('売上基準の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.revenue_basis_invalid'));
         }
         $start = CarbonImmutable::create($year, $month, 1, 0, 0, 0, $this->time->timezone());
         $end = $start->addMonth();
@@ -147,11 +147,11 @@ final class CourseSalesService
     public function setTarget(string $month, string $type, int $courseId, ?int $amount, ?int $count, ?Authenticatable $actor): void
     {
         if (! in_array($type, CourseSalesTarget::TYPES, true)) {
-            throw new InvalidArgumentException('コース種別が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.course_type_invalid'));
         }
         $monthStart = CarbonImmutable::createFromFormat('!Y-m', $month, $this->time->timezone());
         if ($monthStart === false || $monthStart->format('Y-m') !== $month) {
-            throw new InvalidArgumentException('対象月が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting.invalid_month'));
         }
         DB::transaction(function () use ($monthStart, $type, $courseId, $amount, $count, $actor): void {
             $key = ['target_month' => $monthStart->toDateString(), 'course_type' => $type, 'course_id' => $courseId];

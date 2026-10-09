@@ -26,7 +26,7 @@ final class UpdateCustomerKarteRequest extends FormRequest
             'visit_purpose_note' => ['nullable', 'string', 'max:255'],
             'referrer_customer_id' => ['nullable', 'integer', 'exists:customers,user_id'],
             'referrer_name' => ['nullable', 'string', 'max:100'],
-            'prefecture' => ['nullable', 'string', Rule::in(Prefectures::ALL)],
+            'prefecture' => ['nullable', 'string', Rule::in(Prefectures::all())],
             // 分析用は市区町村まで。番地・建物名は入力させない（数字で始まる番地らしい値を拒否）。
             'city' => ['nullable', 'string', 'max:50', 'not_regex:/[0-9０-９]/u'],
         ];

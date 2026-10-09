@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { EmptyState, PageHeader, SectionCard, MasterDeleteButton, TrashedMasterList } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { formatYenCurrency } from '@/utils/money';
+import { useMasterActiveToggle } from '@/composables/masterActive';
 
 defineOptions({ layout: AdminLayout });
 
@@ -18,72 +22,62 @@ interface TicketProductListItem {
 defineProps<{ trashed?: Array<{ id: number; name: string; deleted_at: string | null }>; ticketProducts: TicketProductListItem[] }>();
 
 const headers = [
-    { title: '商品名', key: 'name' },
-    { title: '回数', key: 'total_count' },
-    { title: '価格', key: 'price' },
-    { title: '有効期間', key: 'validity_days' },
-    { title: '表示順', key: 'sort_order' },
-    { title: '有効', key: 'is_active', sortable: false },
+    { title: MESSAGES.mastersUi.ticketProducts.productName, key: 'name' },
+    { title: MESSAGES.mastersUi.ticketProducts.count, key: 'total_count' },
+    { title: MESSAGES.mastersUi.ticketProducts.price, key: 'price' },
+    { title: MESSAGES.mastersUi.ticketProducts.validity, key: 'validity_days' },
+    { title: MESSAGES.mastersUi.ticketProducts.sortOrder, key: 'sort_order' },
+    { title: MESSAGES.mastersUi.ticketProducts.active, key: 'is_active', sortable: false },
     { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
-const toggleActive = (product: TicketProductListItem): void => {
-    router.patch(
-        `/admin/ticket-products/${product.id}/active`,
-        { active: !product.is_active },
-        { preserveScroll: true },
-    );
-};
+// 有効/無効の切替（送信中は同じ行を押せない。M-6）
+const { isPending: isActivePending, toggle: toggleActive } = useMasterActiveToggle('/admin/ticket-products');
 
-const formatPrice = (price: number): string =>
-    new Intl.NumberFormat('ja-JP', {
-        style: 'currency',
-        currency: 'JPY',
-        maximumFractionDigits: 0,
-    }).format(price);
 </script>
 
 <template>
-    <Head title="回数券商品" />
+    <Head :title="MESSAGES.mastersUi.ticketProducts.title" />
 
-    <PageHeader title="回数券商品" subtitle="販売する回数券の内容と公開状態を管理します。">
+    <PageHeader :title="MESSAGES.mastersUi.ticketProducts.title" :subtitle="MESSAGES.mastersUi.ticketProducts.subtitle">
         <template #actions>
             <v-btn color="primary" href="/admin/ticket-products/create">
-                回数券商品を追加
+                {{ MESSAGES.mastersUi.ticketProducts.add }}
             </v-btn>
         </template>
     </PageHeader>
 
-    <SectionCard title="回数券商品一覧" class="ark-table-section">
+    <SectionCard :title="MESSAGES.mastersUi.ticketProducts.list" class="ark-table-section">
         <v-data-table
             :headers="headers"
             :items="ticketProducts"
             item-value="id"
-            no-data-text="回数券商品はありません。"
+            :no-data-text="MESSAGES.mastersUi.ticketProducts.noData"
         >
             <template #no-data>
                 <EmptyState
                     icon="mdi-ticket-outline"
-                    title="回数券商品はありません"
-                    description="回数券商品を追加すると、こちらで価格や有効期間を管理できます。"
+                    :title="MESSAGES.mastersUi.ticketProducts.emptyTitle"
+                    :description="MESSAGES.mastersUi.ticketProducts.emptyDescription"
                 />
             </template>
             <template #item.total_count="{ item }">
-                {{ item.total_count }}回
+                {{ fillMessage(MESSAGES.mastersUi.ticketProducts.countValue, { count: String(item.total_count) }) }}
             </template>
             <template #item.price="{ item }">
-                {{ formatPrice(item.price) }}
+                {{ formatYenCurrency(item.price) }}
             </template>
             <template #item.validity_days="{ item }">
-                {{ item.validity_days }}日
+                {{ fillMessage(MESSAGES.mastersUi.ticketProducts.daysValue, { days: String(item.validity_days) }) }}
             </template>
             <template #item.is_active="{ item }">
                 <v-switch
                     :model-value="item.is_active"
                     color="primary"
                     hide-details
-                    :aria-label="`${item.name}の有効状態`"
-                    @click.stop="toggleActive(item)"
+                    :aria-label="fillMessage(MESSAGES.mastersUi.ticketProducts.activeState, { name: item.name })"
+                    :disabled="isActivePending(item.id)"
+                    @update:model-value="toggleActive(item, $event)"
                 />
             </template>
             <template #item.actions="{ item }">
@@ -94,13 +88,13 @@ const formatPrice = (price: number): string =>
                     prepend-icon="mdi-pencil-outline"
                     :href="`/admin/ticket-products/${item.id}/edit`"
                 >
-                    編集
+                    {{ MESSAGES.mastersUi.ticketProducts.edit }}
                 </v-btn>
-                <MasterDeleteButton type="ticket-products" :id="item.id" :name="item.name" label="回数券" />
+                <MasterDeleteButton type="ticket-products" :id="item.id" :name="item.name" :label="MESSAGES.mastersUi.ticketProducts.masterLabel" />
             </template>
         </v-data-table>
     </SectionCard>
-    <TrashedMasterList type="ticket-products" label="回数券" :items="trashed ?? []" />
+    <TrashedMasterList type="ticket-products" :label="MESSAGES.mastersUi.ticketProducts.masterLabel" :items="trashed ?? []" />
 </template>
 
 <style scoped>

@@ -290,7 +290,7 @@ final class ReservationCheckoutSaga
             $locked->forceFill([
                 'needs_attention' => true,
                 'failure_code' => 'captured_after_expiry',
-                'failure_message' => '期限切れ処理時に capture 済みでした。返金要否の判断が必要です。',
+                'failure_message' => __('messages.payment.expired_after_capture_needs_attention'),
             ])->save();
         });
 

@@ -5,8 +5,15 @@ import { MonthField, PageHeader, SectionCard } from '@/components/ark';
 import { MonthlyReportTabs, ReportFilterBar, ReportFilterField } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { changeAndReload } from '@/composables/reportNavigation';
 
 defineOptions({ layout: AdminLayout });
+
+/** 営業の様子・振り返りの最大文字数（サーバーの入力チェックと合わせる） */
+const NOTE_MAX_LENGTH = 10000;
+/** 入力欄の表示行数 */
+const NOTE_ROWS = 4;
 
 interface DayNote {
     business_date: string;
@@ -18,6 +25,7 @@ interface DayNote {
 
 const props = defineProps<{ month: string; days: DayNote[]; editable: boolean; indexEndpoint: string }>();
 const labels = MESSAGES.reporting;
+const M = MESSAGES.reportsUi.dailyNotes;
 const month = ref(props.month);
 const drafts = ref<DayNote[]>(props.days.map((day) => ({ ...day })));
 const originals = ref<Record<string, { business_condition: string; reflection: string }>>(
@@ -36,9 +44,7 @@ const isDirty = (day: DayNote): boolean => {
 };
 
 function changeMonth(value: string): void {
-    if (value === month.value) return;
-    month.value = value;
-    router.get(props.indexEndpoint, { month: value }, { preserveState: false });
+    changeAndReload(month, value, () => router.get(props.indexEndpoint, { month: value }, { preserveState: false }));
 }
 
 function save(day: DayNote): void {
@@ -75,9 +81,9 @@ function save(day: DayNote): void {
                 <thead><tr><th>{{ labels.dailyNotesDay }}</th><th>{{ labels.dailyNotesCondition }}</th><th>{{ labels.dailyNotesReflection }}</th><th>{{ labels.dailyNotesAction }}</th></tr></thead>
                 <tbody>
                     <tr v-for="day in drafts" :key="day.business_date" :data-testid="`daily-note-${day.business_date}`">
-                        <th>{{ day.day }}日（{{ day.weekday }}）</th>
-                        <td><textarea v-model="day.business_condition" :readonly="!editable" :aria-label="`${day.day}日の${labels.dailyNotesCondition}`" rows="4" maxlength="10000" /></td>
-                        <td><textarea v-model="day.reflection" :readonly="!editable" :aria-label="`${day.day}日の${labels.dailyNotesReflection}`" rows="4" maxlength="10000" /></td>
+                        <th>{{ fillMessage(M.dayWithWeekday, { day: String(day.day), weekday: day.weekday }) }}</th>
+                        <td><textarea v-model="day.business_condition" :readonly="!editable" :aria-label="fillMessage(M.dayField, { day: String(day.day), field: labels.dailyNotesCondition })" :rows="NOTE_ROWS" :maxlength="NOTE_MAX_LENGTH" /></td>
+                        <td><textarea v-model="day.reflection" :readonly="!editable" :aria-label="fillMessage(M.dayField, { day: String(day.day), field: labels.dailyNotesReflection })" :rows="NOTE_ROWS" :maxlength="NOTE_MAX_LENGTH" /></td>
                         <td class="save-cell">
                             <v-btn
                                 v-if="editable"

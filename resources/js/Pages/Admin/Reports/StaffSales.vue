@@ -5,6 +5,7 @@ import { MonthField, PageHeader, SectionCard } from '@/components/ark';
 import { formatReportDate, MonthlyReportTabs, ReportFilterBar, ReportFilterField, ReportKpi, ReportSelect, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { changeAndReload } from '@/composables/reportNavigation';
 
 defineOptions({ layout: AdminLayout });
 
@@ -45,8 +46,8 @@ async function load(): Promise<void> {
     }
 }
 
-function changeMonth(value: string): void { if (value !== month.value) { month.value = value; void load(); } }
-function changeBasis(value: SalesBasis): void { if (value !== basis.value) { basis.value = value; void load(); } }
+function changeMonth(value: string): void { changeAndReload(month, value, load); }
+function changeBasis(value: SalesBasis): void { changeAndReload(basis, value, load); }
 </script>
 
 <template>

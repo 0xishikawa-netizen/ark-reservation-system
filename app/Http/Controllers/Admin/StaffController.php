@@ -80,9 +80,9 @@ class StaffController extends Controller
             'services' => Service::query()->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'name', 'is_active']),
             'qualifications' => Qualification::query()->orderByDesc('is_active')->orderBy('sort_order')->get(['id', 'name', 'is_active']),
             'roles' => [
-                ['title' => 'スタッフ', 'value' => 'staff'],
-                ['title' => 'マネージャー', 'value' => 'manager'],
-                ['title' => '管理者', 'value' => 'admin'],
+                ['title' => __('messages.masters.type_staff'), 'value' => 'staff'],
+                ['title' => __('messages.staff.role_manager'), 'value' => 'manager'],
+                ['title' => __('messages.staff.role_admin'), 'value' => 'admin'],
             ],
         ]);
     }

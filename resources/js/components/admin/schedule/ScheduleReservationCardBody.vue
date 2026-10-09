@@ -66,8 +66,8 @@ defineProps<{
                 :title="
                     reservation.customer_gender ===
                     'male'
-                        ? '男性'
-                        : '女性'
+                        ? MESSAGES.boardUi.reservationCard.male
+                        : MESSAGES.boardUi.reservationCard.female
                 "
                 >{{
                     genderLabel(
@@ -123,17 +123,17 @@ defineProps<{
 
     <!-- 行2：（新規のみ）新規バッジ／時刻 -->
     <span class="reservation-timeline">
-        <span v-if="reservation.is_new_customer" class="reservation-badge reservation-badge--new">新</span>
+        <span v-if="reservation.is_new_customer" class="reservation-badge reservation-badge--new">{{ MESSAGES.boardUi.reservationCard.newCustomer }}</span>
         <span class="reservation-time">{{ reservation.starts_at.slice(11, 16) }}–{{ endLabel }}</span>
     </span>
 
     <!-- 行3：指名／希望バッジ＋メニュー。メニュー名は最大2行まで折り返して、空いている下の段も使う。 -->
     <span class="reservation-service-line">
-        <span v-if="reservation.is_staff_requested" class="reservation-badge reservation-badge--nomination">指名</span>
+        <span v-if="reservation.is_staff_requested" class="reservation-badge reservation-badge--nomination">{{ MESSAGES.boardUi.reservationCard.nomination }}</span>
         <span
             v-else-if="reservation.staff_gender_preference"
             :class="`reservation-gender reservation-gender--${reservation.staff_gender_preference}`"
-        >{{ reservation.staff_gender_preference === "male" ? "男希" : "女希" }}</span>
+        >{{ reservation.staff_gender_preference === "male" ? MESSAGES.boardUi.reservationCard.malePreferenceShort : MESSAGES.boardUi.reservationCard.femalePreferenceShort }}</span>
         <span class="reservation-service reservation-service--wrap" :title="reservation.service_name">{{ reservation.service_name }}</span>
     </span>
 </template>

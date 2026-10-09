@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
+import { MESSAGES } from '@/constants/messages';
 
 const props = defineProps<{
     email: string;
@@ -20,20 +21,20 @@ const submit = (): void => {
 
 <template>
     <AuthCard
-        title="既存アカウントとの連携"
-        subtitle="この Google アカウントのメールアドレスで登録済みの ARK アカウントが見つかりました。パスワードを入力すると Google 連携が有効になります。"
+        :title="MESSAGES.customerUi.auth.linkGoogle.title"
+        :subtitle="MESSAGES.customerUi.auth.linkGoogle.subtitle"
     >
         <v-form @submit.prevent="submit">
             <v-text-field
                 :model-value="form.email"
-                label="メールアドレス"
+                :label="MESSAGES.customerUi.auth.email"
                 type="email"
                 readonly
                 :error-messages="form.errors.email"
             />
             <v-text-field
                 v-model="form.password"
-                label="ARK のパスワード"
+                :label="MESSAGES.customerUi.auth.linkGoogle.password"
                 type="password"
                 autocomplete="current-password"
                 :error-messages="form.errors.password"
@@ -48,12 +49,12 @@ const submit = (): void => {
                 block
                 :loading="form.processing"
             >
-                パスワードを確認して連携
+                {{ MESSAGES.customerUi.auth.linkGoogle.submit }}
             </v-btn>
         </v-form>
 
         <template #footer>
-            <a href="/login" class="text-body-2">パスワードでログインする</a>
+            <a href="/login" class="text-body-2">{{ MESSAGES.customerUi.auth.linkGoogle.loginWithPassword }}</a>
         </template>
     </AuthCard>
 </template>

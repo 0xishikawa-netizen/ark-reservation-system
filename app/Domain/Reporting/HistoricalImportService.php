@@ -57,7 +57,7 @@ final class HistoricalImportService
         $parsed = $this->parse($file);
         $sha = hash_file('sha256', $file->getRealPath());
         if ($sha === false) {
-            throw new RuntimeException('取込ファイルのhashを計算できません。');
+            throw new RuntimeException(__('messages.historical_import.hash_failed'));
         }
         $existing = DB::table('historical_import_batches')->where('source_sha256', $sha)->first();
         if ($existing !== null) {
@@ -68,11 +68,11 @@ final class HistoricalImportService
         $path = 'historical-imports/'.$sha.'.'.$extension;
         $stream = fopen($file->getRealPath(), 'rb');
         if ($stream === false) {
-            throw new RuntimeException('取込ファイルを読み取れません。');
+            throw new RuntimeException(__('messages.historical_import.file_unreadable'));
         }
         try {
             if (! Storage::disk('local')->put($path, $stream)) {
-                throw new RuntimeException('原本の保護コピーを保存できません。');
+                throw new RuntimeException(__('messages.historical_import.copy_failed'));
             }
         } finally {
             fclose($stream);
@@ -133,7 +133,7 @@ final class HistoricalImportService
     {
         $batch = DB::table('historical_import_batches')->find($batchId);
         if ($batch === null) {
-            throw new InvalidArgumentException('取込batchが見つかりません。');
+            throw new InvalidArgumentException(__('messages.historical_import.batch_not_found'));
         }
         $rows = DB::table('historical_import_rows')->where('batch_id', $batchId)
             ->orderBy('sheet_name')->orderBy('source_row')->get();
@@ -161,10 +161,10 @@ final class HistoricalImportService
             $row = DB::table('historical_import_rows')->where('id', $rowId)->lockForUpdate()->first();
             if ($row === null || $row->record_type !== 'customer_detail'
                 || DB::table('historical_import_batches')->where('id', $row->batch_id)->whereNotNull('invalidated_at')->exists()) {
-                throw new InvalidArgumentException('確認対象の顧客行が存在しないか無効化されています。');
+                throw new InvalidArgumentException(__('messages.historical_import.customer_row_unavailable'));
             }
             if (! Customer::query()->whereKey($customerId)->exists()) {
-                throw new InvalidArgumentException('確認先の顧客IDが存在しません。');
+                throw new InvalidArgumentException(__('messages.historical_import.customer_not_found'));
             }
             DB::table('historical_import_rows')->where('id', $rowId)->update([
                 'matched_customer_id' => $customerId, 'match_method' => 'manual_review',
@@ -183,7 +183,7 @@ final class HistoricalImportService
         DB::transaction(function () use ($batchId): void {
             $batch = DB::table('historical_import_batches')->where('id', $batchId)->lockForUpdate()->first();
             if ($batch === null || $batch->invalidated_at !== null) {
-                throw new InvalidArgumentException('取込batchが存在しないか無効化されています。');
+                throw new InvalidArgumentException(__('messages.historical_import.batch_unavailable'));
             }
             $rows = DB::table('historical_import_rows')->where('batch_id', $batchId)
                 ->where('record_type', 'historical_aggregate')->where('validation_status', 'valid')
@@ -221,7 +221,7 @@ final class HistoricalImportService
         DB::transaction(function () use ($batchId): void {
             $batch = DB::table('historical_import_batches')->where('id', $batchId)->lockForUpdate()->first();
             if ($batch === null) {
-                throw new InvalidArgumentException('取込batchが見つかりません。');
+                throw new InvalidArgumentException(__('messages.historical_import.batch_not_found'));
             }
             DB::table('historical_metric_values')->where('batch_id', $batchId)->whereNull('invalidated_at')
                 ->update(['invalidated_at' => now(), 'updated_at' => now()]);
@@ -240,7 +240,7 @@ final class HistoricalImportService
         $header = DB::table('historical_import_rows')->where('batch_id', $row->batch_id)
             ->where('sheet_name', $row->sheet_name)->where('source_row', 1)->first();
         if ($header === null) {
-            throw new RuntimeException('取込ヘッダがありません。');
+            throw new RuntimeException(__('messages.historical_import.header_missing'));
         }
         $headers = DB::table('historical_import_cells')->where('row_id', $header->id)->get()
             ->mapWithKeys(fn (object $cell): array => [$cell->cell_coordinate => $cell->value_ciphertext === null ? '' : Crypt::decryptString($cell->value_ciphertext)]);
@@ -261,7 +261,7 @@ final class HistoricalImportService
     {
         $extension = strtolower((string) $file->getClientOriginalExtension());
         if (! in_array($extension, ['csv', 'xlsx'], true) || $file->getSize() > self::MAX_BYTES) {
-            throw new InvalidArgumentException('CSV/XLSXのみ、5 MiB以下で取込できます。');
+            throw new InvalidArgumentException(__('messages.historical_import.file_type_or_size_invalid'));
         }
         $sheets = $extension === 'csv' ? $this->readCsv($file) : $this->readXlsx($file);
         $rows = [];
@@ -274,7 +274,7 @@ final class HistoricalImportService
                 $names[preg_replace('/\d+$/', '', $coordinate)] = trim($value);
             }
             if (! in_array('record_type', $names, true) || count($names) !== count(array_unique(array_filter($names)))) {
-                throw new InvalidArgumentException("{$sheetName}: record_type列がないか、ヘッダ名が重複しています。");
+                throw new InvalidArgumentException(__('messages.historical_import.record_type_or_header_invalid', ['sheet' => $sheetName]));
             }
             foreach ($sheetRows as $number => $cells) {
                 $values = [];
@@ -297,7 +297,7 @@ final class HistoricalImportService
             }
         }
         if (count($rows) <= count($sheets)) {
-            throw new InvalidArgumentException('取込対象のデータ行がありません。');
+            throw new InvalidArgumentException(__('messages.historical_import.data_rows_missing'));
         }
 
         return ['rows' => $rows, 'error_count' => $errors,
@@ -383,13 +383,13 @@ final class HistoricalImportService
     {
         $handle = fopen($file->getRealPath(), 'rb');
         if ($handle === false) {
-            throw new RuntimeException('CSVを読み取れません。');
+            throw new RuntimeException(__('messages.historical_import.csv_unreadable'));
         }
         $rows = [];
         try {
             while (($fields = fgetcsv($handle, 0, ',', '"', '')) !== false) {
                 if (count($rows) >= self::MAX_ROWS || count($fields) > self::MAX_COLUMNS) {
-                    throw new InvalidArgumentException('行数または列数が上限を超えています。');
+                    throw new InvalidArgumentException(__('messages.historical_import.dimensions_exceeded'));
                 }
                 $number = count($rows) + 1;
                 $cells = [];
@@ -411,17 +411,17 @@ final class HistoricalImportService
     {
         $zip = new ZipArchive;
         if ($zip->open($file->getRealPath()) !== true) {
-            throw new InvalidArgumentException('XLSXファイルが不正です。');
+            throw new InvalidArgumentException(__('messages.historical_import.xlsx_invalid'));
         }
         try {
             $inflated = 0;
             if ($zip->numFiles > 500) {
-                throw new InvalidArgumentException('XLSX内のファイル数が上限を超えています。');
+                throw new InvalidArgumentException(__('messages.historical_import.xlsx_file_count_exceeded'));
             }
             for ($index = 0; $index < $zip->numFiles; $index++) {
                 $inflated += (int) $zip->statIndex($index)['size'];
                 if ($inflated > 50_000_000) {
-                    throw new InvalidArgumentException('XLSX展開後の容量が上限を超えています。');
+                    throw new InvalidArgumentException(__('messages.historical_import.xlsx_expanded_size_exceeded'));
                 }
             }
         } finally {
@@ -434,7 +434,7 @@ final class HistoricalImportService
         try {
             foreach ($book->getAllSheets() as $sheet) {
                 if ($sheet->getHighestRow() > self::MAX_ROWS || Coordinate::columnIndexFromString($sheet->getHighestColumn()) > self::MAX_COLUMNS) {
-                    throw new InvalidArgumentException('行数または列数が上限を超えています。');
+                    throw new InvalidArgumentException(__('messages.historical_import.dimensions_exceeded'));
                 }
                 $rows = [];
                 foreach ($sheet->getRowIterator() as $row) {
@@ -442,7 +442,10 @@ final class HistoricalImportService
                     $cells = [];
                     foreach ($row->getCellIterator() as $cell) {
                         if ($cell->getDataType() === DataType::TYPE_FORMULA) {
-                            throw new InvalidArgumentException("{$sheet->getTitle()}!{$cell->getCoordinate()}: 数式セルは取り込めません。");
+                            throw new InvalidArgumentException(__('messages.historical_import.formula_cell_not_allowed', [
+                                'sheet' => $sheet->getTitle(),
+                                'cell' => $cell->getCoordinate(),
+                            ]));
                         }
                         $value = $cell->getValue();
                         if ($value !== null) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
+import { MESSAGES } from '@/constants/messages';
 
 const page = usePage();
 
@@ -16,12 +17,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-    { label: 'ホーム', icon: 'mdi-home', href: '/', match: '/' },
-    { label: '予約', icon: 'mdi-calendar-plus', href: '/reserve', match: '/reserve' },
-    { label: '回数券', icon: 'mdi-ticket-confirmation', href: '/mypage/tickets', match: '/mypage/tickets' },
-    { label: '会員', icon: 'mdi-card-account-details', href: '/mypage/membership', match: '/mypage/membership' },
-    { label: '支払い', icon: 'mdi-receipt-text', href: '/mypage/payments', match: '/mypage/payments' },
-    { label: 'アカウント', icon: 'mdi-account', href: '/mypage/profile', match: '/mypage/profile' },
+    { label: MESSAGES.customerUi.customerLayout.home, icon: 'mdi-home', href: '/', match: '/' },
+    { label: MESSAGES.customerUi.customerLayout.reserve, icon: 'mdi-calendar-plus', href: '/reserve', match: '/reserve' },
+    { label: MESSAGES.customerUi.customerLayout.tickets, icon: 'mdi-ticket-confirmation', href: '/mypage/tickets', match: '/mypage/tickets' },
+    { label: MESSAGES.customerUi.customerLayout.membership, icon: 'mdi-card-account-details', href: '/mypage/membership', match: '/mypage/membership' },
+    { label: MESSAGES.customerUi.customerLayout.payments, icon: 'mdi-receipt-text', href: '/mypage/payments', match: '/mypage/payments' },
+    { label: MESSAGES.customerUi.customerLayout.account, icon: 'mdi-account', href: '/mypage/profile', match: '/mypage/profile' },
 ];
 
 const currentPath = computed<string>(() => {
@@ -63,7 +64,7 @@ const go = (href: string): void => {
                     color="primary"
                     @click="logout"
                 >
-                    ログアウト
+                    {{ MESSAGES.customerUi.customerLayout.logout }}
                 </v-btn>
             </template>
         </v-app-bar>
@@ -106,7 +107,7 @@ const go = (href: string): void => {
             height="64"
             grow
             class="customer-bottom-nav"
-            aria-label="顧客メニュー"
+            :aria-label="MESSAGES.customerUi.customerLayout.menu"
         >
             <v-btn
                 v-for="(item, index) in navItems"

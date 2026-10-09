@@ -5,8 +5,15 @@ import { EmptyValue, PageHeader, SectionCard } from '@/components/ark';
 import { realEmail } from '@/utils/placeholderEmail';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateTime } from '@/utils/dateFormat';
 
 defineOptions({ layout: AdminLayout });
+
+// 顧客一覧の先頭ページ。
+const FIRST_PAGE = 1;
+// ページネーションに表示する最大ページ数。
+const PAGINATION_VISIBLE_PAGES = 7;
 
 interface CustomerListItem {
     user_id: number;
@@ -32,38 +39,33 @@ const props = defineProps<{
 }>();
 
 const headers = [
-    { title: '氏名', key: 'name' },
-    { title: 'カナ', key: 'kana' },
-    { title: 'メール', key: 'email' },
-    { title: '認証済', key: 'email_verified_at', sortable: false },
-    { title: '登録経路', key: 'created_via' },
-    { title: '登録日', key: 'created_at' },
+    { title: MESSAGES.mastersUi.customers.name, key: 'name' },
+    { title: MESSAGES.mastersUi.customers.kana, key: 'kana' },
+    { title: MESSAGES.mastersUi.customers.email, key: 'email' },
+    { title: MESSAGES.mastersUi.customers.verified, key: 'email_verified_at', sortable: false },
+    { title: MESSAGES.mastersUi.customers.source, key: 'created_via' },
+    { title: MESSAGES.mastersUi.customers.registeredAt, key: 'created_at' },
     { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
 const search = ref<string | null>(props.filters.q);
 
-const visitIndex = (page = 1): void => {
+const visitIndex = (page = FIRST_PAGE): void => {
     router.get(
         '/admin/customers',
         {
             q: search.value || undefined,
-            page: page > 1 ? page : undefined,
+            page: page > FIRST_PAGE ? page : undefined,
         },
         { preserveState: true, replace: true },
     );
 };
 
-const formatDate = (value: string): string =>
-    new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' }).format(
-        new Date(value.replace(' ', 'T')),
-    );
-
 const createdViaLabel = (value: string): string => {
     const labels: Record<string, string> = {
         web: 'Web',
-        admin: '管理画面',
-        migration: '移行',
+        admin: MESSAGES.mastersUi.customers.adminSource,
+        migration: MESSAGES.mastersUi.customers.migrationSource,
     };
 
     return labels[value] ?? value;
@@ -71,22 +73,22 @@ const createdViaLabel = (value: string): string => {
 </script>
 
 <template>
-    <Head title="顧客" />
+    <Head :title="MESSAGES.mastersUi.customers.title" />
 
-    <PageHeader title="顧客" :subtitle="`全 ${customers.total} 件`" />
+    <PageHeader :title="MESSAGES.mastersUi.customers.title" :subtitle="fillMessage(MESSAGES.mastersUi.customers.total, { count: String(customers.total) })" />
 
-    <SectionCard title="顧客一覧" class="ark-table-section">
+    <SectionCard :title="MESSAGES.mastersUi.customers.list" class="ark-table-section">
         <div class="ark-table-section__filters">
             <v-form class="d-flex align-center ga-4" @submit.prevent="visitIndex()">
                 <v-text-field
                     v-model="search"
-                    label="顧客検索"
-                    placeholder="氏名・カナ・メール（部分一致）／電話（完全一致）"
+                    :label="MESSAGES.mastersUi.customers.searchLabel"
+                    :placeholder="MESSAGES.mastersUi.customers.searchPlaceholder"
                     clearable
                     hide-details
                     class="filter-grid__search"
                 />
-                <v-btn type="submit" variant="tonal">検索</v-btn>
+                <v-btn type="submit" variant="tonal">{{ MESSAGES.mastersUi.customers.search }}</v-btn>
             </v-form>
             <p class="text-caption text-medium-emphasis mt-3 mb-0">
                 {{ MESSAGES.customer.phoneExactMatch }}
@@ -101,7 +103,7 @@ const createdViaLabel = (value: string): string => {
             item-value="user_id"
             :items-per-page="-1"
             hide-default-footer
-            no-data-text="該当する顧客はいません。"
+            :no-data-text="MESSAGES.mastersUi.customers.noData"
         >
             <template #item.name="{ item }">
                 <v-btn
@@ -126,14 +128,14 @@ const createdViaLabel = (value: string): string => {
                     :color="item.email_verified_at ? 'success' : 'warning'"
                     size="small"
                 >
-                    {{ item.email_verified_at ? '済' : '未' }}
+                    {{ item.email_verified_at ? MESSAGES.mastersUi.customers.verificationDone : MESSAGES.mastersUi.customers.verificationPending }}
                 </v-chip>
             </template>
             <template #item.created_via="{ item }">
                 {{ createdViaLabel(item.created_via) }}
             </template>
             <template #item.created_at="{ item }">
-                {{ formatDate(item.created_at) }}
+                {{ formatDateTime(item.created_at, 'dateMedium') }}
             </template>
             <template #item.actions="{ item }">
                 <v-btn
@@ -143,7 +145,7 @@ const createdViaLabel = (value: string): string => {
                     append-icon="mdi-chevron-right"
                     :href="`/admin/customers/${item.user_id}`"
                 >
-                    詳細
+                    {{ MESSAGES.customer.openDetail }}
                 </v-btn>
             </template>
         </v-data-table>
@@ -154,7 +156,7 @@ const createdViaLabel = (value: string): string => {
                 <v-pagination
                     :model-value="customers.current_page"
                     :length="customers.last_page"
-                    :total-visible="7"
+                    :total-visible="PAGINATION_VISIBLE_PAGES"
                     density="comfortable"
                     rounded="circle"
                     @update:model-value="visitIndex"

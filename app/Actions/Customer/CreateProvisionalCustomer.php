@@ -115,10 +115,10 @@ final readonly class CreateProvisionalCustomer
         }
 
         if ($phone !== null) {
-            return "未確認（{$phone}）";
+            return __('messages.customer.provisional_phone_name', ['phone' => $phone]);
         }
 
-        return '未確認のお客様';
+        return __('messages.customer.provisional_unknown_name');
     }
 
     private function placeholderEmail(): string

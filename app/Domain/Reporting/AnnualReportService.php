@@ -36,14 +36,14 @@ final class AnnualReportService
     public function forYear(int $year, SalesBasis|string $basis = SalesBasis::PaymentDate, ?string $asOfDate = null, string $period = self::PERIOD_CALENDAR): array
     {
         if (! in_array($period, [self::PERIOD_CALENDAR, self::PERIOD_FISCAL], true)) {
-            throw new InvalidArgumentException('集計期間の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.period_invalid'));
         }
         if ($year < 2000 || $year > 2100) {
-            throw new InvalidArgumentException('年の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.year_invalid'));
         }
         $salesBasis = $basis instanceof SalesBasis ? $basis : SalesBasis::tryFrom($basis);
         if ($salesBasis === null) {
-            throw new InvalidArgumentException('売上基準の指定が不正です。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.revenue_basis_invalid'));
         }
         $startMonth = $period === self::PERIOD_FISCAL ? self::FISCAL_START_MONTH : 1;
         $yearStart = CarbonImmutable::create($year, $startMonth, 1, 0, 0, 0, $this->time->timezone());
@@ -53,7 +53,7 @@ final class AnnualReportService
             : CarbonImmutable::createFromFormat('!Y-m-d', $asOfDate, $this->time->timezone());
         if ($asOf === false || ($asOfDate !== null && $asOf->toDateString() !== $asOfDate)
             || $asOf->lt($yearStart->subDay()) || $asOf->gt($yearEnd)) {
-            throw new InvalidArgumentException('as_of_dateは対象期間内（未来の期間は開始前日も可）で指定してください。');
+            throw new InvalidArgumentException(__('messages.reporting_validation.as_of_period_invalid'));
         }
 
         $rows = [];

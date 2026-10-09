@@ -127,14 +127,14 @@ final class StripeApiGateway implements StripeGateway
             throw $this->declinedException($exception);
         } catch (ApiConnectionException) {
             throw new PaymentGatewayTimeoutException(
-                'Stripeとの通信結果を確認できませんでした。',
+                __('messages.payment.gateway_timeout'),
             );
         } catch (ApiErrorException $exception) {
             $status = $exception->getHttpStatus();
 
             if ($status !== null && $status >= 500) {
                 throw new PaymentGatewayTimeoutException(
-                    'Stripeとの通信結果を確認できませんでした。',
+                    __('messages.payment.gateway_timeout'),
                 );
             }
 
@@ -143,13 +143,13 @@ final class StripeApiGateway implements StripeGateway
             }
 
             throw new PaymentGatewayException(
-                'Stripe APIがリクエストを受け付けませんでした。',
+                __('messages.payment.gateway_request_rejected'),
             );
         } catch (PaymentGatewayException $exception) {
             throw $exception;
         } catch (Throwable) {
             throw new PaymentGatewayException(
-                'Stripe APIの処理中にエラーが発生しました。',
+                __('messages.payment.gateway_processing_error'),
             );
         }
     }
@@ -172,7 +172,7 @@ final class StripeApiGateway implements StripeGateway
 
         return new PaymentGatewayDeclinedException(
             $this->safeCode($code),
-            'カード決済が承認されませんでした。',
+            __('messages.payment.card_payment_declined'),
         );
     }
 
@@ -195,7 +195,7 @@ final class StripeApiGateway implements StripeGateway
             chargeId: $chargeId,
             clientSecret: $intent->client_secret,
             failureCode: $lastError === null ? null : $this->safeCode($lastError->code),
-            failureMessage: $lastError === null ? null : 'カード決済が承認されませんでした。',
+            failureMessage: $lastError === null ? null : __('messages.payment.card_payment_declined'),
             refundedAmount: $refundedAmount,
         );
     }
@@ -217,7 +217,7 @@ final class StripeApiGateway implements StripeGateway
                 : $this->safeCode($refund->failure_reason),
             failureMessage: $refund->failure_reason === null
                 ? null
-                : '返金処理が完了しませんでした。',
+                : __('messages.payment.refund_processing_incomplete'),
         );
     }
 

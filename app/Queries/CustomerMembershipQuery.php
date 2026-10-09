@@ -108,23 +108,23 @@ class CustomerMembershipQuery
     public static function statusLabel(MembershipStatus $status): string
     {
         return match ($status) {
-            MembershipStatus::Pending => '申込確認中',
-            MembershipStatus::Active => '有効',
-            MembershipStatus::Grace => '支払い確認中',
-            MembershipStatus::Canceling => '終了予定',
-            MembershipStatus::Paused => '一時停止中',
-            MembershipStatus::Canceled => '解約済み',
+            MembershipStatus::Pending => __('messages.query_labels.membership_pending'),
+            MembershipStatus::Active => __('messages.query_labels.membership_active'),
+            MembershipStatus::Grace => __('messages.query_labels.membership_grace'),
+            MembershipStatus::Canceling => __('messages.query_labels.membership_canceling'),
+            MembershipStatus::Paused => __('messages.query_labels.membership_paused'),
+            MembershipStatus::Canceled => __('messages.query_labels.membership_canceled'),
         };
     }
 
     public static function usageTypeLabel(MembershipUsageType $type): string
     {
         return match ($type) {
-            MembershipUsageType::Grant => '付与',
-            MembershipUsageType::Reserve => '予約確保',
-            MembershipUsageType::Release => '予約解放',
-            MembershipUsageType::Consume => '消化',
-            MembershipUsageType::Adjust => '調整',
+            MembershipUsageType::Grant => __('messages.query_labels.usage_grant'),
+            MembershipUsageType::Reserve => __('messages.query_labels.usage_reserve'),
+            MembershipUsageType::Release => __('messages.query_labels.usage_release'),
+            MembershipUsageType::Consume => __('messages.query_labels.usage_consume'),
+            MembershipUsageType::Adjust => __('messages.query_labels.usage_adjust'),
         };
     }
 }

@@ -6,6 +6,11 @@ import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
+/** パスワードの再確認が必要な時にサーバーが返す HTTP ステータス（423 Locked） */
+const PASSWORD_CONFIRMATION_REQUIRED_STATUS = 423;
+
+const M = MESSAGES.reportsUi.twoFactorSetup;
+
 const props = defineProps<{
     twoFactorPending: boolean;
     twoFactorEnabled: boolean;
@@ -37,7 +42,7 @@ const fetchJson = async (url: string): Promise<unknown> => {
         },
     });
 
-    if (response.status === 423) {
+    if (response.status === PASSWORD_CONFIRMATION_REQUIRED_STATUS) {
         passwordConfirmed.value = false;
     }
 
@@ -133,7 +138,7 @@ onBeforeUnmount(() => {
 
 <template>
     <div class="d-flex justify-center pa-4">
-        <v-card width="100%" max-width="680" title="スタッフ2段階認証の設定">
+        <v-card width="100%" max-width="680" :title="M.title">
                 <v-card-text>
                     <v-alert v-if="errorMessage" type="error" class="mb-4">
                         {{ errorMessage }}
@@ -143,28 +148,28 @@ onBeforeUnmount(() => {
                         <v-alert type="success" class="mb-4">
                             {{ MESSAGES.auth.twoFactorConfigured }}
                         </v-alert>
-                        <v-btn color="primary" href="/admin">管理画面へ</v-btn>
+                        <v-btn color="primary" href="/admin">{{ M.toAdmin }}</v-btn>
                     </template>
 
                     <template v-else-if="!passwordConfirmed">
                         <p class="mb-4">
-                            設定を始める前に、現在のパスワードを確認します。
+                            {{ M.confirmPasswordFirst }}
                         </p>
                         <v-btn color="primary" href="/user/confirm-password">
-                            パスワードを確認する
+                            {{ M.confirmPassword }}
                         </v-btn>
                     </template>
 
                     <template v-else-if="!twoFactorPending">
                         <p class="mb-4">
-                            認証アプリで使用するQRコードとリカバリーコードを発行します。
+                            {{ M.issueCodes }}
                         </p>
                         <v-btn
                             color="primary"
                             :loading="enableForm.processing"
                             @click="enableTwoFactor"
                         >
-                            2段階認証を有効化する
+                            {{ M.enable }}
                         </v-btn>
                     </template>
 
@@ -182,16 +187,16 @@ onBeforeUnmount(() => {
                             class="mb-4"
                             @click="loadConfiguration"
                         >
-                            設定情報を再取得
+                            {{ M.reload }}
                         </v-btn>
 
                         <template v-if="qrCodeUrl !== null">
                             <p class="mb-3">
-                                認証アプリでQRコードを読み取り、表示された6桁のコードを入力してください。
+                                {{ M.scanQr }}
                             </p>
                             <v-img
                                 :src="qrCodeUrl"
-                                alt="2段階認証設定用QRコード"
+                                :alt="M.qrAlt"
                                 width="240"
                                 height="240"
                                 class="mb-5 mx-auto"
@@ -211,7 +216,7 @@ onBeforeUnmount(() => {
                             <v-form @submit.prevent="confirmTwoFactor">
                                 <v-text-field
                                     v-model="confirmForm.code"
-                                    label="確認コード"
+                                    :label="M.code"
                                     inputmode="numeric"
                                     autocomplete="one-time-code"
                                     :error-messages="confirmForm.errors.code"
@@ -223,7 +228,7 @@ onBeforeUnmount(() => {
                                     color="primary"
                                     :loading="confirmForm.processing"
                                 >
-                                    確認して管理画面へ
+                                    {{ M.confirmAndContinue }}
                                 </v-btn>
                             </v-form>
                         </template>

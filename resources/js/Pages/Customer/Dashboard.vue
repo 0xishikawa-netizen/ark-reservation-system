@@ -3,6 +3,8 @@ import { Head, router } from '@inertiajs/vue3';
 import { EmptyState, PageHeader, SectionCard, StatusChip } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatYenSign } from '@/utils/money';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -45,15 +47,13 @@ const props = defineProps<{
     attention: string[];
 }>();
 
-const yen = (value: number): string => `¥${value.toLocaleString('ja-JP')}`;
-
 const go = (href: string): void => {
     router.visit(href);
 };
 </script>
 
 <template>
-    <Head title="マイページ" />
+    <Head :title="MESSAGES.customerUi.dashboard.title" />
 
     <v-alert
         v-if="props.attention.length > 0"
@@ -68,11 +68,11 @@ const go = (href: string): void => {
     </v-alert>
 
     <PageHeader
-        title="マイページ"
-        subtitle="ご予約や会員情報、お支払い状況をまとめて確認できます。"
+        :title="MESSAGES.customerUi.dashboard.title"
+        :subtitle="MESSAGES.customerUi.dashboard.subtitle"
     />
 
-    <SectionCard title="次回のご予約" class="next-reservation-card mb-6">
+    <SectionCard :title="MESSAGES.customerUi.dashboard.nextReservation" class="next-reservation-card mb-6">
         <template v-if="props.next_reservation">
             <div class="text-h5 font-weight-bold text-primary">
                 {{ props.next_reservation.starts_at }}
@@ -91,33 +91,33 @@ const go = (href: string): void => {
             />
 
             <div class="next-reservation-actions mt-5">
-                <v-btn color="primary" @click="go('/reserve')">予約する</v-btn>
+                <v-btn color="primary" @click="go('/reserve')">{{ MESSAGES.customerUi.dashboard.reserve }}</v-btn>
                 <v-btn
                     variant="outlined"
                     color="primary"
                     @click="go(`/mypage/reservations/${props.next_reservation.id}`)"
                 >
-                    予約の詳細
+                    {{ MESSAGES.customerUi.dashboard.reservationDetail }}
                 </v-btn>
                 <v-btn variant="text" @click="go('/mypage/reservations')">
-                    予約一覧（今後 {{ props.upcoming_count }} 件）
+                    {{ fillMessage(MESSAGES.customerUi.dashboard.reservationList, { count: String(props.upcoming_count) }) }}
                 </v-btn>
             </div>
         </template>
         <EmptyState
             v-else
             icon="mdi-calendar-blank-outline"
-            title="現在ご予定の予約はありません"
-            description="ご都合のよい日時を選んで、次回のご予約をお取りいただけます。"
+            :title="MESSAGES.customerUi.dashboard.noReservationTitle"
+            :description="MESSAGES.customerUi.dashboard.noReservationDescription"
         >
             <template #action>
-                <v-btn color="primary" @click="go('/reserve')">予約する</v-btn>
+                <v-btn color="primary" @click="go('/reserve')">{{ MESSAGES.customerUi.dashboard.reserve }}</v-btn>
             </template>
         </EmptyState>
     </SectionCard>
 
     <div class="dashboard-sections">
-        <SectionCard title="利用権（会員）">
+        <SectionCard :title="MESSAGES.customerUi.dashboard.membership">
             <template #append>
                 <StatusChip
                     v-if="props.membership"
@@ -127,12 +127,12 @@ const go = (href: string): void => {
             </template>
 
             <template v-if="props.membership">
-                <div class="text-h6">当期残り {{ props.membership.available }} 回</div>
+                <div class="text-h6">{{ fillMessage(MESSAGES.customerUi.dashboard.membershipRemaining, { count: String(props.membership.available) }) }}</div>
                 <div
                     v-if="props.membership.current_period_end"
                     class="text-body-2 text-medium-emphasis mt-1"
                 >
-                    次回更新：{{ props.membership.current_period_end }}
+                    {{ fillMessage(MESSAGES.customerUi.dashboard.nextRenewal, { date: props.membership.current_period_end }) }}
                 </div>
                 <div
                     v-if="props.membership.cancel_at_period_end"
@@ -145,31 +145,31 @@ const go = (href: string): void => {
                 <p class="text-body-2 text-medium-emphasis mb-0">{{ MESSAGES.membership.notSubscribed }}</p>
             </template>
             <v-btn variant="text" color="primary" class="mt-2" @click="go('/mypage/membership')">
-                会員ページへ
+                {{ MESSAGES.customerUi.dashboard.toMembership }}
             </v-btn>
         </SectionCard>
 
-        <SectionCard title="回数券">
+        <SectionCard :title="MESSAGES.customerUi.dashboard.tickets">
             <template v-if="props.tickets.total_available > 0">
-                <div class="text-h6">残り {{ props.tickets.total_available }} 回</div>
+                <div class="text-h6">{{ fillMessage(MESSAGES.customerUi.dashboard.ticketsRemaining, { count: String(props.tickets.total_available) }) }}</div>
                 <div
                     v-if="props.tickets.nearest_expires_at"
                     class="text-body-2 text-medium-emphasis mt-1"
                 >
-                    有効期限（最短）：{{ props.tickets.nearest_expires_at }}
+                    {{ fillMessage(MESSAGES.customerUi.dashboard.nearestExpiry, { date: props.tickets.nearest_expires_at }) }}
                 </div>
             </template>
             <template v-else>
                 <p class="text-body-2 text-medium-emphasis mb-0">{{ MESSAGES.ticket.noneUsable }}</p>
             </template>
             <v-btn variant="text" color="primary" class="mt-2" @click="go('/mypage/tickets')">
-                回数券ページへ
+                {{ MESSAGES.customerUi.dashboard.toTickets }}
             </v-btn>
         </SectionCard>
 
-        <SectionCard title="直近のお支払い">
+        <SectionCard :title="MESSAGES.customerUi.dashboard.recentPayment">
             <template v-if="props.recent_payment">
-                <div class="text-h6">{{ yen(props.recent_payment.amount) }}</div>
+                <div class="text-h6">{{ formatYenSign(props.recent_payment.amount) }}</div>
                 <div class="text-body-2 text-medium-emphasis mt-1">
                     {{ props.recent_payment.kind_label }} ／ {{ props.recent_payment.status_label }}
                 </div>
@@ -181,7 +181,7 @@ const go = (href: string): void => {
                 <p class="text-body-2 text-medium-emphasis mb-0">{{ MESSAGES.payment.noPaymentHistory }}</p>
             </template>
             <v-btn variant="text" color="primary" class="mt-2" @click="go('/mypage/payments')">
-                支払い履歴へ
+                {{ MESSAGES.customerUi.dashboard.toPayments }}
             </v-btn>
         </SectionCard>
     </div>

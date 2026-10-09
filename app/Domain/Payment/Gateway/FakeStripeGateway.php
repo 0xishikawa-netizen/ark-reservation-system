@@ -229,7 +229,7 @@ final class FakeStripeGateway implements StripeGateway
     ): void {
         $this->responses[$operation][] = new AmbiguousFakeStripeResponse(
             $result,
-            $exception ?? new PaymentGatewayTimeoutException('Stripeとの通信結果を確認できませんでした。'),
+            $exception ?? new PaymentGatewayTimeoutException(__('messages.payment.gateway_timeout')),
         );
     }
 

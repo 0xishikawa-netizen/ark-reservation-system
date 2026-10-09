@@ -104,7 +104,7 @@ class GoogleAuthController extends Controller
 
         $providerId = (string) $googleUser->getId();
         $email = Str::lower(trim((string) $googleUser->getEmail()));
-        $name = trim((string) ($googleUser->getName() ?? '')) ?: 'Google ユーザー';
+        $name = trim((string) ($googleUser->getName() ?? '')) ?: __('messages.google.default_user_name');
         $emailVerified = filter_var(
             $googleUser->user['email_verified'] ?? false,
             FILTER_VALIDATE_BOOL,

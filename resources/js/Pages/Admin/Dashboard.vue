@@ -3,7 +3,9 @@ import { Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
 import CustomerPeekDrawer from '@/components/admin/CustomerPeekDrawer.vue';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -47,8 +49,10 @@ interface NullableMetricCard extends Omit<MetricCard, 'value'> {
 
 const props = defineProps<DashboardProps>();
 
+const M = MESSAGES.reportsUi.dashboard;
+
 const [todayYear, todayMonth, todayDay] = props.dashboardDate.split('-');
-const today = `${todayYear}年${Number(todayMonth)}月${Number(todayDay)}日`;
+const today = fillMessage(M.todayDate, { year: String(todayYear), month: String(Number(todayMonth)), day: String(Number(todayDay)) });
 
 const membershipAttentionCount = computed<number | null>(() => {
     if (props.membership_attention === null) {
@@ -65,37 +69,37 @@ const membershipAttentionCount = computed<number | null>(() => {
 const metrics = computed<MetricCard[]>(() => {
     const candidates: NullableMetricCard[] = [
         {
-            title: '今日の予約',
+            title: M.todayReservations,
             value: props.today_reservation_count,
             href: `/admin/reservations?date=${props.dashboardDate}`,
             color: 'primary',
         },
         {
-            title: '要対応決済',
+            title: M.attentionPayments,
             value: props.needs_attention_payment_count,
             href: '/admin/payments?needs_attention=1',
             color: 'error',
         },
         {
-            title: '利用権 注意',
+            title: M.membershipAttention,
             value: membershipAttentionCount.value,
             href: '/admin/customers',
             color: 'warning',
         },
         {
-            title: '回数券 警告',
+            title: M.ticketWarning,
             value: props.ticket_warning_count,
             href: '/admin/customers',
             color: 'warning',
         },
         {
-            title: '仮予約 滞留',
+            title: M.stalePending,
             value: props.stale_pending_reservation_count,
             href: '/admin/reservations?status=pending_payment',
             color: 'error',
         },
         {
-            title: '失敗ジョブ',
+            title: M.failedJobs,
             value: props.failed_jobs_count,
             href: '/admin/system/failed-jobs',
             color: 'error',
@@ -121,9 +125,9 @@ function openCustomerPeek(customerId: number): void {
 </script>
 
 <template>
-    <Head title="管理ダッシュボード" />
+    <Head :title="M.title" />
 
-    <PageHeader title="管理ダッシュボード" :subtitle="today" />
+    <PageHeader :title="M.title" :subtitle="today" />
 
     <v-row v-if="metrics.length > 0" class="mb-2">
         <v-col
@@ -155,7 +159,7 @@ function openCustomerPeek(customerId: number): void {
                     <span class="text-h4 font-weight-bold" :class="`text-${metric.color}`">
                         {{ metric.value }}
                     </span>
-                    <span class="text-body-2 text-medium-emphasis mb-1">件</span>
+                    <span class="text-body-2 text-medium-emphasis mb-1">{{ M.countUnit }}</span>
                 </div>
             </SectionCard>
         </v-col>
@@ -163,8 +167,8 @@ function openCustomerPeek(customerId: number): void {
 
     <SectionCard
         v-if="next_arrivals !== null"
-        title="本日の予約"
-        subtitle="本日の予約のうち、まだ来店（完了）していない方を開始時刻の早い順に表示します。"
+        :title="M.arrivalsTitle"
+        :subtitle="M.arrivalsSubtitle"
         variant="outlined"
     >
         <v-list v-if="next_arrivals.length > 0" lines="two">
@@ -185,7 +189,7 @@ function openCustomerPeek(customerId: number): void {
                     <v-list-item-subtitle>
                         {{ arrival.service_name }}
                         <span class="mx-1">・</span>
-                        {{ arrival.staff_name ?? '担当なし' }}
+                        {{ arrival.staff_name ?? MESSAGES.monthlyHub.unknownStaff }}
                     </v-list-item-subtitle>
                     <template #append>
                         <v-icon icon="mdi-chevron-right" class="text-medium-emphasis" />
@@ -198,8 +202,8 @@ function openCustomerPeek(customerId: number): void {
         <EmptyState
             v-else
             icon="mdi-calendar-clock-outline"
-            title="本日の未対応の予約はありません"
-            description="来店前の予約が入ると、こちらに表示されます。"
+            :title="M.arrivalsEmptyTitle"
+            :description="M.arrivalsEmptyDescription"
         />
     </SectionCard>
 

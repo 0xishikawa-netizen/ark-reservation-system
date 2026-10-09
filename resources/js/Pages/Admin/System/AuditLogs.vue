@@ -4,8 +4,15 @@ import { ref } from 'vue';
 import { DateField, EmptyState, PageHeader, SectionCard } from '@/components/ark';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { formatDateTime } from '@/utils/dateFormat';
 
 defineOptions({ layout: AdminLayout });
+
+/** ページ送りに並べるページ番号の最大数 */
+const PAGINATION_TOTAL_VISIBLE = 7;
+
+const M = MESSAGES.reportsUi.auditLogs;
 
 interface AuditLogRow {
     id: number;
@@ -72,53 +79,43 @@ const clearFilters = (): void => {
     );
 };
 
-const formatDateTime = (value: string): string =>
-    new Intl.DateTimeFormat('ja-JP', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-    }).format(new Date(value.replace(' ', 'T')));
-
 const entityLabel = (item: AuditLogRow): string =>
     `${item.entity_type ?? MESSAGES.common.notRecorded}${item.entity_id ? ` #${item.entity_id}` : ''}`;
 </script>
 
 <template>
-    <Head title="監査ログ" />
+    <Head :title="M.title" />
 
-    <PageHeader title="監査ログ" :subtitle="`全 ${logs.total} 件`" />
+    <PageHeader :title="M.title" :subtitle="fillMessage(M.total, { count: String(logs.total) })" />
 
     <SectionCard class="ark-audit-section">
             <v-form class="filter-grid" @submit.prevent="visitIndex()">
                 <v-select
                     v-model="action"
                     :items="actions"
-                    label="アクション"
+                    :label="M.action"
                     clearable
                     hide-details
                 />
                 <v-text-field
                     v-model="entityType"
-                    label="対象種別"
+                    :label="M.entityType"
                     clearable
                     hide-details
                 />
                 <DateField
                     v-model="dateFrom"
-                    label="開始日"
+                    :label="M.dateFrom"
                     hide-details
                 />
                 <DateField
                     v-model="dateTo"
-                    label="終了日"
+                    :label="M.dateTo"
                     hide-details
                 />
                 <div class="d-flex ga-2 align-center">
-                    <v-btn type="submit" variant="tonal">適用</v-btn>
-                    <v-btn variant="text" @click="clearFilters">クリア</v-btn>
+                    <v-btn type="submit" variant="tonal">{{ M.apply }}</v-btn>
+                    <v-btn variant="text" @click="clearFilters">{{ M.clear }}</v-btn>
                 </div>
             </v-form>
 
@@ -127,18 +124,18 @@ const entityLabel = (item: AuditLogRow): string =>
         <v-table>
             <thead>
                 <tr>
-                    <th>日時</th>
-                    <th>操作者</th>
-                    <th>アクション</th>
-                    <th>対象</th>
-                    <th>概要</th>
+                    <th>{{ M.datetime }}</th>
+                    <th>{{ M.actor }}</th>
+                    <th>{{ M.action }}</th>
+                    <th>{{ M.entity }}</th>
+                    <th>{{ M.summary }}</th>
                     <th>IP</th>
                 </tr>
             </thead>
             <tbody>
                 <tr v-for="log in logs.data" :key="log.id">
-                    <td>{{ formatDateTime(log.created_at) }}</td>
-                    <td>{{ log.actor_name ?? 'システム' }}</td>
+                    <td>{{ formatDateTime(log.created_at, 'withSeconds') }}</td>
+                    <td>{{ log.actor_name ?? M.system }}</td>
                     <td>{{ log.action }}</td>
                     <td>{{ entityLabel(log) }}</td>
                     <td>{{ log.summary }}</td>
@@ -148,8 +145,8 @@ const entityLabel = (item: AuditLogRow): string =>
                     <td colspan="6">
                         <EmptyState
                             icon="mdi-text-box-search-outline"
-                            title="該当する監査ログはありません"
-                            description="検索条件を変更すると、ほかの操作記録を確認できます。"
+                            :title="M.emptyTitle"
+                            :description="M.emptyDescription"
                         />
                     </td>
                 </tr>
@@ -162,7 +159,7 @@ const entityLabel = (item: AuditLogRow): string =>
             <v-pagination
                 :model-value="logs.current_page"
                 :length="logs.last_page"
-                :total-visible="7"
+                :total-visible="PAGINATION_TOTAL_VISIBLE"
                 @update:model-value="visitIndex"
             />
         </v-card-actions>

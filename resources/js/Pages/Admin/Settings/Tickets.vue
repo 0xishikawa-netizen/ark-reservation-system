@@ -7,6 +7,9 @@ import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: AdminLayout });
 
+// 変更理由の最大文字数。
+const REASON_MAX_LENGTH = 255;
+
 interface TicketPolicy {
     no_show_policy: string;
     expiration_hold_policy: string;
@@ -75,19 +78,19 @@ const updatePolicy = (): void => {
 </script>
 
 <template>
-    <Head title="回数券運用設定" />
+    <Head :title="MESSAGES.mastersUi.ticketSettings.title" />
 
     <div class="ark-settings-page">
     <PageHeader
-        title="回数券運用設定"
-        subtitle="回数券予約の無断キャンセルと有効期限到来時の扱いを設定します。"
+        :title="MESSAGES.mastersUi.ticketSettings.title"
+        :subtitle="MESSAGES.mastersUi.ticketSettings.subtitle"
     />
 
-    <SectionCard title="運用ポリシー">
+    <SectionCard :title="MESSAGES.mastersUi.ticketSettings.sectionTitle">
         <div class="ark-policy-form">
             <section aria-labelledby="no-show-policy-heading">
                 <h2 id="no-show-policy-heading" class="text-h6 mb-2">
-                    無断キャンセル時の扱い
+                    {{ MESSAGES.mastersUi.ticketSettings.noShowPolicy }}
                 </h2>
                 <v-radio-group
                     v-model="noShowPolicy"
@@ -114,7 +117,7 @@ const updatePolicy = (): void => {
 
             <section aria-labelledby="expiration-hold-policy-heading">
                 <h2 id="expiration-hold-policy-heading" class="text-h6 mb-2">
-                    有効期限到来時の予約確保分
+                    {{ MESSAGES.mastersUi.ticketSettings.expirationHoldPolicy }}
                 </h2>
                 <v-radio-group
                     v-model="expirationHoldPolicy"
@@ -141,10 +144,10 @@ const updatePolicy = (): void => {
 
             <v-textarea
                 v-model="reason"
-                label="変更理由"
+                :label="MESSAGES.mastersUi.ticketSettings.reason"
                 :error-messages="errors.reason"
-                maxlength="255"
-                counter="255"
+                :maxlength="REASON_MAX_LENGTH"
+                :counter="REASON_MAX_LENGTH"
                 rows="3"
                 required
             />
@@ -155,7 +158,7 @@ const updatePolicy = (): void => {
                     :disabled="processing"
                     @click="confirmationOpen = true"
                 >
-                    保存
+                    {{ MESSAGES.mastersUi.ticketSettings.save }}
                 </v-btn>
             </div>
         </div>
@@ -164,16 +167,16 @@ const updatePolicy = (): void => {
     </div>
 
     <v-dialog v-model="confirmationOpen" max-width="600">
-        <v-card title="回数券運用設定を変更しますか？">
+        <v-card :title="MESSAGES.mastersUi.ticketSettings.confirmTitle">
             <v-card-text>
                 {{ MESSAGES.ticket.policyNotRetroactive }}
             </v-card-text>
             <v-card-actions class="justify-end">
                 <v-btn :disabled="processing" @click="confirmationOpen = false">
-                    キャンセル
+                    {{ MESSAGES.mastersUi.ticketSettings.cancel }}
                 </v-btn>
                 <v-btn color="primary" :loading="processing" @click="updatePolicy">
-                    変更する
+                    {{ MESSAGES.mastersUi.ticketSettings.update }}
                 </v-btn>
             </v-card-actions>
         </v-card>

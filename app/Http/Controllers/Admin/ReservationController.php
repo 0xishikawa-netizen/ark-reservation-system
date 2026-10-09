@@ -16,12 +16,12 @@ use App\Enums\Reservation\ReservationSource;
 use App\Enums\Reservation\ReservationStatus;
 use App\Enums\Visit\CheckoutExemptionReason;
 use App\Exceptions\Reservation\StaleReservationException;
+use App\Http\Controllers\Concerns\ResolvesAuthenticatedUser;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdjustReservationAmountRequest;
 use App\Http\Requests\Admin\StoreAdminReservationRequest;
 use App\Http\Requests\Admin\UpdateAdminReservationRequest;
 use App\Models\Reservation;
-use App\Models\User;
 use App\Queries\CustomerLookupQuery;
 use App\Queries\ReservationFormOptionsQuery;
 use App\Queries\ReservationListQuery;
@@ -38,6 +38,8 @@ use Inertia\Response;
 
 final class ReservationController extends Controller
 {
+    use ResolvesAuthenticatedUser;
+
     public function index(
         Request $request,
         ReservationListQuery $query,
@@ -280,30 +282,30 @@ final class ReservationController extends Controller
         if (($result['refund_failed'] ?? false) === true) {
             return back()->with(
                 'error',
-                '差額返金の一部または全部を完了できませんでした。要対応として確認してください。',
+                __('messages.payment.adjustment_refund_failed'),
             );
         }
 
         return match ($result['outcome']) {
             'addon_created' => back()->with(
                 'success',
-                '差額のお支払いリンクを発行しました。お客様のマイページに表示されます。',
+                __('messages.payment.adjustment_addon_created'),
             ),
             'addon_reused' => back()->with(
                 'info',
-                '発行済みの差額支払いリンクをそのまま利用します。',
+                __('messages.payment.adjustment_addon_reused'),
             ),
             'refunded' => back()->with(
                 'success',
-                '施術内容変更による差額を返金しました。',
+                __('messages.payment.adjustment_refunded'),
             ),
             'no_change' => back()->with(
                 'info',
-                '実質受領額と最終施術金額が一致しているため、金銭処理はありません。',
+                __('messages.payment.adjustment_no_change'),
             ),
             default => back()->with(
                 'error',
-                '差額のお支払いリンクを発行できませんでした。要対応として確認してください。',
+                __('messages.payment.adjustment_failed'),
             ),
         };
     }
@@ -437,17 +439,6 @@ final class ReservationController extends Controller
         );
 
         return back()->with('success', __('messages.reservation.extended', ['minutes' => (int) $validated['minutes']]));
-    }
-
-    private function userFor(Request $request): User
-    {
-        $user = $request->user();
-
-        if (! $user instanceof User) {
-            abort(403);
-        }
-
-        return $user;
     }
 
     private function normalizeNotes(mixed $value): ?string

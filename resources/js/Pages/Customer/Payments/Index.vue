@@ -2,6 +2,9 @@
 import { Head, router } from '@inertiajs/vue3';
 import { EmptyState, PageHeader, SectionCard } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
+import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatYenSign } from '@/utils/money';
 
 defineOptions({ layout: CustomerLayout });
 
@@ -27,28 +30,27 @@ const props = defineProps<{
     payments: PaymentRow[];
 }>();
 
-const yen = (value: number): string => `¥${value.toLocaleString('ja-JP')}`;
 </script>
 
 <template>
-    <Head title="支払い履歴" />
+    <Head :title="MESSAGES.customerUi.payments.title" />
 
     <PageHeader
-        title="支払い履歴"
-        subtitle="カード決済と利用権のお支払いの記録です。"
+        :title="MESSAGES.customerUi.payments.title"
+        :subtitle="MESSAGES.customerUi.payments.subtitle"
     />
 
     <EmptyState
         v-if="props.payments.length === 0"
         icon="mdi-receipt-text-outline"
-        title="お支払い履歴はまだありません"
-        description="お支払いが完了すると、こちらで内容をご確認いただけます。"
+        :title="MESSAGES.customerUi.payments.emptyTitle"
+        :description="MESSAGES.customerUi.payments.emptyDescription"
     />
 
     <SectionCard
         v-for="payment in props.payments"
         :key="payment.id"
-        :title="yen(payment.amount)"
+        :title="formatYenSign(payment.amount)"
         :subtitle="payment.kind_label"
         class="mb-3"
     >
@@ -62,19 +64,19 @@ const yen = (value: number): string => `¥${value.toLocaleString('ja-JP')}`;
             v-if="payment.refunded_amount > 0"
             class="text-body-2 text-medium-emphasis mb-2"
         >
-            返金額：{{ yen(payment.refunded_amount) }}
+            {{ fillMessage(MESSAGES.customerUi.payments.refunded, { amount: formatYenSign(payment.refunded_amount) }) }}
         </div>
 
         <div class="text-body-2 text-medium-emphasis">
-            お支払い日時：{{ payment.paid_at ?? payment.created_at }}
+            {{ fillMessage(MESSAGES.customerUi.payments.paidAt, { date: payment.paid_at ?? payment.created_at }) }}
         </div>
         <div
             v-if="payment.reservation"
             class="text-body-2 mt-1"
         >
-            対象のご予約：{{ payment.reservation.service_name }}
+            {{ fillMessage(MESSAGES.customerUi.payments.reservation, { name: payment.reservation.service_name ?? '' }) }}
             <template v-if="payment.reservation.starts_at">
-                （{{ payment.reservation.starts_at }}）
+                {{ fillMessage(MESSAGES.customerUi.payments.reservationStartsAt, { date: payment.reservation.starts_at }) }}
             </template>
             <v-btn
                 size="x-small"
@@ -83,7 +85,7 @@ const yen = (value: number): string => `¥${value.toLocaleString('ja-JP')}`;
                 class="ml-1"
                 @click="router.visit(`/mypage/reservations/${payment.reservation.id}`)"
             >
-                詳細
+                {{ MESSAGES.customerUi.payments.detail }}
             </v-btn>
         </div>
     </SectionCard>

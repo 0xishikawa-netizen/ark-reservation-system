@@ -5,8 +5,15 @@ import { MonthField, PageHeader, SectionCard } from '@/components/ark';
 import { formatReportDate, MonthlyReportTabs, ReportDailyToolbar, ReportFilterBar, ReportFilterField, ReportSelect, ReportTable, ReportValue, useDailyFilter } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { changeAndReload } from '@/composables/reportNavigation';
 
 defineOptions({ layout: AdminLayout });
+
+/** 分を時間へ直す割り算の値 */
+const MINUTES_PER_HOUR = 60;
+/** 時間表示を小数1桁に丸めるための倍率 */
+const HOURS_ROUNDING_FACTOR = 10;
 
 interface Row {
     business_date?: string; staff_id: number | null; staff_name: string | null;
@@ -24,6 +31,7 @@ interface Report {
 
 const props = defineProps<{ report: Report; dataEndpoint: string }>();
 const labels = MESSAGES.reporting;
+const M = MESSAGES.reportsUi.timeBands;
 const report = ref(props.report);
 const month = ref(props.report.month_key);
 const staffId = ref<number | null>(null);
@@ -47,7 +55,7 @@ const monthlyRows = computed(() => {
 });
 
 /** 稼働分を時間（小数1桁）でも見られるようにする。値なしは null のまま。 */
-const hours = (minutes: number | null): number | null => (minutes === null ? null : Math.round((minutes / 60) * 10) / 10);
+const hours = (minutes: number | null): number | null => (minutes === null ? null : Math.round((minutes / MINUTES_PER_HOUR) * HOURS_ROUNDING_FACTOR) / HOURS_ROUNDING_FACTOR);
 const dayTypeRows = computed(() => (report.value.day_type_rows ?? []).map((row, index, rows) => ({ row, groupStart: index === 0 || rows[index - 1].day_type !== row.day_type })));
 const storeDailyRows = computed(() => {
     const sorted = [...(report.value.store_daily_rows ?? [])].sort((a, b) => (a.business_date ?? '').localeCompare(b.business_date ?? '') || compareBand(a, b));
@@ -94,9 +102,7 @@ async function loadReport(): Promise<void> {
 }
 
 function changeMonth(value: string): void {
-    if (value === month.value) return;
-    month.value = value;
-    void loadReport();
+    changeAndReload(month, value, loadReport);
 }
 
 function changeStaff(value: number | null): void {
@@ -118,7 +124,7 @@ function changeStaff(value: number | null): void {
             <ReportSelect :model-value="staffId" :items="staffItems" :label="labels.staffName" data-testid="staff-filter" @update:model-value="changeStaff" />
         </ReportFilterField>
         <template #meta>
-            {{ labels.bandOutside }}: <ReportValue :value="report.outside_band_minutes" />分 / {{ labels.annualAsOf }} {{ report.as_of_date }}
+            {{ labels.bandOutside }}: <ReportValue :value="report.outside_band_minutes" />{{ M.minuteUnit }} / {{ labels.annualAsOf }} {{ report.as_of_date }}
         </template>
     </ReportFilterBar>
 
@@ -147,7 +153,7 @@ function changeStaff(value: number | null): void {
                 <tr v-if="report.overall_rows.length === 0"><td colspan="9" class="empty-cell">{{ labels.staffNoData }}</td></tr>
             </tbody>
         </ReportTable>
-        <p class="band-note">{{ labels.bandVisitsHint }}<template v-if="(report.visit_unknown_count ?? 0) > 0">（{{ labels.bandVisitsUnknown }} {{ report.visit_unknown_count }}）</template></p>
+        <p class="band-note">{{ labels.bandVisitsHint }}<template v-if="(report.visit_unknown_count ?? 0) > 0">{{ fillMessage(M.visitUnknown, { label: labels.bandVisitsUnknown, count: String(report.visit_unknown_count) }) }}</template></p>
     </SectionCard>
 
     <SectionCard :title="labels.bandDayType" :subtitle="labels.bandDayTypeHint" class="mb-4">

@@ -30,7 +30,7 @@ function fmtDay(iso: string): string {
 
 <template>
     <PanelShell
-        title="この時間に追加"
+        :title="MESSAGES.boardUi.slotChoicePanel.title"
         icon="mdi-calendar-blank-outline"
         :show-back="canGoBack"
         @close="emit('close')"
@@ -39,16 +39,16 @@ function fmtDay(iso: string): string {
         <!-- 選んだ枠（日付・開始時間・担当）を、予約パネルと同じ3セルのカードで確認させる。 -->
         <div class="sch__when">
             <div class="sch__when-cell">
-                <span class="sch__when-label">日付</span>
+                <span class="sch__when-label">{{ MESSAGES.boardUi.slotChoicePanel.date }}</span>
                 <span class="sch__when-value">{{ fmtDay(date) }}</span>
             </div>
             <div class="sch__when-cell">
-                <span class="sch__when-label">開始時間</span>
+                <span class="sch__when-label">{{ MESSAGES.boardUi.slotChoicePanel.startTime }}</span>
                 <span v-if="time" class="sch__when-value sch__when-value--time">{{ time }}</span>
                 <span v-else class="sch__when-value sch__when-value--muted">{{ MESSAGES.common.emptyValue }}</span>
             </div>
             <div v-if="staffName" class="sch__when-cell sch__when-cell--staff">
-                <span class="sch__when-label">担当</span>
+                <span class="sch__when-label">{{ MESSAGES.boardUi.slotChoicePanel.staff }}</span>
                 <span class="sch__when-value">{{ staffName }}</span>
             </div>
         </div>
@@ -59,7 +59,7 @@ function fmtDay(iso: string): string {
         <div class="sch__choices">
             <PanelChoiceCard
                 kind="reservation"
-                title="予約を作成"
+                :title="MESSAGES.boardUi.slotChoicePanel.createReservation"
                 :description="MESSAGES.schedule.choiceReservationDesc"
                 data-testid="choose-reservation"
                 @click="emit('chooseReservation')"

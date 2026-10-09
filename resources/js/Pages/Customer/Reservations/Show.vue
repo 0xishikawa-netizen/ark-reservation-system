@@ -4,8 +4,14 @@ import { computed, ref, watch } from 'vue';
 import { DateField } from '@/components/ark';
 import CustomerLayout from '@/layouts/CustomerLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { formatDateTime, timeLabel } from '@/utils/dateFormat';
+import { formatYenSuffix } from '@/utils/money';
 
 defineOptions({ layout: CustomerLayout });
+
+/** 日付変更後に空き時間を取りに行くまでの待ち時間（ミリ秒）。連続入力での多重取得を防ぐ。 */
+const AVAILABILITY_DEBOUNCE_MS = 150;
 
 interface ReservationDetail {
     id: number;
@@ -71,13 +77,7 @@ const canModify = computed(() => {
         && startsAt.getTime() > Date.now();
 });
 
-const statusLabels: Record<string, string> = {
-    confirmed: '予約確定',
-    completed: '完了',
-    no_show: '来店なし',
-    canceled: 'キャンセル',
-    expired: '期限切れ',
-};
+const statusLabels: Record<string, string> = MESSAGES.customerUi.reservations.statuses;
 
 /**
  * 日付が変わったら空き時間を自動で取り直す。「空き時間を見る」ボタンを押させる方式は
@@ -99,7 +99,7 @@ watch(date, () => {
         return;
     }
 
-    availabilityTimer = setTimeout(() => void loadAvailability(), 150);
+    availabilityTimer = setTimeout(() => void loadAvailability(), AVAILABILITY_DEBOUNCE_MS);
 });
 
 watch(() => props.reservation.version, (version) => {
@@ -108,25 +108,6 @@ watch(() => props.reservation.version, (version) => {
     changeForm.starts_at = null;
     slots.value = [];
 });
-
-function formatDateTime(value: string): string {
-    return new Intl.DateTimeFormat('ja-JP', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        weekday: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-    }).format(new Date(value.replace(' ', 'T')));
-}
-
-function formatPrice(price: number): string {
-    return `${new Intl.NumberFormat('ja-JP').format(price)}円`;
-}
-
-function timeLabel(value: string): string {
-    return value.slice(11, 16);
-}
 
 function today(): string {
     const now = new Date();
@@ -200,7 +181,7 @@ function cancelReservation(): void {
 </script>
 
 <template>
-    <Head title="予約詳細" />
+    <Head :title="MESSAGES.customerUi.reservationShow.title" />
 
     <v-alert
         v-if="addon_payment"
@@ -209,13 +190,13 @@ function cancelReservation(): void {
         class="mx-auto mb-4"
         max-width="640"
     >
-        <div class="font-weight-bold mb-1">差額のお支払いが必要です</div>
-        <div class="mb-3">{{ formatPrice(addon_payment.amount) }} のお支払い手続きをお願いします。</div>
+        <div class="font-weight-bold mb-1">{{ MESSAGES.customerUi.reservationShow.addonRequired }}</div>
+        <div class="mb-3">{{ fillMessage(MESSAGES.customerUi.reservationShow.addonRequest, { amount: formatYenSuffix(addon_payment.amount) }) }}</div>
         <v-btn
             color="primary"
             :href="`/mypage/reservations/${reservation.id}/addon/checkout`"
         >
-            差額のお支払い
+            {{ MESSAGES.customerUi.reservationShow.addonPay }}
         </v-btn>
     </v-alert>
 
@@ -225,7 +206,7 @@ function cancelReservation(): void {
                 class="service-color"
                 :style="{ backgroundColor: reservation.color ?? '#757575' }"
             />
-            予約詳細
+            {{ MESSAGES.customerUi.reservationShow.title }}
         </v-card-title>
         <v-card-text>
             <v-chip color="primary" class="mb-4">
@@ -236,24 +217,24 @@ function cancelReservation(): void {
                 color="secondary"
                 class="mb-4 ml-2"
             >
-                お支払い：回数券
+                {{ MESSAGES.customerUi.reservationShow.paidByTicket }}
             </v-chip>
             <v-chip
                 v-if="reservation.payment_method === 'membership'"
                 color="secondary"
                 class="mb-4 ml-2"
             >
-                お支払い：利用権
+                {{ MESSAGES.customerUi.reservationShow.paidByMembership }}
             </v-chip>
             <v-list lines="two">
-                <v-list-item title="日時" :subtitle="formatDateTime(reservation.starts_at)" />
-                <v-list-item title="サービス" :subtitle="reservation.service_name" />
-                <v-list-item title="所要時間" :subtitle="`${reservation.duration_min}分`" />
-                <v-list-item title="料金" :subtitle="formatPrice(reservation.price)" />
-                <v-list-item title="担当" :subtitle="reservation.staff_name ?? '未定'" />
+                <v-list-item :title="MESSAGES.customerUi.reservationShow.dateTime" :subtitle="formatDateTime(reservation.starts_at, 'long')" />
+                <v-list-item :title="MESSAGES.customerUi.reservationShow.service" :subtitle="reservation.service_name" />
+                <v-list-item :title="MESSAGES.customerUi.reservationShow.duration" :subtitle="fillMessage(MESSAGES.customerUi.reservationShow.minutes, { min: String(reservation.duration_min) })" />
+                <v-list-item :title="MESSAGES.customerUi.reservationShow.price" :subtitle="formatYenSuffix(reservation.price)" />
+                <v-list-item :title="MESSAGES.customerUi.reservationShow.staff" :subtitle="reservation.staff_name ?? MESSAGES.customerUi.reservations.staffUndecided" />
                 <v-list-item
                     v-if="reservation.cancel_reason"
-                    title="キャンセル理由"
+                    :title="MESSAGES.customerUi.reservationShow.cancelReason"
                     :subtitle="reservation.cancel_reason"
                 />
             </v-list>
@@ -269,7 +250,7 @@ function cancelReservation(): void {
         </v-card-text>
 
         <v-card-actions class="pa-4 flex-wrap ga-2">
-            <v-btn href="/mypage/reservations" variant="text">一覧へ戻る</v-btn>
+            <v-btn href="/mypage/reservations" variant="text">{{ MESSAGES.customerUi.reservationShow.backToList }}</v-btn>
             <v-spacer />
             <v-btn
                 v-if="canModify"
@@ -277,7 +258,7 @@ function cancelReservation(): void {
                 variant="outlined"
                 @click="changeOpen = true"
             >
-                日時を変更
+                {{ MESSAGES.customerUi.bookingConfirmation.reschedule }}
             </v-btn>
             <v-btn
                 v-if="canModify"
@@ -285,17 +266,17 @@ function cancelReservation(): void {
                 variant="outlined"
                 @click="cancelOpen = true"
             >
-                キャンセル
+                {{ MESSAGES.customerUi.bookingConfirmation.cancel }}
             </v-btn>
         </v-card-actions>
     </v-card>
 
     <v-dialog v-model="changeOpen" max-width="560">
-        <v-card title="予約日時を変更">
+        <v-card :title="MESSAGES.customerUi.bookingConfirmation.rescheduleTitle">
             <v-card-text>
                 <DateField
                     v-model="date"
-                    label="変更後の日付"
+                    :label="MESSAGES.customerUi.bookingConfirmation.newDate"
                     :min="today()"
                     class="mb-4"
                 />
@@ -304,7 +285,7 @@ function cancelReservation(): void {
                     v-model="changeForm.starts_at"
                     :items="slotItems"
                     :loading="loadingSlots"
-                    label="時間"
+                    :label="MESSAGES.customerUi.reservationShow.time"
                     class="mb-4"
                     :disabled="slotItems.length === 0"
                 />
@@ -337,7 +318,7 @@ function cancelReservation(): void {
                 </div>
             </v-card-text>
             <v-card-actions class="pa-4">
-                <v-btn variant="text" @click="changeOpen = false">閉じる</v-btn>
+                <v-btn variant="text" @click="changeOpen = false">{{ MESSAGES.customerUi.bookingConfirmation.close }}</v-btn>
                 <v-spacer />
                 <v-btn
                     color="primary"
@@ -345,33 +326,33 @@ function cancelReservation(): void {
                     :loading="changeForm.processing"
                     @click="reschedule"
                 >
-                    この日時に変更
+                    {{ MESSAGES.customerUi.bookingConfirmation.rescheduleSubmit }}
                 </v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
 
     <v-dialog v-model="cancelOpen" max-width="480">
-        <v-card title="予約をキャンセルしますか？">
+        <v-card :title="MESSAGES.customerUi.reservationShow.cancelTitle">
             <v-card-text>
                 <p class="mb-4">{{ MESSAGES.reservation.cancelReleasesSlot }}</p>
                 <v-textarea
                     v-model="cancelForm.reason"
-                    label="理由（任意）"
+                    :label="MESSAGES.customerUi.bookingConfirmation.reasonOptional"
                     maxlength="255"
                     rows="3"
                     :error-messages="cancelForm.errors.reason"
                 />
             </v-card-text>
             <v-card-actions class="pa-4">
-                <v-btn variant="text" @click="cancelOpen = false">戻る</v-btn>
+                <v-btn variant="text" @click="cancelOpen = false">{{ MESSAGES.customerUi.bookingConfirmation.back }}</v-btn>
                 <v-spacer />
                 <v-btn
                     color="error"
                     :loading="cancelForm.processing"
                     @click="cancelReservation"
                 >
-                    キャンセルを確定
+                    {{ MESSAGES.customerUi.bookingConfirmation.cancelSubmit }}
                 </v-btn>
             </v-card-actions>
         </v-card>

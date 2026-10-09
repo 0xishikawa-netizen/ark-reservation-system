@@ -2,6 +2,7 @@
 import { router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 /**
  * マスタの削除ボタン（admin 専用）。必ず確認ダイアログを出し、使用中で削除できない時は理由をダイアログ内に表示する。
@@ -45,23 +46,23 @@ function confirm(): void {
             variant="text"
             color="error"
             prepend-icon="mdi-delete-outline"
-            :aria-label="`${name}を削除`"
+            :aria-label="fillMessage(MESSAGES.customerUi.masterDelete.ariaLabel, { name: name })"
             @click="open = true; error = null"
         >
-            削除
+            {{ MESSAGES.customerUi.masterDelete.button }}
         </v-btn>
         <v-dialog v-model="open" max-width="440">
             <v-card>
-                <v-card-title class="text-subtitle-1 font-weight-bold">{{ MESSAGES.masters.confirmTitle.replace('{label}', label) }}</v-card-title>
+                <v-card-title class="text-subtitle-1 font-weight-bold">{{ fillMessage(MESSAGES.masters.confirmTitle, { label: label }) }}</v-card-title>
                 <v-card-text>
-                    <p class="mb-2">「{{ name }}」を削除します。</p>
+                    <p class="mb-2">{{ fillMessage(MESSAGES.customerUi.masterDelete.body, { name: name }) }}</p>
                     <p class="text-body-2 text-medium-emphasis">{{ MESSAGES.masters.confirmBody }}</p>
                     <v-alert v-if="error" type="error" variant="tonal" density="compact" class="mt-3">{{ error }}</v-alert>
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer />
-                    <v-btn variant="text" @click="open = false">やめる</v-btn>
-                    <v-btn color="error" variant="flat" :loading="processing" :disabled="error !== null" @click="confirm">削除する</v-btn>
+                    <v-btn variant="text" @click="open = false">{{ MESSAGES.customerUi.masterDelete.cancel }}</v-btn>
+                    <v-btn color="error" variant="flat" :loading="processing" :disabled="error !== null" @click="confirm">{{ MESSAGES.customerUi.masterDelete.submit }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>

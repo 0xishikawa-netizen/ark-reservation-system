@@ -3,6 +3,14 @@
  * 値がない（null / undefined）ときは null を返し、呼び出し側で EmptyValue（薄いグレーの「-」）にする。
  * 0 は実績値なので必ず「0」「0円」「0.0%」として返す。
  */
+import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+
+/** 割合（0〜1）を百分率にする倍率。 */
+const PERCENT_SCALE = 100;
+/** 百分率の小数点以下の桁数。 */
+const PERCENT_FRACTION_DIGITS = 1;
+
 export type ReportValueFormat = 'count' | 'money' | 'percent' | 'decimal' | 'minutes';
 
 const integerFormat = new Intl.NumberFormat('ja-JP');
@@ -15,9 +23,9 @@ export function formatReportValue(value: number | null | undefined, format: Repo
 
     switch (format) {
         case 'money':
-            return `${integerFormat.format(Math.round(value))}円`;
+            return fillMessage(MESSAGES.customerUi.reportFormat.money, { amount: integerFormat.format(Math.round(value)) });
         case 'percent':
-            return `${(value * 100).toFixed(1)}%`;
+            return `${(value * PERCENT_SCALE).toFixed(PERCENT_FRACTION_DIGITS)}%`;
         case 'decimal':
             return decimalFormat.format(value);
         default:
@@ -36,5 +44,5 @@ export function formatReportDate(value: string): string {
     const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
     const weekday = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(date);
 
-    return `${Number(match[2])}/${Number(match[3])}（${weekday}）`;
+    return fillMessage(MESSAGES.customerUi.reportFormat.date, { month: String(Number(match[2])), day: String(Number(match[3])), weekday: weekday });
 }

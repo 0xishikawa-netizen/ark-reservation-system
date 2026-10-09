@@ -14,13 +14,13 @@ class PaymentGatewayDeclinedException extends PaymentGatewayException
 
     public function __construct(
         string $code,
-        string $message = 'カード決済が承認されませんでした。',
+        ?string $message = null,
         ?Throwable $previous = null,
     ) {
         $this->gatewayCode = $code;
         $this->declineCode = $code;
 
-        parent::__construct($message, 0, $previous);
+        parent::__construct($message ?? __('messages.payment.card_payment_declined'), 0, $previous);
     }
 
     public function getGatewayCode(): string

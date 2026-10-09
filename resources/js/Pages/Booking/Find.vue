@@ -3,8 +3,12 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { PageHeader, SectionCard } from '@/components/ark';
 import GuestBookingLayout from '@/layouts/GuestBookingLayout.vue';
+import { MESSAGES } from '@/constants/messages';
 
 defineOptions({ layout: GuestBookingLayout });
+
+/** SMS 認証コードの桁数。 */
+const OTP_CODE_LENGTH = 6;
 
 const props = defineProps<{
     code_sent: boolean;
@@ -32,21 +36,21 @@ const verify = (): void => {
 </script>
 
 <template>
-    <Head title="予約を探す" />
+    <Head :title="MESSAGES.customerUi.bookingFind.title" />
 
     <PageHeader
-        title="予約を探す"
-        subtitle="予約時の電話番号へ認証コードをお送りします。"
+        :title="MESSAGES.customerUi.bookingFind.title"
+        :subtitle="MESSAGES.customerUi.bookingFind.subtitle"
     />
 
     <SectionCard>
         <v-form @submit.prevent="codeSent ? verify() : sendCode()">
             <v-text-field
                 v-model="form.phone"
-                label="電話番号"
+                :label="MESSAGES.customerUi.bookingFind.phone"
                 autocomplete="tel"
                 persistent-hint
-                hint="予約時に入力した電話番号"
+                :hint="MESSAGES.customerUi.bookingFind.phoneHint"
                 :error-messages="form.errors.phone"
                 required
             />
@@ -55,10 +59,10 @@ const verify = (): void => {
                 <div v-if="codeSent">
                     <v-text-field
                         v-model="form.code"
-                        label="認証コード"
+                        :label="MESSAGES.customerUi.bookingFind.code"
                         inputmode="numeric"
                         autocomplete="one-time-code"
-                        maxlength="6"
+                        :maxlength="OTP_CODE_LENGTH"
                         :error-messages="form.errors.code"
                         required
                     />
@@ -68,9 +72,9 @@ const verify = (): void => {
                         size="large"
                         block
                         :loading="form.processing"
-                        :disabled="form.phone.trim() === '' || form.code.length !== 6"
+                        :disabled="form.phone.trim() === '' || form.code.length !== OTP_CODE_LENGTH"
                     >
-                        予約を表示する
+                        {{ MESSAGES.customerUi.bookingFind.show }}
                     </v-btn>
                     <v-btn
                         variant="text"
@@ -79,7 +83,7 @@ const verify = (): void => {
                         :disabled="form.processing"
                         @click="sendCode"
                     >
-                        認証コードを再送する
+                        {{ MESSAGES.customerUi.bookingFind.resend }}
                     </v-btn>
                 </div>
                 <v-btn
@@ -91,13 +95,13 @@ const verify = (): void => {
                     :loading="form.processing"
                     :disabled="form.phone.trim() === ''"
                 >
-                    認証コードを送る
+                    {{ MESSAGES.customerUi.bookingFind.send }}
                 </v-btn>
             </v-expand-transition>
         </v-form>
     </SectionCard>
 
     <p class="text-center text-body-2 mt-4 mb-0">
-        <a href="/booking">予約画面へ戻る</a>
+        <a href="/booking">{{ MESSAGES.customerUi.bookingFind.backToBooking }}</a>
     </p>
 </template>

@@ -4,6 +4,7 @@ import { MonthField, PageHeader, SectionCard } from '@/components/ark';
 import { formatReportDate, MonthlyReportTabs, ReportFilterBar, ReportFilterField, ReportTable, ReportText, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -24,11 +25,12 @@ interface Report {
 
 defineProps<{ report: Report }>();
 const hub = MESSAGES.monthlyHub;
+const M = MESSAGES.reportsUi.dailyLedger;
 const methodName = (code: string, name: string): string => MESSAGES.reporting.paymentMethodHeadings[code] ?? name;
-const payments = (sales: Sales | null): string => (sales?.payments ?? []).map((p) => `${methodName(p.code, p.name)} ${p.amount.toLocaleString()}円`).join(' ／ ');
+const payments = (sales: Sales | null): string => (sales?.payments ?? []).map((p) => fillMessage(M.paymentAmount, { method: methodName(p.code, p.name), amount: p.amount.toLocaleString() })).join(' ／ ');
 // 分類（M/T/A…）があれば「T30」のように、無ければ施術名と分数を出す（旧日計表のメニュー欄に合わせる）。
 const treatmentText = (row: VisitRow): string => row.treatments
-    .map((t) => (t.category ? `${t.category}${t.minutes ?? ''}` : `${t.name ?? ''}${t.minutes === null ? '' : ` ${t.minutes}分`}`).trim())
+    .map((t) => (t.category ? `${t.category}${t.minutes ?? ''}` : `${t.name ?? ''}${t.minutes === null ? '' : ` ${fillMessage(M.minutes, { minutes: String(t.minutes) })}`}`).trim())
     .join(' + ');
 const genderLabel = (value: string | null): string | null => hub.genders[value ?? ''] ?? null;
 
@@ -44,10 +46,10 @@ function reload(month: string): void {
     <MonthlyReportTabs active="ledger" :month="report.month_key" />
     <ReportFilterBar>
         <ReportFilterField size="md"><MonthField :model-value="report.month_key" :label="MESSAGES.calendar.targetMonth" data-testid="month-input" @update:model-value="reload" /></ReportFilterField>
-        <span class="legacy" data-testid="legacy-sheet">{{ hub.ledgerLegacy.replace('{sheet}', report.legacy_sheet_name) }}</span>
+        <span class="legacy" data-testid="legacy-sheet">{{ fillMessage(hub.ledgerLegacy, { sheet: report.legacy_sheet_name }) }}</span>
     </ReportFilterBar>
 
-    <SectionCard :title="`${hub.ledgerVisits}（${report.totals.visit_count}件）`" class="mb-4">
+    <SectionCard :title="fillMessage(M.visitsTitle, { label: hub.ledgerVisits, count: String(report.totals.visit_count) })" class="mb-4">
         <ReportTable max-height="none" page-sticky-header min-width="1500px" sticky-width="72px" data-testid="ledger-visits">
             <thead><tr>
                 <th class="is-sticky">{{ hub.colDate }}</th><th>{{ hub.colCustomer }}</th><th>{{ hub.colMenu }}</th><th>{{ hub.colTreatments }}</th>
@@ -59,7 +61,7 @@ function reload(month: string): void {
                 <tr v-for="row in report.rows" :key="row.id" :data-visit-id="row.id">
                     <th class="is-sticky">{{ formatReportDate(row.date) }}</th>
                     <td>{{ row.customer_name }}<small v-if="row.member_no" class="muted"> {{ row.member_no }}</small></td>
-                    <td><ReportText :value="row.reserved_menu" /><small v-if="row.entitlement" class="muted">（{{ row.entitlement === 'ticket' ? hub.entitlementTicket : hub.entitlementMembership }}）</small></td>
+                    <td><ReportText :value="row.reserved_menu" /><small v-if="row.entitlement" class="muted">{{ fillMessage(MESSAGES.reportsUi.shared.parenthesized, { value: row.entitlement === 'ticket' ? hub.entitlementTicket : hub.entitlementMembership }) }}</small></td>
                     <td><ReportText :value="treatmentText(row) || null" /></td>
                     <td><ReportText :value="row.primary_staff" /></td>
                     <td><ReportText :value="row.actual_staff.join('、') || null" /></td>
@@ -67,7 +69,7 @@ function reload(month: string): void {
                     <td><ReportText :value="row.sales?.retail_items.join('、') || null" /></td>
                     <td class="num">
                         <template v-if="row.sales"><ReportValue :value="row.sales.treatment_gross" format="money" /></template>
-                        <span v-else-if="row.checkout_exemption" class="muted">{{ hub.exempt.replace('{reason}', MESSAGES.visitCompletion.exemptionReasons[row.checkout_exemption] ?? row.checkout_exemption) }}</span>
+                        <span v-else-if="row.checkout_exemption" class="muted">{{ fillMessage(hub.exempt, { reason: MESSAGES.visitCompletion.exemptionReasons[row.checkout_exemption] ?? row.checkout_exemption }) }}</span>
                         <span v-else class="warn">{{ hub.unsettled }}</span>
                     </td>
                     <td class="num"><ReportValue :value="row.sales?.retail_gross ?? null" format="money" /></td>
@@ -75,17 +77,17 @@ function reload(month: string): void {
                     <td><ReportText :value="row.next_reservation === null ? null : (row.next_reservation ? hub.yes : hub.no)" /></td>
                     <td><ReportText :value="row.is_new === null ? null : (row.is_new ? hub.newVisit : hub.repeatVisit)" /></td>
                     <td><ReportText :value="genderLabel(row.gender)" /></td>
-                    <td><ReportText :value="row.age_decade === null ? null : hub.ageDecade.replace('{age}', String(row.age_decade))" /></td>
+                    <td><ReportText :value="row.age_decade === null ? null : fillMessage(hub.ageDecade, { age: String(row.age_decade) })" /></td>
                     <td><ReportText :value="row.channel" /></td>
                     <td>
                         <details v-if="row.sales || row.staff_minutes.length">
                             <summary>{{ hub.details }}</summary>
                             <div class="detail">
-                                <div v-for="(t, i) in row.treatments" :key="`t${i}`">{{ t.name }} {{ t.minutes }}分<template v-if="t.booth"> ／ {{ t.booth }}</template></div>
-                                <div v-for="(s, i) in row.staff_minutes" :key="`s${i}`">{{ s.name }} {{ s.minutes }}分</div>
+                                <div v-for="(t, i) in row.treatments" :key="`t${i}`">{{ t.name }} {{ fillMessage(M.minutes, { minutes: String(t.minutes ?? '') }) }}<template v-if="t.booth"> ／ {{ t.booth }}</template></div>
+                                <div v-for="(s, i) in row.staff_minutes" :key="`s${i}`">{{ s.name }} {{ fillMessage(M.minutes, { minutes: String(s.minutes ?? '') }) }}</div>
                                 <template v-if="row.sales">
-                                    <div v-for="(l, i) in row.sales.lines" :key="`l${i}`">{{ l.name }} ×{{ l.quantity }} {{ l.gross.toLocaleString() }}円</div>
-                                    <div class="muted">{{ hub.netTax.replace('{net}', row.sales.net.toLocaleString()).replace('{tax}', row.sales.tax.toLocaleString()) }}</div>
+                                    <div v-for="(l, i) in row.sales.lines" :key="`l${i}`">{{ l.name }} {{ fillMessage(M.lineDetail, { quantity: String(l.quantity), gross: l.gross.toLocaleString() }) }}</div>
+                                    <div class="muted">{{ fillMessage(hub.netTax, { net: row.sales.net.toLocaleString(), tax: row.sales.tax.toLocaleString() }) }}</div>
                                 </template>
                             </div>
                         </details>

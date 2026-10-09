@@ -32,7 +32,7 @@ final class ScheduleBlockService
         $this->validate($in);
 
         $block = DB::transaction(function () use ($in): StaffScheduleBlock {
-            $this->lockResources([$in->staffId], [$in->boothId]);
+            ResourceLock::forUpdate([$in->staffId], [$in->boothId]);
             $this->assertNoConflict($in);
 
             return StaffScheduleBlock::query()->create([
@@ -71,7 +71,7 @@ final class ScheduleBlockService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $this->lockResources(
+            ResourceLock::forUpdate(
                 [$locked->staff_id, $in->staffId],
                 [$locked->booth_id, $in->boothId],
             );
@@ -219,41 +219,6 @@ final class ScheduleBlockService
             ->whereTime('start_at', '<', $in->endsAt->format('H:i:s'))
             ->whereTime('end_at', '>', $in->startsAt->format('H:i:s'))
             ->exists();
-    }
-
-    /**
-     * @param  list<int|null>  $staffIds
-     * @param  list<int|null>  $boothIds
-     */
-    private function lockResources(array $staffIds, array $boothIds): void
-    {
-        $staffIds = array_values(array_unique(array_map(
-            static fn (mixed $id): int => (int) $id,
-            array_filter($staffIds, static fn (mixed $id): bool => $id !== null),
-        )));
-        sort($staffIds);
-        $boothIds = array_values(array_unique(array_map(
-            static fn (mixed $id): int => (int) $id,
-            array_filter($boothIds, static fn (mixed $id): bool => $id !== null),
-        )));
-        sort($boothIds);
-
-        if ($staffIds !== []) {
-            Staff::withTrashed()
-                ->whereIn('user_id', $staffIds)
-                ->orderBy('user_id')
-                ->lockForUpdate()
-                ->get();
-        }
-
-        if ($boothIds !== []) {
-            Booth::withTrashed()
-                ->withoutGlobalScope('sort_order')
-                ->whereIn('id', $boothIds)
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get();
-        }
     }
 
     private function summary(string $label, StaffScheduleBlock $block): string

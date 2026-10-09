@@ -16,8 +16,14 @@ import {
 } from '@/composables/notificationSound';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
+
+// 通知音の音量スライダー範囲と刻み。
+const MIN_NOTIFICATION_VOLUME = 10;
+const MAX_NOTIFICATION_VOLUME = 100;
+const NOTIFICATION_VOLUME_STEP = 10;
 
 interface NotificationSoundSettings {
     enabled: boolean;
@@ -62,10 +68,10 @@ const toItem = (o: (typeof NOTIFICATION_SOUND_OPTIONS)[number]): SoundItem => ({
 
 /** プルダウンの項目。気づきやすい音と控えめな音を見出しで分ける。 */
 const soundItems = computed<SoundItem[]>(() => [
-    { type: 'subheader', title: '通知音' },
+    { type: 'subheader', title: MESSAGES.mastersUi.notifications.soundHeading },
     ...NOTIFICATION_SOUND_OPTIONS.filter((o) => o.loud).map(toItem),
     { type: 'divider' },
-    { type: 'subheader', title: '控えめな音' },
+    { type: 'subheader', title: MESSAGES.mastersUi.notifications.quietSoundHeading },
     ...NOTIFICATION_SOUND_OPTIONS.filter((o) => !o.loud).map(toItem),
 ]);
 
@@ -110,28 +116,28 @@ function save(): void {
 </script>
 
 <template>
-    <Head title="通知設定" />
+    <Head :title="MESSAGES.mastersUi.notifications.title" />
 
     <div class="ark-settings-page">
         <PageHeader
-            title="通知設定"
-            subtitle="ブッキングボードで予約が入った時の通知方法を設定します。"
+            :title="MESSAGES.mastersUi.notifications.title"
+            :subtitle="MESSAGES.mastersUi.notifications.subtitle"
         />
 
-        <SectionCard title="新規予約の通知音">
+        <SectionCard :title="MESSAGES.mastersUi.notifications.sectionTitle">
             <v-switch
                 v-model="enabled"
                 color="primary"
                 inset
                 hide-details="auto"
-                :label="enabled ? '通知音を鳴らす' : '通知音を鳴らさない'"
+                :label="enabled ? MESSAGES.mastersUi.notifications.enabled : MESSAGES.mastersUi.notifications.disabled"
                 :error-messages="errors.enabled"
             />
 
             <div class="ns" :class="{ 'ns--disabled': !enabled }">
                 <!-- 音の種類 -->
                 <div class="ns__row">
-                    <div class="ns__label">音の種類</div>
+                    <div class="ns__label">{{ MESSAGES.mastersUi.notifications.soundType }}</div>
                     <div class="ns__field ns__sound">
                         <v-select
                             class="ns__select"
@@ -141,7 +147,7 @@ function save(): void {
                             hide-details="auto"
                             prepend-inner-icon="mdi-bell-ring-outline"
                             :error-messages="errors.type"
-                            aria-label="通知音の種類"
+                            :aria-label="MESSAGES.mastersUi.notifications.soundTypeAria"
                             @update:model-value="onSoundChange"
                         >
                             <template #item="{ props: itemProps, item }">
@@ -152,7 +158,7 @@ function save(): void {
                                             variant="text"
                                             size="small"
                                             color="primary"
-                                            :aria-label="`${item.title}を試聴`"
+                                            :aria-label="fillMessage(MESSAGES.mastersUi.notifications.previewAria, { name: String(item.title) })"
                                             @click.stop="previewItem(item.raw as SoundItem)"
                                         />
                                     </template>
@@ -168,20 +174,20 @@ function save(): void {
                             class="ns__play"
                             @click="preview()"
                         >
-                            試聴
+                            {{ MESSAGES.mastersUi.notifications.preview }}
                         </v-btn>
                     </div>
                 </div>
 
                 <!-- 音量 -->
                 <div class="ns__row">
-                    <div class="ns__label">音量</div>
+                    <div class="ns__label">{{ MESSAGES.mastersUi.notifications.volume }}</div>
                     <div class="ns__field">
                         <v-slider
                             v-model="volume"
-                            :min="10"
-                            :max="100"
-                            :step="10"
+                            :min="MIN_NOTIFICATION_VOLUME"
+                            :max="MAX_NOTIFICATION_VOLUME"
+                            :step="NOTIFICATION_VOLUME_STEP"
                             :disabled="!enabled"
                             color="primary"
                             thumb-label
@@ -189,7 +195,7 @@ function save(): void {
                             prepend-icon="mdi-volume-low"
                             append-icon="mdi-volume-high"
                             :error-messages="errors.volume"
-                            aria-label="通知音の音量"
+                            :aria-label="MESSAGES.mastersUi.notifications.volumeAria"
                             @end="preview()"
                         >
                             <template #thumb-label="{ modelValue }">{{ modelValue }}%</template>
@@ -200,7 +206,7 @@ function save(): void {
 
                 <!-- 繰り返し -->
                 <div class="ns__row">
-                    <div class="ns__label">繰り返し</div>
+                    <div class="ns__label">{{ MESSAGES.mastersUi.notifications.repeat }}</div>
                     <div class="ns__field">
                         <v-btn-toggle
                             v-model="repeat"
@@ -210,7 +216,7 @@ function save(): void {
                             density="comfortable"
                             divided
                             :disabled="!enabled"
-                            aria-label="通知音の繰り返し"
+                            :aria-label="MESSAGES.mastersUi.notifications.repeatAria"
                         >
                             <v-btn
                                 v-for="option in NOTIFICATION_REPEAT_OPTIONS"
@@ -228,7 +234,7 @@ function save(): void {
 
             <div class="d-flex justify-end mt-6">
                 <v-btn color="primary" :loading="processing" @click="save">
-                    保存
+                    {{ MESSAGES.mastersUi.notifications.save }}
                 </v-btn>
             </div>
         </SectionCard>

@@ -7,9 +7,9 @@ namespace App\Exceptions\Ticket;
 final class InsufficientTicketBalanceException extends \RuntimeException
 {
     public function __construct(
-        string $message = '回数券の残数が不足しています',
+        ?string $message = null,
         ?\Throwable $previous = null,
     ) {
-        parent::__construct($message, 0, $previous);
+        parent::__construct($message ?? __('messages.ticket.insufficient_balance_exception'), 0, $previous);
     }
 }

@@ -10,7 +10,14 @@ import {
     playNotificationSound,
     unlockNotificationSound,
 } from '@/composables/notificationSound';
+import { MESSAGES } from '@/constants/messages';
 import { getEcho } from '@/echo';
+import { fillMessage } from '@/utils/message';
+
+/** 通知音を3回鳴らす際に各音の後へ空ける秒数。 */
+const REPEAT_SOUND_GAP_SECONDS = 0.8;
+/** 秒をミリ秒へ変換する倍率。 */
+const MILLISECONDS_PER_SECOND = 1000;
 
 interface NotificationItem {
     id: number;
@@ -98,7 +105,7 @@ function ring(newIds: number[]): void {
 
     if (props.sound.repeat === 'three') {
         // 1回分の長さ＋少しの間をあけて、合計3回鳴らす。
-        const gapMs = (notificationSoundLength(props.sound.type) + 0.8) * 1000;
+        const gapMs = (notificationSoundLength(props.sound.type) + REPEAT_SOUND_GAP_SECONDS) * MILLISECONDS_PER_SECOND;
 
         for (const n of [1, 2]) {
             const timer = setTimeout(() => {
@@ -335,21 +342,21 @@ onBeforeUnmount(() => {
         <div v-for="row in visibleItems" :key="row.id" class="sn__card" @click="select(row)">
             <v-icon icon="mdi-calendar-check-outline" size="18" class="sn__icon" />
             <div class="sn__body">
-                <div class="sn__title">オンライン予約</div>
+                <div class="sn__title">{{ MESSAGES.boardUi.scheduleNotifications.onlineReservation }}</div>
                 <div class="sn__main">{{ row.customer_name }} ／ {{ row.service_name }}</div>
                 <div class="sn__sub">{{ fmtWhen(row) }}・{{ row.source_label }}</div>
             </div>
             <button
                 type="button"
                 class="sn__close"
-                aria-label="通知を閉じる"
+                :aria-label="MESSAGES.boardUi.scheduleNotifications.close"
                 @click.stop="dismiss(row)"
             >
                 <v-icon icon="mdi-close" size="16" />
             </button>
         </div>
         <div v-if="overflowCount > 0" class="sn__more">
-            ほか {{ overflowCount }} 件
+            {{ fillMessage(MESSAGES.boardUi.scheduleNotifications.overflow, { count: String(overflowCount) }) }}
         </div>
     </div>
 </template>

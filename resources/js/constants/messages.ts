@@ -2,9 +2,22 @@
  * 画面に表示するメッセージ（エラー・完了・確認・注意・空の時の表示）。
  *
  * 画面側の文言はここに集約し、各画面からは MESSAGES.<グループ>.<キー> で参照する。
+ * 画面ごとのラベル・見出し等は領域別ファイル constants/messages/{board,masters,reports,customer}.ts に置き、
+ * MESSAGES.boardUi / mastersUi / reportsUi / customerUi として束ねる（Task 11-34）。
+ * 差し込み値のある文言は `{名前}` で書き、utils/message.ts の fillMessage() で埋める（String.replace は使わない）。
  * サーバーから返すメッセージは lang/ja/messages.php に置く。
  */
+import { BOARD_MESSAGES } from './messages/board';
+import { CUSTOMER_MESSAGES } from './messages/customer';
+import { MASTERS_MESSAGES } from './messages/masters';
+import { REPORTS_MESSAGES } from './messages/reports';
+
 export const MESSAGES = {
+    /** 領域別の画面文言（Task 11-34。constants/messages/*.ts） */
+    boardUi: BOARD_MESSAGES,
+    mastersUi: MASTERS_MESSAGES,
+    reportsUi: REPORTS_MESSAGES,
+    customerUi: CUSTOMER_MESSAGES,
     /** 共通 */
     masters: {
         confirmTitle: '{label}を削除しますか？',

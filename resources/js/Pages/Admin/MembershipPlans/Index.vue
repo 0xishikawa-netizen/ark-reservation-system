@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { EmptyState, PageHeader, SectionCard, MasterDeleteButton, TrashedMasterList } from '@/components/ark';
+import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
+import { formatYenCurrency } from '@/utils/money';
+import { useMasterActiveToggle } from '@/composables/masterActive';
 
 defineOptions({ layout: AdminLayout });
 
@@ -20,68 +24,57 @@ interface MembershipPlanListItem {
 defineProps<{ trashed?: Array<{ id: number; name: string; deleted_at: string | null }>; membershipPlans: MembershipPlanListItem[] }>();
 
 const headers = [
-    { title: 'プラン名', key: 'name' },
-    { title: '月額', key: 'price' },
-    { title: '回数', key: 'usage_count_per_period' },
-    { title: '間隔', key: 'billing_interval' },
-    { title: 'Stripe 価格ID', key: 'stripe_price_id' },
-    { title: '稼働契約', key: 'active_memberships_count' },
-    { title: '表示順', key: 'sort_order' },
-    { title: '有効', key: 'is_active', sortable: false },
+    { title: MESSAGES.mastersUi.membershipPlans.name, key: 'name' },
+    { title: MESSAGES.mastersUi.membershipPlans.monthlyPrice, key: 'price' },
+    { title: MESSAGES.mastersUi.membershipPlans.count, key: 'usage_count_per_period' },
+    { title: MESSAGES.mastersUi.membershipPlans.interval, key: 'billing_interval' },
+    { title: MESSAGES.mastersUi.membershipPlans.stripePriceId, key: 'stripe_price_id' },
+    { title: MESSAGES.mastersUi.membershipPlans.activeContracts, key: 'active_memberships_count' },
+    { title: MESSAGES.mastersUi.membershipPlans.sortOrder, key: 'sort_order' },
+    { title: MESSAGES.mastersUi.membershipPlans.active, key: 'is_active', sortable: false },
     { title: '', key: 'actions', sortable: false, align: 'end' },
 ] as const;
 
-function toggleActive(plan: MembershipPlanListItem): void {
-    router.patch(
-        `/admin/membership-plans/${plan.id}/active`,
-        { active: !plan.is_active },
-        { preserveScroll: true },
-    );
-}
+// 有効/無効の切替（送信中は同じ行を押せない。M-6）
+const { isPending: isActivePending, toggle: toggleActive } = useMasterActiveToggle('/admin/membership-plans');
 
-function formatPrice(price: number): string {
-    return new Intl.NumberFormat('ja-JP', {
-        style: 'currency',
-        currency: 'JPY',
-        maximumFractionDigits: 0,
-    }).format(price);
-}
 </script>
 
 <template>
-    <Head title="月額プラン" />
+    <Head :title="MESSAGES.mastersUi.membershipPlans.title" />
 
-    <PageHeader title="月額プラン" subtitle="月額利用権の料金と利用回数を管理します。">
+    <PageHeader :title="MESSAGES.mastersUi.membershipPlans.title" :subtitle="MESSAGES.mastersUi.membershipPlans.subtitle">
         <template #actions>
-            <v-btn color="primary" href="/admin/membership-plans/create">月額プランを追加</v-btn>
+            <v-btn color="primary" href="/admin/membership-plans/create">{{ MESSAGES.mastersUi.membershipPlans.add }}</v-btn>
         </template>
     </PageHeader>
 
-    <SectionCard title="月額プラン一覧" class="ark-table-section">
+    <SectionCard :title="MESSAGES.mastersUi.membershipPlans.list" class="ark-table-section">
         <v-data-table
             :headers="headers"
             :items="membershipPlans"
             item-value="id"
-            no-data-text="月額プランはありません。"
+            :no-data-text="MESSAGES.mastersUi.membershipPlans.noData"
         >
             <template #no-data>
                 <EmptyState
                     icon="mdi-card-account-details-outline"
-                    title="月額プランはありません"
-                    description="月額プランを追加すると、こちらで料金と利用回数を管理できます。"
+                    :title="MESSAGES.mastersUi.membershipPlans.emptyTitle"
+                    :description="MESSAGES.mastersUi.membershipPlans.emptyDescription"
                 />
             </template>
-            <template #item.price="{ item }">{{ formatPrice(item.price) }}</template>
-            <template #item.usage_count_per_period="{ item }">{{ item.usage_count_per_period }}回</template>
-            <template #item.billing_interval="{ item }">{{ item.billing_interval === 'month' ? '月ごと' : item.billing_interval }}</template>
-            <template #item.active_memberships_count="{ item }">{{ item.active_memberships_count }}件</template>
+            <template #item.price="{ item }">{{ formatYenCurrency(item.price) }}</template>
+            <template #item.usage_count_per_period="{ item }">{{ fillMessage(MESSAGES.mastersUi.membershipPlans.countValue, { count: String(item.usage_count_per_period) }) }}</template>
+            <template #item.billing_interval="{ item }">{{ item.billing_interval === 'month' ? MESSAGES.mastersUi.membershipPlans.monthlyInterval : item.billing_interval }}</template>
+            <template #item.active_memberships_count="{ item }">{{ fillMessage(MESSAGES.mastersUi.membershipPlans.contractsValue, { count: String(item.active_memberships_count) }) }}</template>
             <template #item.is_active="{ item }">
                 <v-switch
                     :model-value="item.is_active"
                     color="primary"
                     hide-details
-                    :aria-label="`${item.name}の有効状態`"
-                    @click.stop="toggleActive(item)"
+                    :aria-label="fillMessage(MESSAGES.mastersUi.membershipPlans.activeState, { name: item.name })"
+                    :disabled="isActivePending(item.id)"
+                    @update:model-value="toggleActive(item, $event)"
                 />
             </template>
             <template #item.actions="{ item }">
@@ -92,13 +85,13 @@ function formatPrice(price: number): string {
                     prepend-icon="mdi-pencil-outline"
                     :href="`/admin/membership-plans/${item.id}/edit`"
                 >
-                    編集
+                    {{ MESSAGES.mastersUi.membershipPlans.edit }}
                 </v-btn>
-                <MasterDeleteButton type="membership-plans" :id="item.id" :name="item.name" label="月額プラン" />
+                <MasterDeleteButton type="membership-plans" :id="item.id" :name="item.name" :label="MESSAGES.mastersUi.membershipPlans.masterLabel" />
             </template>
         </v-data-table>
     </SectionCard>
-    <TrashedMasterList type="membership-plans" label="月額プラン" :items="trashed ?? []" />
+    <TrashedMasterList type="membership-plans" :label="MESSAGES.mastersUi.membershipPlans.masterLabel" :items="trashed ?? []" />
 </template>
 
 <style scoped>

@@ -27,20 +27,20 @@ final class TicketPolicySettingsController extends Controller
                 'no_show' => [
                     [
                         'value' => 'restore',
-                        'label' => '回数を返却する',
-                        'description' => 'RESERVE_RELEASE のみ。無断キャンセルでも顧客の利用可能回数が 1 戻ります。',
+                        'label' => __('messages.ticket_policy.restore_label'),
+                        'description' => __('messages.ticket_policy.restore_description'),
                     ],
                     [
                         'value' => 'consume',
-                        'label' => '1回分を消化する',
-                        'description' => 'RESERVE_RELEASE + CONSUME。無断キャンセルで 1 回分を消化し、利用可能回数は戻りません。',
+                        'label' => __('messages.ticket_policy.consume_label'),
+                        'description' => __('messages.ticket_policy.consume_description'),
                     ],
                 ],
                 'expiration_hold' => [
                     [
                         'value' => 'preserve_hold',
-                        'label' => '予約分は保持し、予約結果に応じて後処理する',
-                        'description' => '有効期限が来ても、予約で確保済みの回数は保持します。来店で消化・キャンセルで返却（返却分は期限切れとして相殺）します。',
+                        'label' => __('messages.ticket_policy.preserve_hold_label'),
+                        'description' => __('messages.ticket_policy.preserve_hold_description'),
                     ],
                 ],
             ],

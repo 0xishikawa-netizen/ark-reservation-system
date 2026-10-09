@@ -22,7 +22,10 @@ import type {
  * 予約カードのドラッグ&ドロップ（時間／担当スタッフ・ブース／日付の変更・§13-17, §27-33）。
  * 台帳ページの状態（レーン・時間軸・パネル操作）は引数で受け取り、ドラッグ中の状態と操作を返す。
  */
+/** クリックとドラッグを分ける移動距離。 */
 export const DRAG_THRESHOLD_PX = 6;
+/** ドラッグ時に利用する予約枠の最小刻み。 */
+const MIN_DRAG_SLOT_MINUTES = 5;
 
 export interface ReservationDragContext {
     axisMode: Ref<ScheduleAxis>;
@@ -70,7 +73,7 @@ export function useReservationDrag(ctx: ReservationDragContext) {
     /* ───────────────── ドラッグ&ドロップ（時間／担当スタッフ・ブース／日付・§13-17, §27-33） ───────────────── */
 
     const snapMinutes = computed(() =>
-        Math.max(props.business_hours.slot_minutes, 5),
+        Math.max(props.business_hours.slot_minutes, MIN_DRAG_SLOT_MINUTES),
     );
 
     function isDraggable(reservation: ScheduleReservation): boolean {
@@ -533,7 +536,9 @@ export function useReservationDrag(ctx: ReservationDragContext) {
         kind: "staff" | "booth",
     ): string {
         if (laneId === null) {
-            return kind === "staff" ? "担当なし" : "ブース未割当";
+            return kind === "staff"
+                ? MESSAGES.boardUi.schedule.unassignedStaff
+                : MESSAGES.boardUi.schedule.unassignedBooth;
         }
 
         return (

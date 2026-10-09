@@ -3,6 +3,12 @@
  * 第1階層はカテゴリだけに統一し（項目が1つのカテゴリもネストする）、各画面は必ずカテゴリの下に置く。
  * 画面への route（href）は変更しない。
  */
+import { MESSAGES } from '@/constants/messages';
+
+/** 設定メニューの文言（カテゴリ名・項目名）。 */
+const NAV = MESSAGES.customerUi.navigation;
+const CATEGORY = NAV.settingsCategories;
+const ITEM = NAV.settingsItems;
 
 interface SettingsPermissions {
     staffManage: boolean;
@@ -18,10 +24,10 @@ interface SettingsPermissions {
 
 /** カテゴリの表示順・アイコン。 */
 export const SETTINGS_CATEGORIES = [
-    { title: '店舗設定', icon: 'mdi-storefront-outline' },
-    { title: '予約設定', icon: 'mdi-calendar-check-outline' },
-    { title: '回数券・月額', icon: 'mdi-wallet-membership' },
-    { title: '権限管理', icon: 'mdi-shield-lock-outline' },
+    { title: CATEGORY.store, icon: 'mdi-storefront-outline' },
+    { title: CATEGORY.reservation, icon: 'mdi-calendar-check-outline' },
+    { title: CATEGORY.ticketMembership, icon: 'mdi-wallet-membership' },
+    { title: CATEGORY.permissions, icon: 'mdi-shield-lock-outline' },
 ] as const;
 
 export type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number]['title'];
@@ -31,7 +37,7 @@ export interface SettingsNavigationItem {
     href: string;
     disabled: false;
     icon: string;
-    group: '設定';
+    group: typeof NAV.groups.settings;
     subgroup: SettingsCategory;
 }
 
@@ -42,27 +48,27 @@ export interface SettingsSection {
 }
 
 const item = (title: string, href: string, icon: string, subgroup: SettingsCategory): SettingsNavigationItem => (
-    { title, href, disabled: false, icon, group: '設定', subgroup }
+    { title, href, disabled: false, icon, group: NAV.groups.settings, subgroup }
 );
 
 export function settingsNavigationItems(can: SettingsPermissions): SettingsNavigationItem[] {
     return [
-        ...(can.staffManage ? [item('スタッフ', '/admin/staff', 'mdi-account-group-outline', '店舗設定')] : []),
-        ...(can.servicesManage ? [item('メニュー', '/admin/services', 'mdi-clipboard-text-outline', '店舗設定')] : []),
+        ...(can.staffManage ? [item(ITEM.staff, '/admin/staff', 'mdi-account-group-outline', CATEGORY.store)] : []),
+        ...(can.servicesManage ? [item(ITEM.services, '/admin/services', 'mdi-clipboard-text-outline', CATEGORY.store)] : []),
         ...(can.settingsManage ? [
-            item('商品', '/admin/products', 'mdi-package-variant-closed', '店舗設定'),
-            item('業務マスタ', '/admin/settings/business-masters', 'mdi-database-cog-outline', '店舗設定'),
+            item(ITEM.products, '/admin/products', 'mdi-package-variant-closed', CATEGORY.store),
+            item(ITEM.businessMasters, '/admin/settings/business-masters', 'mdi-database-cog-outline', CATEGORY.store),
         ] : []),
-        ...(can.boothsManage ? [item('ブース', '/admin/booths', 'mdi-door-open', '店舗設定')] : []),
-        ...(can.shiftsManage ? [item('勤務枠', '/admin/staff-shifts', 'mdi-calendar-clock-outline', '店舗設定')] : []),
+        ...(can.boothsManage ? [item(ITEM.booths, '/admin/booths', 'mdi-door-open', CATEGORY.store)] : []),
+        ...(can.shiftsManage ? [item(ITEM.staffShifts, '/admin/staff-shifts', 'mdi-calendar-clock-outline', CATEGORY.store)] : []),
         ...(can.settingsManage ? [
-            item('予約ポリシー', '/admin/settings/reservation', 'mdi-calendar-alert-outline', '予約設定'),
-            item('通知設定', '/admin/settings/notifications', 'mdi-bell-ring-outline', '予約設定'),
+            item(ITEM.reservationPolicy, '/admin/settings/reservation', 'mdi-calendar-alert-outline', CATEGORY.reservation),
+            item(ITEM.notifications, '/admin/settings/notifications', 'mdi-bell-ring-outline', CATEGORY.reservation),
         ] : []),
-        ...(can.ticketProductsManage ? [item('回数券商品', '/admin/ticket-products', 'mdi-ticket-confirmation-outline', '回数券・月額')] : []),
-        ...(can.ticketPolicyManage ? [item('回数券運用設定', '/admin/settings/tickets', 'mdi-tune-variant', '回数券・月額')] : []),
-        ...(can.membershipManage ? [item('月額プラン', '/admin/membership-plans', 'mdi-card-account-details-outline', '回数券・月額')] : []),
-        ...(can.rolesManage ? [item('ロール権限', '/admin/settings/roles', 'mdi-shield-account-outline', '権限管理')] : []),
+        ...(can.ticketProductsManage ? [item(ITEM.ticketProducts, '/admin/ticket-products', 'mdi-ticket-confirmation-outline', CATEGORY.ticketMembership)] : []),
+        ...(can.ticketPolicyManage ? [item(ITEM.ticketPolicy, '/admin/settings/tickets', 'mdi-tune-variant', CATEGORY.ticketMembership)] : []),
+        ...(can.membershipManage ? [item(ITEM.membershipPlans, '/admin/membership-plans', 'mdi-card-account-details-outline', CATEGORY.ticketMembership)] : []),
+        ...(can.rolesManage ? [item(ITEM.roles, '/admin/settings/roles', 'mdi-shield-account-outline', CATEGORY.permissions)] : []),
     ];
 }
 

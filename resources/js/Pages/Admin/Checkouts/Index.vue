@@ -6,6 +6,7 @@ import CustomerPicker, { type PickedCustomer } from '@/components/checkout/Custo
 import { ReportFilterBar, ReportFilterField, ReportTable, ReportValue } from '@/components/reports';
 import { MESSAGES } from '@/constants/messages';
 import AdminLayout from '@/layouts/AdminLayout.vue';
+import { fillMessage } from '@/utils/message';
 
 defineOptions({ layout: AdminLayout });
 
@@ -85,7 +86,7 @@ function create(): void {
             </thead>
             <tbody>
                 <tr v-for="row in rows" :key="`${row.kind}-${row.id}`">
-                    <td>{{ row.kind === 'visit' ? labels.kindVisit : labels.kindSale }}<small v-if="row.kind === 'visit'" class="muted">（{{ row.has_reservation ? labels.reservationLinked : labels.walkIn }}）</small></td>
+                    <td>{{ row.kind === 'visit' ? labels.kindVisit : labels.kindSale }}<small v-if="row.kind === 'visit'" class="muted">{{ fillMessage(MESSAGES.reportsUi.shared.parenthesized, { value: row.has_reservation ? labels.reservationLinked : labels.walkIn }) }}</small></td>
                     <td><template v-if="row.customer_name">{{ row.customer_name }}</template><EmptyValue v-else :label="labels.anonymous" /></td>
                     <td><template v-if="row.primary_staff_name">{{ row.primary_staff_name }}</template><EmptyValue v-else /></td>
                     <td><template v-if="row.kind === 'visit'">{{ statusLabel(row.visit_status) }}</template><EmptyValue v-else /></td>

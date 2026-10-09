@@ -40,7 +40,7 @@ final class RevenueRecognitionService
     public function createMembershipContract(Membership $membership, int $contractAmount, string $operationKey, array $attributes, ?Authenticatable $actor = null): RevenueRecognitionContract
     {
         if (! isset($attributes['period_start'], $attributes['period_end'])) {
-            throw ValidationException::withMessages(['period_start' => '月額配賦には対象期間が必要です。']);
+            throw ValidationException::withMessages(['period_start' => __('messages.revenue_recognition.period_required')]);
         }
 
         return $this->createContract(
@@ -71,20 +71,20 @@ final class RevenueRecognitionService
             if ($existing !== null) {
                 if ((int) $existing->revenue_recognition_contract_id !== (int) $locked->getKey()
                     || (int) $existing->amount !== $amount) {
-                    throw ValidationException::withMessages(['operation_key' => '操作キーが別内容の収益配賦で使用されています。']);
+                    throw ValidationException::withMessages(['operation_key' => __('messages.revenue_recognition.allocation_operation_key_conflict')]);
                 }
 
                 return $existing;
             }
             if ($locked->status !== RevenueRecognitionContractStatus::Active || $amount < 0) {
-                throw ValidationException::withMessages(['contract' => '有効な配賦契約と0円以上の金額が必要です。']);
+                throw ValidationException::withMessages(['contract' => __('messages.revenue_recognition.valid_contract_required')]);
             }
             $this->validateUsage($locked, $ticketUsage, $membershipUsage);
 
             $allocated = (int) RevenueAllocation::query()
                 ->where('revenue_recognition_contract_id', $locked->getKey())->lockForUpdate()->sum('amount');
             if ($allocated + $amount > (int) $locked->contract_amount) {
-                throw ValidationException::withMessages(['amount' => '配賦合計が元契約金額を超えます。']);
+                throw ValidationException::withMessages(['amount' => __('messages.revenue_recognition.amount_exceeds_contract')]);
             }
 
             $allocationNo = (int) RevenueAllocation::query()
@@ -117,7 +117,7 @@ final class RevenueRecognitionService
             $total = (int) RevenueAllocation::query()
                 ->where('revenue_recognition_contract_id', $locked->getKey())->lockForUpdate()->sum('amount');
             if ($total !== (int) $locked->contract_amount) {
-                throw ValidationException::withMessages(['allocations' => '配賦合計が元契約金額と一致しません。']);
+                throw ValidationException::withMessages(['allocations' => __('messages.revenue_recognition.amount_mismatch')]);
             }
             $locked->forceFill(['status' => RevenueRecognitionContractStatus::Closed])->save();
             $this->audit->log('revenue_contract.closed', $locked, '収益配賦契約を完了', $actor);
@@ -130,7 +130,7 @@ final class RevenueRecognitionService
     private function createContract(RevenueContractKind $kind, array $anchor, int $amount, string $operationKey, array $attributes, ?Authenticatable $actor): RevenueRecognitionContract
     {
         if ($amount < 0 || trim($operationKey) === '') {
-            throw ValidationException::withMessages(['contract_amount' => '元契約金額と操作キーを指定してください。']);
+            throw ValidationException::withMessages(['contract_amount' => __('messages.revenue_recognition.contract_amount_and_key_required')]);
         }
 
         return DB::transaction(function () use ($kind, $anchor, $amount, $operationKey, $attributes, $actor): RevenueRecognitionContract {
@@ -143,11 +143,11 @@ final class RevenueRecognitionService
             ]);
             foreach ($anchor as $key => $value) {
                 if ((int) $contract->{$key} !== (int) $value) {
-                    throw ValidationException::withMessages(['operation_key' => '操作キーが別契約で使用されています。']);
+                    throw ValidationException::withMessages(['operation_key' => __('messages.revenue_recognition.contract_operation_key_conflict')]);
                 }
             }
             if ($contract->kind !== $kind || (int) $contract->contract_amount !== $amount) {
-                throw ValidationException::withMessages(['operation_key' => '操作キーが別内容の契約で使用されています。']);
+                throw ValidationException::withMessages(['operation_key' => __('messages.revenue_recognition.contract_operation_content_conflict')]);
             }
             if ($contract->wasRecentlyCreated) {
                 $this->audit->log('revenue_contract.created', $contract, '収益配賦契約を作成', $actor);
@@ -164,13 +164,13 @@ final class RevenueRecognitionService
     ): void {
         if ($contract->kind === RevenueContractKind::Ticket) {
             if ($ticketUsage === null || $membershipUsage !== null || (int) $ticketUsage->ticket_wallet_id !== (int) $contract->ticket_wallet_id) {
-                throw ValidationException::withMessages(['ticket_usage' => '回数券配賦と利用実績が一致しません。']);
+                throw ValidationException::withMessages(['ticket_usage' => __('messages.revenue_recognition.ticket_usage_mismatch')]);
             }
 
             return;
         }
         if ($membershipUsage === null || $ticketUsage !== null || (int) $membershipUsage->membership_id !== (int) $contract->membership_id) {
-            throw ValidationException::withMessages(['membership_usage' => '月額配賦と利用実績が一致しません。']);
+            throw ValidationException::withMessages(['membership_usage' => __('messages.revenue_recognition.membership_usage_mismatch')]);
         }
     }
 }

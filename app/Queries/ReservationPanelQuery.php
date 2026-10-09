@@ -313,13 +313,13 @@ final class ReservationPanelQuery
     public static function statusLabel(ReservationStatus $status): string
     {
         return match ($status) {
-            ReservationStatus::PendingPayment => '支払い待ち',
-            ReservationStatus::PendingExternalSync => '外部連携待ち',
-            ReservationStatus::Confirmed => '予約確定',
-            ReservationStatus::Completed => '来店完了',
-            ReservationStatus::NoShow => '無断キャンセル',
-            ReservationStatus::Canceled => 'キャンセル',
-            ReservationStatus::Expired => '期限切れ',
+            ReservationStatus::PendingPayment => __('messages.query_labels.reservation_pending_payment'),
+            ReservationStatus::PendingExternalSync => __('messages.query_labels.reservation_pending_external_sync'),
+            ReservationStatus::Confirmed => __('messages.query_labels.reservation_confirmed'),
+            ReservationStatus::Completed => __('messages.query_labels.reservation_completed'),
+            ReservationStatus::NoShow => __('messages.query_labels.reservation_no_show'),
+            ReservationStatus::Canceled => __('messages.query_labels.reservation_canceled'),
+            ReservationStatus::Expired => __('messages.customer_dashboard.reservation_expired'),
         };
     }
 
@@ -331,19 +331,19 @@ final class ReservationPanelQuery
             ReservationSource::ArkWeb => 'ARK Web',
             ReservationSource::PeakManager => 'Peak Manager',
             ReservationSource::SalonBoard => 'SALON BOARD',
-            ReservationSource::External => '外部予約',
-            ReservationSource::Admin => '管理画面',
+            ReservationSource::External => __('messages.query_labels.source_external'),
+            ReservationSource::Admin => __('messages.query_labels.source_admin'),
         };
     }
 
     public static function paymentMethodLabel(PaymentMethod $method): string
     {
         return match ($method) {
-            PaymentMethod::Single => 'カード決済',
-            PaymentMethod::Membership => '月額プラン',
-            PaymentMethod::Ticket => '回数券',
-            PaymentMethod::Onsite => '店頭支払い',
-            PaymentMethod::Unpaid => '未設定',
+            PaymentMethod::Single => __('messages.customer_dashboard.kind_single'),
+            PaymentMethod::Membership => __('messages.masters.type_membership_plan'),
+            PaymentMethod::Ticket => __('messages.masters.type_ticket'),
+            PaymentMethod::Onsite => __('messages.query_labels.payment_method_onsite'),
+            PaymentMethod::Unpaid => __('messages.query_labels.unconfigured'),
         };
     }
 }

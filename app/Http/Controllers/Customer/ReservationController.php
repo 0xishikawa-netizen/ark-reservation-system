@@ -10,11 +10,10 @@ use App\Domain\Reservation\RescheduleInput;
 use App\Domain\Reservation\ReservationService;
 use App\Enums\Reservation\ReservationStatus;
 use App\Exceptions\Reservation\SlotUnavailableException;
+use App\Http\Controllers\Concerns\ResolvesAuthenticatedUser;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\RescheduleReservationRequest;
-use App\Models\Customer;
 use App\Models\Reservation;
-use App\Models\User;
 use App\Queries\CustomerReservationListQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -24,6 +23,8 @@ use Inertia\Response;
 
 class ReservationController extends Controller
 {
+    use ResolvesAuthenticatedUser;
+
     public function index(
         Request $request,
         CustomerReservationListQuery $query,
@@ -151,27 +152,5 @@ class ReservationController extends Controller
         return redirect()
             ->route('mypage.reservations.index')
             ->with('success', __('messages.reservation.canceled'));
-    }
-
-    private function userFor(Request $request): User
-    {
-        $user = $request->user();
-
-        if (! $user instanceof User) {
-            abort(403);
-        }
-
-        return $user;
-    }
-
-    private function customerFor(Request $request): Customer
-    {
-        $customer = $this->userFor($request)->customer;
-
-        if (! $customer instanceof Customer) {
-            abort(403);
-        }
-
-        return $customer;
     }
 }

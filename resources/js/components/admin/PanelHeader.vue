@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MESSAGES } from '@/constants/messages';
+
 withDefaults(defineProps<{
     title: string;
     icon?: string | null;
@@ -21,11 +23,11 @@ const emit = defineEmits<{
                 v-if="showBack"
                 type="button"
                 class="ph__back"
-                aria-label="戻る"
+                :aria-label="MESSAGES.boardUi.panelHeader.back"
                 @click="emit('back')"
             >
                 <v-icon icon="mdi-arrow-left" size="14" />
-                <span>戻る</span>
+                <span>{{ MESSAGES.boardUi.panelHeader.back }}</span>
             </button>
             <v-icon v-if="icon" :icon="icon" size="16" class="ph__icon" />
             <span class="ph__title">{{ title }}</span>
@@ -36,7 +38,7 @@ const emit = defineEmits<{
                 variant="text"
                 size="small"
                 color="white"
-                aria-label="パネルを閉じる"
+                :aria-label="MESSAGES.boardUi.panelHeader.close"
                 @click="emit('close')"
             />
         </span>

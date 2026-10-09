@@ -4,6 +4,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { PageHeader } from '@/components/ark';
 import GuestBookingLayout from '@/layouts/GuestBookingLayout.vue';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
+import { loadStripeJs } from '@/composables/stripeJs';
 
 defineOptions({ layout: GuestBookingLayout });
 
@@ -30,8 +32,12 @@ interface CheckoutProps {
 
 const props = defineProps<CheckoutProps>();
 
-/** Stripe.js は CSP で許可した公式ドメインからのみ読み込む。 */
-const STRIPE_JS = 'https://js.stripe.com/v3';
+/** 残り時間の表示を更新する間隔（ミリ秒）。 */
+const COUNTDOWN_INTERVAL_MS = 1000;
+/** ミリ秒を秒へ換算する係数。 */
+const MS_PER_SECOND = 1000;
+/** 1分あたりの秒数。 */
+const SECONDS_PER_MINUTE = 60;
 
 interface StripeElement {
     mount: (selector: string) => void;
@@ -63,7 +69,7 @@ let elements: StripeElements | null = null;
 let paymentElement: StripeElement | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
 
-const amountLabel = computed(() => `${props.payment.amount.toLocaleString()} 円`);
+const amountLabel = computed(() => fillMessage(MESSAGES.customerUi.checkout.amount, { amount: props.payment.amount.toLocaleString() }));
 const expired = computed(
     () => remainingSeconds.value !== null && remainingSeconds.value <= 0,
 );
@@ -72,25 +78,11 @@ const remainingLabel = computed(() => {
         return null;
     }
     const total = Math.max(0, remainingSeconds.value);
-    const minutes = Math.floor(total / 60);
-    const seconds = total % 60;
+    const minutes = Math.floor(total / SECONDS_PER_MINUTE);
+    const seconds = total % SECONDS_PER_MINUTE;
 
-    return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
+    return fillMessage(MESSAGES.customerUi.checkout.remaining, { minutes: String(minutes), seconds: String(seconds).padStart(2, '0') });
 });
-
-const loadStripeJs = (): Promise<void> =>
-    new Promise((resolve, reject) => {
-        if (window.Stripe) {
-            resolve();
-
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = STRIPE_JS;
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('stripe-js-load-failed'));
-        document.head.appendChild(script);
-    });
 
 const startCountdown = (): void => {
     if (!props.reservation.payment_expires_at) {
@@ -98,10 +90,10 @@ const startCountdown = (): void => {
     }
     const deadline = new Date(props.reservation.payment_expires_at).getTime();
     const tick = (): void => {
-        remainingSeconds.value = Math.floor((deadline - Date.now()) / 1000);
+        remainingSeconds.value = Math.floor((deadline - Date.now()) / MS_PER_SECOND);
     };
     tick();
-    timer = setInterval(tick, 1000);
+    timer = setInterval(tick, COUNTDOWN_INTERVAL_MS);
 };
 
 onMounted(async () => {
@@ -176,22 +168,22 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Head title="お支払い" />
+    <Head :title="MESSAGES.customerUi.checkout.title" />
 
-    <PageHeader title="お支払い" subtitle="安全な Stripe 決済画面でお手続きください。" />
+    <PageHeader :title="MESSAGES.customerUi.checkout.title" :subtitle="MESSAGES.customerUi.checkout.subtitle" />
 
     <v-card class="mb-4" variant="outlined">
         <v-card-text>
             <div class="d-flex justify-space-between mb-1 ga-4">
-                <span class="text-medium-emphasis">メニュー</span>
+                <span class="text-medium-emphasis">{{ MESSAGES.customerUi.checkout.service }}</span>
                 <span class="text-right">{{ reservation.service_name }}</span>
             </div>
             <div class="d-flex justify-space-between mb-1 ga-4">
-                <span class="text-medium-emphasis">日時</span>
+                <span class="text-medium-emphasis">{{ MESSAGES.customerUi.checkout.dateTime }}</span>
                 <span class="text-right">{{ reservation.starts_at }}</span>
             </div>
             <div class="d-flex justify-space-between ga-4">
-                <span class="text-medium-emphasis">お支払い金額</span>
+                <span class="text-medium-emphasis">{{ MESSAGES.customerUi.checkout.amountLabel }}</span>
                 <span class="font-weight-bold">{{ amountLabel }}</span>
             </div>
         </v-card-text>
@@ -204,8 +196,7 @@ const submit = async (): Promise<void> => {
         density="comfortable"
         class="mb-4"
     >
-        この予約枠はあと <strong>{{ remainingLabel }}</strong> 確保されています。
-        期限を過ぎると枠は解放されます。
+        {{ MESSAGES.customerUi.checkout.holdPrefix }} <strong>{{ remainingLabel }}</strong> {{ MESSAGES.customerUi.checkout.holdSuffix }}
     </v-alert>
 
     <v-alert v-if="expired" type="warning" variant="tonal" class="mb-4">
@@ -233,7 +224,7 @@ const submit = async (): Promise<void> => {
                 :disabled="loading || expired || !stripe"
                 @click="submit"
             >
-                {{ amountLabel }} を支払う
+                {{ fillMessage(MESSAGES.customerUi.checkout.pay, { amount: amountLabel }) }}
             </v-btn>
         </v-card-actions>
     </v-card>
@@ -243,6 +234,6 @@ const submit = async (): Promise<void> => {
     </p>
 
     <v-btn :href="confirmation_url" variant="text" class="mt-2">
-        予約内容へ戻る
+        {{ MESSAGES.customerUi.checkout.backToReservation }}
     </v-btn>
 </template>

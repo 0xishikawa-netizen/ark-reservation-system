@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ArkCalendar } from "@/components/ark";
 import { dayLabel } from "@/components/admin/schedule/scheduleFormat";
+import { MESSAGES } from "@/constants/messages";
+import { fillMessage } from '@/utils/message';
 
 /**
  * ドラッグ&ドロップで予約／予定ブロックを動かした時の確認ダイアログ（誤操作防止・§14, §40）。
@@ -41,12 +43,12 @@ defineEmits<{
                 </div>
                 <div class="ark-move-compare">
                     <div>
-                        <div class="text-caption text-medium-emphasis">変更前</div>
+                        <div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.moveConfirm.before }}</div>
                         <div class="text-body-1">{{ beforeLabel }}</div>
                     </div>
                     <v-icon icon="mdi-arrow-right" class="mx-2" />
                     <div>
-                        <div class="text-caption text-medium-emphasis">変更後</div>
+                        <div class="text-caption text-medium-emphasis">{{ MESSAGES.boardUi.moveConfirm.after }}</div>
                         <div class="text-body-1 font-weight-bold text-primary">{{ afterLabel }}</div>
                     </div>
                 </div>
@@ -65,7 +67,7 @@ defineEmits<{
                             prepend-icon="mdi-calendar-edit-outline"
                             class="mt-3"
                         >
-                            日付を変更（{{ dayLabel(targetDate) }}）
+                            {{ fillMessage(MESSAGES.boardUi.moveConfirm.changeDate, { date: dayLabel(targetDate) }) }}
                         </v-btn>
                     </template>
                     <v-card>
@@ -78,9 +80,9 @@ defineEmits<{
             </v-card-text>
             <v-card-actions>
                 <v-spacer />
-                <v-btn variant="text" :disabled="submitting" @click="$emit('cancel')">キャンセル</v-btn>
+                <v-btn variant="text" :disabled="submitting" @click="$emit('cancel')">{{ MESSAGES.boardUi.moveConfirm.cancel }}</v-btn>
                 <v-btn color="primary" variant="flat" :loading="submitting" @click="$emit('confirm')">
-                    変更する
+                    {{ MESSAGES.boardUi.moveConfirm.submit }}
                 </v-btn>
             </v-card-actions>
         </v-card>
