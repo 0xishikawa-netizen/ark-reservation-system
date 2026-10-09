@@ -5,7 +5,10 @@ import { StatusChip } from "@/components/ark";
 import PanelShell from "@/components/admin/PanelShell.vue";
 import { firstErrorMessage } from "@/composables/inertiaErrors";
 import { MESSAGES } from "@/constants/messages";
-import type { HistoryRow, PanelData } from "@/components/admin/panels/reservationDetailTypes";
+import type {
+    HistoryRow,
+    PanelData,
+} from "@/components/admin/panels/reservationDetailTypes";
 
 const props = withDefaults(
     defineProps<{
@@ -49,7 +52,9 @@ const memoEditing = ref(false);
 const memoDraft = ref("");
 const memoSaving = ref(false);
 
-const confirmMode = ref<null | "cancel" | "no_show" | "no_checkout" | "extend">(null);
+const confirmMode = ref<null | "cancel" | "no_show" | "no_checkout" | "extend">(
+    null,
+);
 // 延長（Task 11-29）：追加する分数と施術。空いていなければサーバーが保存しない。
 const extendMinutes = ref<number>(30);
 const extendServiceId = ref<number | null>(null);
@@ -194,9 +199,10 @@ const timeRange = computed(() => {
     const [h, m] = r.ends_at.slice(11, 16).split(":").map(Number);
     const end = h * 60 + m - (r.buffer_min ?? 0);
     const endLabel = `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
-    const buffer = (r.buffer_min ?? 0) > 0
-        ? `（${MESSAGES.visitCompletion.bufferAfter.replace("{min}", String(r.buffer_min))}）`
-        : "";
+    const buffer =
+        (r.buffer_min ?? 0) > 0
+            ? `（${MESSAGES.visitCompletion.bufferAfter.replace("{min}", String(r.buffer_min))}）`
+            : "";
 
     return `${r.starts_at.slice(11, 16)}〜${endLabel}${buffer}`;
 });
@@ -298,8 +304,7 @@ function runAction(
         errorBag: "reservation",
         onError: (errors) => {
             actionError.value =
-                firstErrorMessage(errors) ??
-                MESSAGES.common.actionFailedReload;
+                firstErrorMessage(errors) ?? MESSAGES.common.actionFailedReload;
         },
         onFinish: () => {
             actionBusy.value = false;
@@ -314,7 +319,15 @@ function openVisitEntry(): void {
     const url = data.value?.reservation?.visit_entry_url;
     if (url) {
         actionBusy.value = true;
-        router.post(url, {}, { onFinish: () => { actionBusy.value = false; } });
+        router.post(
+            url,
+            {},
+            {
+                onFinish: () => {
+                    actionBusy.value = false;
+                },
+            },
+        );
     }
 }
 
@@ -346,19 +359,33 @@ function submitConfirm(): void {
     } else if (confirmMode.value === "extend") {
         actionBusy.value = true;
         actionError.value = null;
-        router.post(`/admin/reservations/${id}/extend`, {
-            minutes: extendMinutes.value,
-            service_id: extendServiceId.value,
-            version: data.value?.reservation?.version ?? 0,
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-            errorBag: "reservation",
-            onError: (errors) => { actionError.value = firstErrorMessage(errors) ?? MESSAGES.common.actionFailedReload; },
-            onFinish: () => { actionBusy.value = false; confirmMode.value = null; },
-            onSuccess: () => refetch(),
-        });
-    } else if (confirmMode.value === "no_checkout" && exemptionReason.value !== null) {
+        router.post(
+            `/admin/reservations/${id}/extend`,
+            {
+                minutes: extendMinutes.value,
+                service_id: extendServiceId.value,
+                version: data.value?.reservation?.version ?? 0,
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                errorBag: "reservation",
+                onError: (errors) => {
+                    actionError.value =
+                        firstErrorMessage(errors) ??
+                        MESSAGES.common.actionFailedReload;
+                },
+                onFinish: () => {
+                    actionBusy.value = false;
+                    confirmMode.value = null;
+                },
+                onSuccess: () => refetch(),
+            },
+        );
+    } else if (
+        confirmMode.value === "no_checkout" &&
+        exemptionReason.value !== null
+    ) {
         runAction(`/admin/reservations/${id}/complete`, {
             exemption_reason: exemptionReason.value,
         });
@@ -420,10 +447,16 @@ function submitConfirm(): void {
                         data.customer.member_no
                     }}</span>
                 </div>
-                <p class="rdp__tel">TEL {{ data.customer.phone ?? MESSAGES.common.emptyValue }}</p>
+                <p class="rdp__tel">
+                    TEL {{ data.customer.phone ?? MESSAGES.common.emptyValue }}
+                </p>
 
                 <!-- 表示切替タブ：顧客詳細／履歴／今後の予約（§タブ）。既定は「今回の予約」。 -->
-                <div class="rdp__tabs" role="tablist" aria-label="表示の切り替え">
+                <div
+                    class="rdp__tabs"
+                    role="tablist"
+                    aria-label="表示の切り替え"
+                >
                     <button
                         v-if="data.reservation"
                         type="button"
@@ -579,7 +612,9 @@ function submitConfirm(): void {
                         </button>
                     </template>
 
-                    <p v-else class="rdp__memo-empty">{{ MESSAGES.common.emptyValue }}</p>
+                    <p v-else class="rdp__memo-empty">
+                        {{ MESSAGES.common.emptyValue }}
+                    </p>
                 </div>
             </section>
 
@@ -617,14 +652,28 @@ function submitConfirm(): void {
                             >
                                 指名
                             </span>
-                            <span v-if="data.reservation.staff_gender_preference" class="rdp__nomination" :class="`rdp__nomination--${data.reservation.staff_gender_preference}`">
-                                {{ data.reservation.staff_gender_preference === "male" ? "男性希望" : "女性希望" }}
+                            <span
+                                v-if="data.reservation.staff_gender_preference"
+                                class="rdp__nomination"
+                                :class="`rdp__nomination--${data.reservation.staff_gender_preference}`"
+                            >
+                                {{
+                                    data.reservation.staff_gender_preference ===
+                                    "male"
+                                        ? "男性希望"
+                                        : "女性希望"
+                                }}
                             </span>
                         </dd>
                     </div>
                     <div>
                         <dt>ブース</dt>
-                        <dd>{{ data.reservation.booth_name ?? MESSAGES.common.emptyValue }}</dd>
+                        <dd>
+                            {{
+                                data.reservation.booth_name ??
+                                MESSAGES.common.emptyValue
+                            }}
+                        </dd>
                     </div>
                 </dl>
 
@@ -816,7 +865,11 @@ function submitConfirm(): void {
                 </template>
 
                 <!-- 閲覧だけの権限（一般スタッフ）では操作が無いので「…」自体を出さない。 -->
-                <v-menu v-if="data.can.manage || data.reservation?.payment" v-model="moreMenuOpen" location="top end">
+                <v-menu
+                    v-if="data.can.manage || data.reservation?.payment"
+                    v-model="moreMenuOpen"
+                    location="top end"
+                >
                     <template #activator="{ props: menuProps }">
                         <v-btn
                             v-bind="menuProps"
@@ -844,7 +897,11 @@ function submitConfirm(): void {
                             prepend-icon="mdi-clock-plus-outline"
                             :title="MESSAGES.schedule.extend"
                             data-testid="extend-reservation"
-                            @click="extendMinutes = 30; extendServiceId = null; confirmMode = 'extend'"
+                            @click="
+                                extendMinutes = 30;
+                                extendServiceId = null;
+                                confirmMode = 'extend';
+                            "
                         />
                         <v-list-item
                             v-if="data.reservation?.can_complete"
@@ -907,9 +964,24 @@ function submitConfirm(): void {
                         <br />{{ data.reservation.service_name }}
                     </div>
                     <template v-if="confirmMode === 'extend'">
-                        <p class="text-body-2 mb-2">{{ MESSAGES.schedule.extendHint }}</p>
-                        <v-btn-toggle v-model="extendMinutes" mandatory density="compact" variant="outlined" class="mb-3" data-testid="extend-minutes">
-                            <v-btn v-for="minutes in [15, 30, 45, 60]" :key="minutes" :value="minutes" size="small">+{{ minutes }}分</v-btn>
+                        <p class="text-body-2 mb-2">
+                            {{ MESSAGES.schedule.extendHint }}
+                        </p>
+                        <v-btn-toggle
+                            v-model="extendMinutes"
+                            mandatory
+                            density="compact"
+                            variant="outlined"
+                            class="mb-3"
+                            data-testid="extend-minutes"
+                        >
+                            <v-btn
+                                v-for="minutes in [15, 30, 45, 60]"
+                                :key="minutes"
+                                :value="minutes"
+                                size="small"
+                                >+{{ minutes }}分</v-btn
+                            >
                         </v-btn-toggle>
                         <v-select
                             v-model="extendServiceId"
@@ -926,10 +998,18 @@ function submitConfirm(): void {
                         />
                     </template>
                     <template v-if="confirmMode === 'no_checkout'">
-                        <p class="text-body-2 mb-2">{{ MESSAGES.visitCompletion.noCheckoutHint }}</p>
-                        <v-radio-group v-model="exemptionReason" density="compact" hide-details data-testid="exemption-reasons">
+                        <p class="text-body-2 mb-2">
+                            {{ MESSAGES.visitCompletion.noCheckoutHint }}
+                        </p>
+                        <v-radio-group
+                            v-model="exemptionReason"
+                            density="compact"
+                            hide-details
+                            data-testid="exemption-reasons"
+                        >
                             <v-radio
-                                v-for="(label, value) in MESSAGES.visitCompletion.exemptionReasons"
+                                v-for="(label, value) in MESSAGES
+                                    .visitCompletion.exemptionReasons"
                                 :key="value"
                                 :label="label"
                                 :value="value"
@@ -959,7 +1039,10 @@ function submitConfirm(): void {
                         :color="confirmMode === 'cancel' ? 'error' : 'primary'"
                         variant="flat"
                         :loading="actionBusy"
-                        :disabled="confirmMode === 'no_checkout' && exemptionReason === null"
+                        :disabled="
+                            confirmMode === 'no_checkout' &&
+                            exemptionReason === null
+                        "
                         @click="submitConfirm"
                     >
                         {{
@@ -978,4 +1061,7 @@ function submitConfirm(): void {
     </PanelShell>
 </template>
 
-<style scoped src="@/components/admin/panels/ReservationDetailPanel.css"></style>
+<style
+    scoped
+    src="@/components/admin/panels/ReservationDetailPanel.css"
+></style>
