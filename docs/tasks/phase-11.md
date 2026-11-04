@@ -672,7 +672,7 @@ Task 11-1では生成せず、必要データ、テンプレート管理、シ�
 - [x] `./vendor/bin/sail artisan test` 全件成功（1242 件・174,122 assertions。既存アサーション不変）。
 - [x] 表示文字列が変わっていないことを差分で確認（変更前の日本語の連なりを変更後の全文言から照合。不一致は部品分割による誤検知のみ）。
 
-### Task 11-35 — MySQL 5.7（お名前.com RS プラン）互換：日時列の既定値明記（2026-11-04 ユーザー承認・CURRENT / APPROVED）
+### Task 11-35 — MySQL 5.7（お名前.com RS プラン）互換：日時列の既定値明記（2026-11-04 ユーザー承認・DONE 2026-11-04）
 
 背景：Staging 候補のお名前.com レンタルサーバー（RS プラン）の DB は **MySQL 5.7.44・`explicit_defaults_for_timestamp=OFF`**（2026-11-04 phpMyAdmin で確認）。共用サーバーの一般ユーザーは SUPER 権限がなく、セッション単位でも `explicit_defaults_for_timestamp` を変更できない（`ERROR 1227`、ローカルの 5.7.44 で再現）。この設定では、NULL 不可・既定値なしの `timestamp` 列に MySQL が暗黙の既定値を付け、`migrate` が `1067 Invalid default value` で止まるか、`DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` が黙って付いて行更新のたびに値が書き換わる。
 
@@ -688,11 +688,11 @@ Task 11-1では生成せず、必要データ、テンプレート管理、シ�
 - `CHECK` 制約：MySQL 5.7 は構文を受け付けるが強制しない（DB 側の最終防御のみ失われ、アプリ側の検証は有効）。
 
 #### 受け入れ条件
-- [ ] MySQL 5.7.44・`explicit_defaults_for_timestamp=OFF`・一般ユーザー権限で `migrate` が全件成功し、`SHOW CREATE TABLE` に意図しない `ON UPDATE CURRENT_TIMESTAMP` が付かない。
-- [ ] 同条件で `artisan test` を実行し、失敗が上記「対象外」（`SKIP LOCKED` 8 件・`CHECK` 1 件）のみであること。
-- [ ] MySQL 8.4 で `artisan test` 全件成功、`npm run build` 成功・型エラー 0。
+- [x] MySQL 5.7.44・`explicit_defaults_for_timestamp=OFF`・一般ユーザー権限で `migrate` が全件成功し、`SHOW CREATE TABLE` に意図しない `ON UPDATE CURRENT_TIMESTAMP` が付かない。
+- [x] 同条件で `artisan test` を実行し、失敗が上記「対象外」（`SKIP LOCKED` 8 件・`CHECK` 1 件）のみであること（2026-11-04：1242 件中 1233 件成功）。
+- [x] MySQL 8.4 で `artisan test` 全件成功、`npm run build` 成功・型エラー 0。
 
-### Task 11-36 — お試し環境（Staging）：開発用メニュー・テストデータ・デプロイ手順（2026-11-04 ユーザー承認・CURRENT / APPROVED）
+### Task 11-36 — お試し環境（Staging）：開発用メニュー・テストデータ・デプロイ手順（2026-11-04 ユーザー承認・DONE 2026-11-04）
 
 目的：お名前.com RS プランのサブドメイン（`stg.ark-conditioning.com`）に、関係者だけが触れるお試し環境を置く。WordPress（`64ssq_ark_db`）・本番ドメイン・DNS には触れない。サーバー作業はユーザーが手順書に沿って行う。
 
@@ -703,6 +703,6 @@ Task 11-1では生成せず、必要データ、テンプレート管理、シ�
 - `.env.staging.example`（Stripe Test キーのみ・メールは log・`APP_DEBUG=false`）と `docs/STAGING_DEPLOY.md`（お名前.com での手順）。
 
 #### 受け入れ条件
-- [ ] Basic 認証・noindex・開発用メニューの表示条件を Feature テストで確認（staging 以外では無効／404）。
-- [ ] `staging` で `STAGING_DEMO_PASSWORD` が未設定・12 文字未満ならデモ Seeder が停止する。
-- [ ] MySQL 8.4 で `artisan test` 全件成功、`npm run build` 成功・型エラー 0。
+- [x] Basic 認証・noindex・開発用メニューの表示条件を Feature テストで確認（staging 以外では無効／404）。
+- [x] `staging` で `STAGING_DEMO_PASSWORD` が未設定・12 文字未満ならデモ Seeder が停止する。
+- [x] MySQL 8.4 で `artisan test` 全件成功（2026-11-04：1250 件・174,155 assertions）、`npm run build` 成功・型エラー 0。MySQL 5.7（OFF・一般ユーザー）を相手に `tools/staging-deploy.sh` で展開し、`/dev-menu`・`/booking`・管理者ログイン・ブッキングボードの表示まで確認。サーバーへの実デプロイはユーザー作業（`docs/STAGING_DEPLOY.md`）。
