@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('review_status', 24);
             $table->string('reason', 1000);
             $table->foreignId('reviewed_by')->constrained('users')->restrictOnDelete();
-            $table->timestamp('reviewed_at');
+            $table->timestamp('reviewed_at')->useCurrent();
             $table->timestamps();
         });
     }

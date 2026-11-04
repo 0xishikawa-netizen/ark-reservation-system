@@ -671,3 +671,23 @@ Task 11-1では生成せず、必要データ、テンプレート管理、シ�
 - [x] `./vendor/bin/sail npm run build` 成功・型エラー 0、`npm run test`（Vitest）167 件成功。
 - [x] `./vendor/bin/sail artisan test` 全件成功（1242 件・174,122 assertions。既存アサーション不変）。
 - [x] 表示文字列が変わっていないことを差分で確認（変更前の日本語の連なりを変更後の全文言から照合。不一致は部品分割による誤検知のみ）。
+
+### Task 11-35 — MySQL 5.7（お名前.com RS プラン）互換：日時列の既定値明記（2026-11-04 ユーザー承認・CURRENT / APPROVED）
+
+背景：Staging 候補のお名前.com レンタルサーバー（RS プラン）の DB は **MySQL 5.7.44・`explicit_defaults_for_timestamp=OFF`**（2026-11-04 phpMyAdmin で確認）。共用サーバーの一般ユーザーは SUPER 権限がなく、セッション単位でも `explicit_defaults_for_timestamp` を変更できない（`ERROR 1227`、ローカルの 5.7.44 で再現）。この設定では、NULL 不可・既定値なしの `timestamp` 列に MySQL が暗黙の既定値を付け、`migrate` が `1067 Invalid default value` で止まるか、`DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` が黙って付いて行更新のたびに値が書き換わる。
+
+目的：上記 5.7・OFF 環境でも `migrate` が通り、暗黙の自動更新が付かないようにする。MySQL 8.x での挙動は変えない。
+
+#### 対象（NULL 不可・既定値なしの `timestamp` 列 5 か所）
+- `trusted_devices.expires_at` / `reservation_guest_tokens.expires_at` / `reservation_notification_dismissals.dismissed_at` / `historical_metric_values.imported_at` / `historical_metric_reviews.reviewed_at`
+- 修正：各列に `->useCurrent()`（`DEFAULT CURRENT_TIMESTAMP`。`ON UPDATE` は付けない）を明記する。アプリは常に値を明示して書き込むため挙動は変わらない。
+- 未デプロイのため既存 migration を直接修正する。既にローカル DB を作成済みの環境は `migrate:fresh` で作り直す。
+
+#### 対象外（記録のみ）
+- `OutboxDispatcher` の `FOR UPDATE SKIP LOCKED`（MySQL 8.0+ 専用）：外部予約連携（Phase 10）の送信処理でのみ通る。Staging（gateway=null）では使わない。本番は MySQL 8 系を前提とする（OPEN_QUESTIONS #2）。
+- `CHECK` 制約：MySQL 5.7 は構文を受け付けるが強制しない（DB 側の最終防御のみ失われ、アプリ側の検証は有効）。
+
+#### 受け入れ条件
+- [ ] MySQL 5.7.44・`explicit_defaults_for_timestamp=OFF`・一般ユーザー権限で `migrate` が全件成功し、`SHOW CREATE TABLE` に意図しない `ON UPDATE CURRENT_TIMESTAMP` が付かない。
+- [ ] 同条件で `artisan test` を実行し、失敗が上記「対象外」（`SKIP LOCKED` 8 件・`CHECK` 1 件）のみであること。
+- [ ] MySQL 8.4 で `artisan test` 全件成功、`npm run build` 成功・型エラー 0。

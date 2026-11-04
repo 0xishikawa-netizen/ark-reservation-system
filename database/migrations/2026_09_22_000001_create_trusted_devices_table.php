@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('token_hash');
             $table->string('user_agent', 255)->nullable();
             $table->timestamp('last_used_at')->nullable();
-            $table->timestamp('expires_at');
+            $table->timestamp('expires_at')->useCurrent();
             $table->timestamps();
 
             $table->index(['user_id', 'expires_at']);

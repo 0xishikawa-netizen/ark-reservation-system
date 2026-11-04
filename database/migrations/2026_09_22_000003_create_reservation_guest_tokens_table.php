@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('selector', 40)->unique();
             $table->string('token_hash');
             $table->timestamp('last_used_at')->nullable();
-            $table->timestamp('expires_at');
+            $table->timestamp('expires_at')->useCurrent();
             $table->timestamps();
 
             $table->index(['reservation_id', 'expires_at']);

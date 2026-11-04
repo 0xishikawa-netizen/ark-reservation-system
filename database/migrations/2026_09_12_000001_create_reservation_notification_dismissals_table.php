@@ -19,7 +19,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->foreignId('reservation_id')->constrained('reservations')->cascadeOnDelete();
-            $table->timestamp('dismissed_at');
+            $table->timestamp('dismissed_at')->useCurrent();
 
             // MySQL の識別子は 64 文字まで。デフォルト命名は超えるため短い名前を明示する。
             $table->unique(['user_id', 'reservation_id'], 'rnd_user_reservation_unique');

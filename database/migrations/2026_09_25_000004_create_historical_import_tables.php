@@ -66,7 +66,7 @@ return new class extends Migration
             $table->date('period_end');
             $table->bigInteger('value_integer');
             $table->text('source_identifier_ciphertext')->nullable();
-            $table->timestamp('imported_at');
+            $table->timestamp('imported_at')->useCurrent();
             $table->timestamp('invalidated_at')->nullable();
             $table->timestamps();
             $table->index(['metric_code', 'period_start', 'period_end'], 'hist_metric_period_idx');
