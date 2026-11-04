@@ -29,6 +29,8 @@ cp -R public/build "$WORK/public/build"
 # 開発専用のファイルは入れない
 rm -rf "$WORK/tests" "$WORK/node_modules" "$WORK/.github" "$WORK/compose.yaml" "$WORK/docker-compose.yml"
 rm -f "$WORK/.env" "$WORK/bootstrap/cache/"*.php
+# ネットワーク事情で composer が git から取得した場合の履歴（.git）を除く
+find "$WORK/vendor" -name .git -type d -prune -exec rm -rf {} +
 
 tar -czf "$OUT" -C "$WORK" .
 echo "作成: $OUT（$(du -h "$OUT" | cut -f1)）"
