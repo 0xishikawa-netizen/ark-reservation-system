@@ -84,5 +84,5 @@ return [
     ],
 
     // Live キー検出時の起動ガード対象環境
-    'block_live_keys_in' => ['local', 'testing'],
+    'block_live_keys_in' => ['local', 'testing', 'staging'],
 ];

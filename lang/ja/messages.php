@@ -741,4 +741,8 @@ return [
         'different' => '差分',
         'missing' => '欠落',
     ],
+    'staging' => [
+        'basic_auth_required' => 'このお試し環境を見るには、共通の ID とパスワードが必要です。',
+        'demo_password_missing' => 'お試し環境のデモデータには STAGING_DEMO_PASSWORD（:min 文字以上）の設定が必要です。',
+    ],
 ];

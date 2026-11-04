@@ -9,6 +9,7 @@ use App\Exceptions\Ticket\InsufficientTicketBalanceException;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PreventStaffTotpDisable;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\StagingGate;
 use App\Http\Middleware\StartSession;
 use App\Http\Middleware\ThrottleFortifyRequests;
 use Illuminate\Foundation\Application;
@@ -30,6 +31,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // お試し環境だけ Basic 認証と noindex を掛ける（staging 以外では素通し・Task 11-36）。
+        $middleware->prepend(StagingGate::class);
+
         // fetch() の JSON を「直前の URL」に記録しない StartSession に差し替える（back() が JSON 画面へ戻る不具合の対策）。
         $middleware->web(replace: [
             FrameworkStartSession::class => StartSession::class,

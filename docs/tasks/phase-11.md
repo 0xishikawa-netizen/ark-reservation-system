@@ -691,3 +691,18 @@ Task 11-1では生成せず、必要データ、テンプレート管理、シ�
 - [ ] MySQL 5.7.44・`explicit_defaults_for_timestamp=OFF`・一般ユーザー権限で `migrate` が全件成功し、`SHOW CREATE TABLE` に意図しない `ON UPDATE CURRENT_TIMESTAMP` が付かない。
 - [ ] 同条件で `artisan test` を実行し、失敗が上記「対象外」（`SKIP LOCKED` 8 件・`CHECK` 1 件）のみであること。
 - [ ] MySQL 8.4 で `artisan test` 全件成功、`npm run build` 成功・型エラー 0。
+
+### Task 11-36 — お試し環境（Staging）：開発用メニュー・テストデータ・デプロイ手順（2026-11-04 ユーザー承認・CURRENT / APPROVED）
+
+目的：お名前.com RS プランのサブドメイン（`stg.ark-conditioning.com`）に、関係者だけが触れるお試し環境を置く。WordPress（`64ssq_ark_db`）・本番ドメイン・DNS には触れない。サーバー作業はユーザーが手順書に沿って行う。
+
+#### 対象
+- `APP_ENV=staging` 専用の入口制御：Basic 認証（`STAGING_BASIC_AUTH_USER` / `STAGING_BASIC_AUTH_PASSWORD` を設定したときだけ有効。Stripe webhook と `/up` は除外）と `X-Robots-Tag: noindex, nofollow`。
+- 開発用メニュー画面 `/dev-menu`：`local` / `staging` かつ `STAGING_DEV_MENU=true` のときだけ表示（それ以外は 404）。お客様の予約・ログイン／マイページ・店舗管理画面へのボタンと、テスト用アカウント・Stripe テストカードの案内。
+- テストデータ：既存のデモ Seeder（`DemoScenarioSeeder` と開発管理者）を `staging` でも実行可能にする。`staging` ではパスワードを `STAGING_DEMO_PASSWORD`（12 文字以上必須）から取り、既定の `password` は使わない。
+- `.env.staging.example`（Stripe Test キーのみ・メールは log・`APP_DEBUG=false`）と `docs/STAGING_DEPLOY.md`（お名前.com での手順）。
+
+#### 受け入れ条件
+- [ ] Basic 認証・noindex・開発用メニューの表示条件を Feature テストで確認（staging 以外では無効／404）。
+- [ ] `staging` で `STAGING_DEMO_PASSWORD` が未設定・12 文字未満ならデモ Seeder が停止する。
+- [ ] MySQL 8.4 で `artisan test` 全件成功、`npm run build` 成功・型エラー 0。

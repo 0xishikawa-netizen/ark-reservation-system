@@ -21,6 +21,7 @@ use App\Support\Settings\Settings;
 use App\Support\SlotKey;
 use BackedEnum;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Support\DemoPassword;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -48,13 +49,19 @@ final class DemoScenarioSeeder extends Seeder
 
     private const FUTURE_DAYS = 21;
 
+    /** デモアカウント共通パスワードのハッシュ（run() の最初に 1 回だけ作る）。 */
+    private string $demoPassword = '';
+
     public function run(): void
     {
-        if (! app()->environment('local')) {
-            $this->command?->warn('DemoScenarioSeeder は local 環境専用です。スキップします。');
+        if (! app()->environment(['local', 'staging'])) {
+            $this->command?->warn('DemoScenarioSeeder は local / staging 環境専用です。スキップします。');
 
             return;
         }
+
+        // staging では STAGING_DEMO_PASSWORD 必須（未設定ならここで止める・Task 11-36）。
+        $this->demoPassword = Hash::make(DemoPassword::resolve());
 
         $this->command?->info('マスタを整備しています…');
         $this->call(RolePermissionSeeder::class);
@@ -117,7 +124,7 @@ final class DemoScenarioSeeder extends Seeder
         foreach ($definitions as $d) {
             $user = User::query()->firstOrCreate(
                 ['email' => $d['email']],
-                ['name' => $d['name'], 'password' => Hash::make('password'), 'email_verified_at' => now()],
+                ['name' => $d['name'], 'password' => $this->demoPassword, 'email_verified_at' => now()],
             );
             $user->forceFill(['name' => $d['name'], 'email_verified_at' => $user->email_verified_at ?? now()])->save();
             $user->syncRoles([$d['role']]);
@@ -349,7 +356,7 @@ final class DemoScenarioSeeder extends Seeder
             $user = User::query()->create([
                 'name' => $name,
                 'email' => $email,
-                'password' => Hash::make('password'),
+                'password' => $this->demoPassword,
                 'email_verified_at' => $i % 9 === 0 ? null : now()->subDays(random_int(1, 400)),
             ]);
             $user->assignRole('customer');

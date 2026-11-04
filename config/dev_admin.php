@@ -16,7 +16,8 @@ declare(strict_types=1);
 return [
 
     // このリストに含まれる環境でのみ開発管理者を作成する。
-    'environments' => ['local', 'development', 'testing'],
+    // staging はお試し環境（Task 11-36）。パスワードは STAGING_DEMO_PASSWORD 必須。
+    'environments' => ['local', 'development', 'testing', 'staging'],
 
     'name' => env('DEV_ADMIN_NAME', 'ARK 開発管理者'),
     'email' => env('DEV_ADMIN_EMAIL', 'dev-admin@ark.test'),

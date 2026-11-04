@@ -415,6 +415,29 @@ export const CUSTOMER_MESSAGES = {
         login: 'ログイン',
         register: '新規登録',
     },
+    /** お試し環境の開発用メニュー（DevMenu・Task 11-36） */
+    devMenu: {
+        title: '開発用メニュー',
+        badge: 'お試し環境',
+        lead: '実際のお金・本物のお客様情報は使われません。自由に操作して確認してください。',
+        customerHeading: 'お客様の画面',
+        booking: '予約する（会員登録なし）',
+        bookingNote: 'メニュー・日時を選んで予約し、テストカードで支払います。',
+        login: 'ログイン／マイページ',
+        loginNote: 'テスト用のお客様アカウントでログインします。',
+        register: '新規会員登録',
+        storeHeading: '店舗の画面',
+        admin: '管理画面（ブッキングボード）',
+        adminNote: '予約台帳・会計・レポート・マスタ設定を確認できます。',
+        accountsHeading: 'テスト用アカウント',
+        accountAdmin: '店舗の管理者',
+        accountStaff: '店舗スタッフ（初回ログイン時に認証アプリの設定が必要）',
+        accountCustomer: 'お客様',
+        passwordNote: 'パスワードは関係者に別途お知らせしている共通パスワードです。',
+        cardHeading: 'テスト用カード（Stripe テストモード）',
+        cardNumber: 'カード番号 4242 4242 4242 4242',
+        cardNote: '有効期限は未来の日付、セキュリティコードは任意の 3 桁で入力してください。',
+    },
     /** 管理画面のヘッダーメニュー（layouts/AdminLayout・settingsNavigation・reportNavigation） */
     navigation: {
         groups: {

@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
 
         // 開発用の固定管理者（Phase 9 / item 10）。production では呼ばず、
         // DevelopmentAdminSeeder 自身も同じ環境判定で no-op になる（多重ガード）。
-        if ($this->container->environment(['local', 'development', 'testing'])) {
+        if ($this->container->environment(['local', 'development', 'testing', 'staging'])) {
             $this->call(DevelopmentAdminSeeder::class);
         }
 

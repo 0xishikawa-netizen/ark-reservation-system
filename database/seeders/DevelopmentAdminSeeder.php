@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Models\User;
+use Database\Seeders\Support\DemoPassword;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -26,7 +27,7 @@ final class DevelopmentAdminSeeder extends Seeder
     public function run(): void
     {
         /** @var list<string> $allowed */
-        $allowed = (array) config('dev_admin.environments', ['local', 'development', 'testing']);
+        $allowed = (array) config('dev_admin.environments', ['local', 'development', 'testing', 'staging']);
 
         if (! app()->environment($allowed)) {
             // production 等では固定認証情報を絶対に作らない。
@@ -41,7 +42,8 @@ final class DevelopmentAdminSeeder extends Seeder
         $user = User::query()->firstOrNew(['email' => $email]);
         $user->name = (string) config('dev_admin.name', 'ARK 開発管理者');
         // password キャストが hashed のため平文を代入してよい。
-        $user->password = (string) config('dev_admin.password', 'password');
+        // staging では STAGING_DEMO_PASSWORD を使う（既定値 'password' は local 系だけ・Task 11-36）。
+        $user->password = DemoPassword::resolve((string) config('dev_admin.password', 'password'));
         $user->email_verified_at = now();
         $user->two_factor_confirmed_at = now();
         $user->save();
