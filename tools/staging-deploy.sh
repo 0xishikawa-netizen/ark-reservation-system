@@ -46,6 +46,7 @@ fi
 chmod 600 .env
 grep -qE '^APP_ENV=staging' .env || fail ".env の APP_ENV が staging ではありません。"
 grep -qE '^DB_DATABASE=64ssq_ark_db' .env && fail ".env の DB が WordPress の DB（64ssq_ark_db）になっています。"
+grep -qE '^ADMIN_ALERT_EMAIL=.+' .env || fail ".env の ADMIN_ALERT_EMAIL が空です（空だと起動できません）。"
 
 mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
 chmod -R u+rwX storage bootstrap/cache

@@ -12,7 +12,7 @@ set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
 OUT=${1:-"$ROOT/ark-staging.tar.gz"}
-WORK=$(mktemp -d)
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/ark-staging.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
 cd "$ROOT"
@@ -23,7 +23,8 @@ git diff --quiet HEAD -- resources/js resources/css vite.config.* package.json \
 git archive HEAD | tar -x -C "$WORK"
 cp -R public/build "$WORK/public/build"
 
-(cd "$WORK" && composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist)
+# .env が無い状態で artisan を起動させない（--no-scripts。パッケージ一覧はサーバー初回起動時に自動生成される）
+(cd "$WORK" && composer install --no-dev --optimize-autoloader --no-scripts --no-interaction --no-progress --prefer-dist)
 
 # 開発専用のファイルは入れない
 rm -rf "$WORK/tests" "$WORK/node_modules" "$WORK/.github" "$WORK/compose.yaml" "$WORK/docker-compose.yml"

@@ -57,6 +57,7 @@ bash ~/staging-deploy.sh ~/ark-staging.tar.gz ~/ark-stg <公開フォルダ> --s
 | `DB_USERNAME` / `DB_PASSWORD` | 1-4 で用意したお試し用 DB のユーザー |
 | `STAGING_BASIC_AUTH_USER` / `STAGING_BASIC_AUTH_PASSWORD` | 関係者に配る共通 ID / パスワード |
 | `STAGING_DEMO_PASSWORD` | テスト用アカウント共通のパスワード（12 文字以上） |
+| `ADMIN_ALERT_EMAIL` | 自分のメールアドレス（必須。空だと起動しない。お試しでは実際には送られない） |
 | `STRIPE_KEY` / `STRIPE_SECRET` | Stripe ダッシュボード（テストモード）の `pk_test_...` / `sk_test_...` |
 | `APP_KEY` / `PII_LOOKUP_KEY` | 空のままで OK（スクリプトが自動で作る） |
 
