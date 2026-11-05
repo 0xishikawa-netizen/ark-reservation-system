@@ -34,7 +34,7 @@ esac
 [ -w "$DOCROOT" ] || fail "公開フォルダ $DOCROOT に書き込めません。"
 # 2 回目以降は目印ファイルがある。初回は空か、お名前.com の初期ファイルだけのときに限る。
 if [ ! -f "$DOCROOT/.ark-staging" ]; then
-    leftover=$(find "$DOCROOT" -mindepth 1 -maxdepth 1 ! -name 'index.html' ! -name '.htaccess' ! -name '.user.ini' | head -1)
+    leftover=$(find "$DOCROOT" -mindepth 1 -maxdepth 1 ! -name 'index.html' ! -name '.htaccess' ! -name '.user.ini' ! -name 'error' | head -1)
     [ -n "$leftover" ] && fail "$DOCROOT に既存のファイルがあります（$leftover）。中身を確認してから空にしてください。"
 fi
 
