@@ -85,6 +85,8 @@ fi
 [ -f "$DOCROOT/.ark-staging" ] || { [ -f "$DOCROOT/index.html" ] && mv "$DOCROOT/index.html" "$DOCROOT/index.html.bak"; }
 rm -rf "$DOCROOT/build"
 cp -R "$APP_DIR/public/." "$DOCROOT/"
+# お名前.com では .htaccess の Options（MultiViews 等）が禁止されていて 500 になるため取り除く
+sed -i '/<IfModule mod_negotiation.c>/,/<\/IfModule>/d' "$DOCROOT/.htaccess"
 # index.php はアプリ本体（公開フォルダの外）を読み込むだけにする。__DIR__ は読み込まれた側の場所になる。
 cat > "$DOCROOT/index.php" <<PHP
 <?php

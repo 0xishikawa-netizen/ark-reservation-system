@@ -98,6 +98,7 @@ cd ~/ark-stg && php artisan schedule:run >> /dev/null 2>&1
 
 | 症状 | 確認すること |
 |---|---|
-| 500 エラー | `~/ark-stg/storage/logs/` の最新ログ。`.env` の DB 設定。 |
+| 500 エラー（Apache の Internal Server Error 画面） | `~/logs/stg.ark-conditioning.com/error_log`。`Option MultiViews not allowed here` なら公開フォルダの `.htaccess` から `mod_negotiation` の塊を消す（スクリプトは自動で消す）。 |
+| 500 エラー（ARK の画面） | `~/ark-stg/storage/logs/` の最新ログ。`.env` の DB 設定。 |
 | 共通 ID / パスワードを入れても何度も聞かれる | サーバーが認証ヘッダーを PHP に渡していない可能性。`.env` の `STAGING_BASIC_AUTH_*` を空にして `php artisan config:cache` し、代わりにコントロールパネルのアクセス制限（Basic 認証）機能を使う。 |
 | 画面が崩れる・真っ白 | パッケージ作成前に `npm run build` したか。 |
