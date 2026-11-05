@@ -43,6 +43,8 @@ fi
 
 # --- 展開（.env と storage は残す） ---------------------------------------
 mkdir -p "$APP_DIR"
+# HP デザイン案はパッケージの内容に置き換える（名前を変えた・消した案が残らないように）
+rm -rf "$APP_DIR/hp-designs"
 tar -xzf "$PACKAGE" -C "$APP_DIR"
 cd "$APP_DIR"
 
