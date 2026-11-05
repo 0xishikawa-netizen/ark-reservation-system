@@ -35,7 +35,7 @@ final class DevMenuController extends Controller
     {
         return [
             'admin' => (string) config('dev_admin.email'),
-            'staff' => 'staff.shigeki@demo.ark',
+            'staff' => 'staff.a@demo.ark',
             'customerA' => 'cust01@demo.ark',
             'customerB' => 'cust02@demo.ark',
             'customerC' => 'cust03@demo.ark',
@@ -72,7 +72,7 @@ final class DevMenuController extends Controller
     {
         return [
             'admin' => (string) config('dev_admin.email'),
-            'staff' => 'staff.shigeki@demo.ark',
+            'staff' => 'staff.a@demo.ark',
             'customer' => 'cust01@demo.ark',
         ];
     }

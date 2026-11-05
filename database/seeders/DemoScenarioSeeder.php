@@ -112,11 +112,11 @@ final class DemoScenarioSeeder extends Seeder
     /** @return list<Staff> */
     private function ensureStaff(): array
     {
-        // ARK 公式サイト（スタッフ紹介）のスタッフ。担当範囲はサイトに記載が無いため全メニュー担当にする。
+        // デモ用スタッフ（実在スタッフ名は使わない・2026-11-05 ユーザー要望）。全メニュー担当にする。
         $definitions = [
-            ['name' => '本間 慈基', 'email' => 'staff.shigeki'.self::DEMO_EMAIL_DOMAIN, 'display_name' => '本間 慈基', 'color' => '#1E88E5', 'role' => 'staff', 'sort' => 10],
-            ['name' => '本間 奨基', 'email' => 'staff.shoki'.self::DEMO_EMAIL_DOMAIN, 'display_name' => '本間 奨基', 'color' => '#00897B', 'role' => 'staff', 'sort' => 20],
-            ['name' => '齋藤 美由紀', 'email' => 'staff.saito'.self::DEMO_EMAIL_DOMAIN, 'display_name' => '齋藤 美由紀', 'color' => '#D81B60', 'role' => 'staff', 'sort' => 30],
+            ['name' => 'スタッフA', 'email' => 'staff.a'.self::DEMO_EMAIL_DOMAIN, 'display_name' => 'スタッフA', 'color' => '#1E88E5', 'role' => 'staff', 'sort' => 10],
+            ['name' => 'スタッフB', 'email' => 'staff.b'.self::DEMO_EMAIL_DOMAIN, 'display_name' => 'スタッフB', 'color' => '#00897B', 'role' => 'staff', 'sort' => 20],
+            ['name' => 'スタッフC', 'email' => 'staff.c'.self::DEMO_EMAIL_DOMAIN, 'display_name' => 'スタッフC', 'color' => '#D81B60', 'role' => 'staff', 'sort' => 30],
         ];
 
         $staff = [];
