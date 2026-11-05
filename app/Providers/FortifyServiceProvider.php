@@ -9,6 +9,7 @@ use App\Actions\Fortify\RedirectIfTwoFactorAuthenticatableUnlessTrustedDevice;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Actions\Fortify\UpdateUserPassword;
 use App\Actions\Fortify\UpdateUserProfileInformation;
+use App\Http\Controllers\DevMenuController;
 use App\Http\Responses\HistoryClearingLogoutResponse;
 use App\Http\Responses\TrustedDeviceAwareTwoFactorLoginResponse;
 use App\Models\User;
@@ -16,6 +17,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -95,10 +97,17 @@ class FortifyServiceProvider extends ServiceProvider
 
     private function configureViews(): void
     {
-        Fortify::loginView(fn () => Inertia::render('Auth/Login', [
+        Fortify::loginView(fn (Request $request) => Inertia::render('Auth/Login', [
             'status' => $this->statusMessage(),
+            'googleEnabled' => $this->googleEnabled(),
+            // お試し環境だけテスト用アカウントを案内し、開発用メニューから来たら入力済みにする（Task 11-37）。
+            'stagingAccounts' => DevMenuController::enabled() ? DevMenuController::accounts() : null,
+            'stagingPrefill' => DevMenuController::prefillFor(is_string($as = $request->query('as')) ? $as : null),
+            'stagingNotes' => DevMenuController::enabled(),
         ]));
-        Fortify::registerView(fn () => Inertia::render('Auth/Register'));
+        Fortify::registerView(fn () => Inertia::render('Auth/Register', [
+            'googleEnabled' => $this->googleEnabled(),
+        ]));
         Fortify::requestPasswordResetLinkView(fn () => Inertia::render('Auth/ForgotPassword', [
             'status' => $this->statusMessage(),
         ]));
@@ -106,13 +115,35 @@ class FortifyServiceProvider extends ServiceProvider
             'email' => $request->string('email')->toString(),
             'token' => $request->route('token'),
         ]));
-        Fortify::verifyEmailView(fn () => Inertia::render('Auth/VerifyEmail', [
+        Fortify::verifyEmailView(fn (Request $request) => Inertia::render('Auth/VerifyEmail', [
             'status' => $this->statusMessage(),
+            // お試し環境はメールを送らない（log）ため、確認リンクを画面に出す（Task 11-37）。
+            'stagingVerifyUrl' => $this->stagingVerifyUrl($request),
         ]));
         Fortify::confirmPasswordView(fn () => Inertia::render('Auth/ConfirmPassword'));
         Fortify::twoFactorChallengeView(fn () => Inertia::render('Auth/TwoFactorChallenge', [
             'trustedDeviceTtlDays' => (int) config('mfa.trusted_device.ttl_days', 365),
         ]));
+    }
+
+    /** Google ログインの認証情報があるときだけボタンを出す（未設定で押すと Google 側で 400 になる）。 */
+    private function googleEnabled(): bool
+    {
+        return filled(config('services.google.client_id')) && filled(config('services.google.client_secret'));
+    }
+
+    private function stagingVerifyUrl(Request $request): ?string
+    {
+        $user = $request->user();
+
+        if (! DevMenuController::enabled() || $user === null || $user->hasVerifiedEmail()) {
+            return null;
+        }
+
+        return URL::temporarySignedRoute('verification.verify', now()->addMinutes(60), [
+            'id' => $user->getKey(),
+            'hash' => sha1((string) $user->getEmailForVerification()),
+        ]);
     }
 
     /**

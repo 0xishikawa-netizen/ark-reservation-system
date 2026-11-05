@@ -5,7 +5,10 @@ import { MESSAGES } from '@/constants/messages';
 
 defineProps<{
     status?: string | null;
+    stagingVerifyUrl?: string | null;
 }>();
+
+const D = MESSAGES.customerUi.devMenu;
 
 const resendForm = useForm({});
 const logoutForm = useForm({});
@@ -26,6 +29,10 @@ const logout = (): void => {
     >
         <v-alert v-if="status" type="success" variant="tonal" density="comfortable" class="mb-4">
             {{ status }}
+        </v-alert>
+        <v-alert v-if="stagingVerifyUrl" type="info" variant="tonal" density="comfortable" class="mb-4">
+            <div class="mb-2">{{ D.verifyHint }}</div>
+            <v-btn color="info" variant="flat" block :href="stagingVerifyUrl">{{ D.verifyNow }}</v-btn>
         </v-alert>
         <v-btn
             color="primary"

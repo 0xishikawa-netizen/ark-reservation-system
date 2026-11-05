@@ -140,4 +140,75 @@ final class StagingEnvironmentTest extends TestCase
 
         $this->assertStringStartsWith('https://', url('/build/app.js'));
     }
+
+    public function test_login_hides_google_without_credentials_and_staging_hint_outside_staging(): void
+    {
+        config(['services.google.client_id' => null, 'services.google.client_secret' => null]);
+
+        $this->get('/login')->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Auth/Login')
+            ->where('googleEnabled', false)
+            ->where('stagingAccounts', null));
+
+        config(['services.google.client_id' => 'id', 'services.google.client_secret' => 'secret']);
+        $this->get('/login')->assertInertia(fn ($page) => $page->where('googleEnabled', true));
+        $this->get('/register')->assertInertia(fn ($page) => $page->where('googleEnabled', true));
+    }
+
+    public function test_login_shows_test_accounts_in_staging(): void
+    {
+        $this->actAsStaging();
+        config(['staging.dev_menu' => true, 'staging.basic_auth.user' => null]);
+
+        $this->get('/login')->assertOk()->assertInertia(fn ($page) => $page
+            ->where('stagingAccounts.admin', config('dev_admin.email'))
+            ->where('stagingAccounts.customer', 'cust01@demo.ark'));
+    }
+
+    public function test_verify_email_page_offers_signed_link_only_in_staging(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $user = User::factory()->unverified()->create();
+        $user->assignRole('customer');
+
+        $this->actingAs($user)->get('/email/verify')
+            ->assertInertia(fn ($page) => $page->where('stagingVerifyUrl', null));
+
+        $this->actAsStaging();
+        config(['staging.dev_menu' => true, 'staging.basic_auth.user' => null]);
+
+        $url = null;
+        $this->actingAs($user)->get('/email/verify')
+            ->assertInertia(function ($page) use (&$url) {
+                $url = $page->toArray()['props']['stagingVerifyUrl'];
+
+                return $page->where('stagingVerifyUrl', fn ($v) => is_string($v) && str_contains($v, '/email/verify/'));
+            });
+
+        $this->actingAs($user)->get((string) $url)->assertRedirect();
+        $this->assertTrue($user->fresh()->hasVerifiedEmail());
+    }
+
+    public function test_quick_login_prefills_only_in_staging_with_a_known_key(): void
+    {
+        $this->get('/login?as=admin')->assertInertia(fn ($page) => $page->where('stagingPrefill', null));
+
+        $this->actAsStaging();
+        config([
+            'staging.dev_menu' => true,
+            'staging.basic_auth.user' => null,
+            'staging.demo_password' => 'staging-pass-1234',
+        ]);
+
+        $this->get('/dev-menu')->assertInertia(fn ($page) => $page
+            ->where('quickLogins', ['admin', 'staff', 'customerA', 'customerB', 'customerC']));
+
+        $this->get('/login?as=customerB')->assertInertia(fn ($page) => $page
+            ->where('stagingPrefill.email', 'cust02@demo.ark')
+            ->where('stagingPrefill.password', 'staging-pass-1234')
+            ->where('stagingNotes', true));
+
+        $this->get('/login?as=unknown')->assertInertia(fn ($page) => $page->where('stagingPrefill', null));
+        $this->get('/login?as[]=admin')->assertInertia(fn ($page) => $page->where('stagingPrefill', null));
+    }
 }

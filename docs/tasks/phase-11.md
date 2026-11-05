@@ -706,3 +706,15 @@ Task 11-1では生成せず、必要データ、テンプレート管理、シ�
 - [x] Basic 認証・noindex・開発用メニューの表示条件を Feature テストで確認（staging 以外では無効／404）。
 - [x] `staging` で `STAGING_DEMO_PASSWORD` が未設定・12 文字未満ならデモ Seeder が停止する。
 - [x] MySQL 8.4 で `artisan test` 全件成功（2026-11-04：1250 件・174,155 assertions）、`npm run build` 成功・型エラー 0。MySQL 5.7（OFF・一般ユーザー）を相手に `tools/staging-deploy.sh` で展開し、`/dev-menu`・`/booking`・管理者ログイン・ブッキングボードの表示まで確認。サーバーへの実デプロイはユーザー作業（`docs/STAGING_DEPLOY.md`）。
+
+### Task 11-37 — お試し環境：ワンタップログイン・できない機能の表示・https 対応（2026-11-05 ユーザー承認・DONE 2026-11-05）
+
+初回デプロイ（2026-11-05）で出た問題の修正と、ユーザー要望の追加。
+- https：お名前.com は TLS を手前で終端するため、`APP_URL` が https の環境（local / testing 以外）では URL を https で生成する（画面の部品が http になりブラウザに止められていた）。
+- 開発用メニュー：「管理者／スタッフ／お客様A・B・C としてログイン」。押すとログイン画面が入力済みで開く（`/login?as=<key>`。staging かつ `STAGING_DEV_MENU=true` のときだけ。パスワードは `STAGING_DEMO_PASSWORD`）。デモ用スタッフは開発管理者と同じく MFA 済み扱い。
+- できない機能の下に小さく「今はできません」：カード決済（Stripe キー未設定）、Google ログイン（認証情報未設定なら全環境でボタンを無効化）、パスワード再設定メール・確認メール（staging はメールを送らない）。
+- 確認メールの画面：staging では確認リンク（署名付き・60 分）をボタンで出す。
+- デプロイスクリプト：`.htaccess` の `Options`（禁止）を除去、Stripe キー未設定ならダミー値を入れる。
+
+#### 受け入れ条件
+- [x] 上記を Feature テストで確認（staging 以外では出ない・不正なキーは無視）。関連テスト 172 件成功、`npm run build` 成功・型エラー 0。

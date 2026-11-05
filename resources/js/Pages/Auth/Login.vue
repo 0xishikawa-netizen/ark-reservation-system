@@ -3,13 +3,19 @@ import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
 import { MESSAGES } from '@/constants/messages';
 
-defineProps<{
+const props = defineProps<{
     status?: string | null;
+    googleEnabled?: boolean;
+    stagingAccounts?: { admin: string; staff: string; customer: string } | null;
+    stagingPrefill?: { email: string; password: string } | null;
+    stagingNotes?: boolean;
 }>();
 
+const D = MESSAGES.customerUi.devMenu;
+
 const form = useForm({
-    email: '',
-    password: '',
+    email: props.stagingPrefill?.email ?? '',
+    password: props.stagingPrefill?.password ?? '',
     remember: false,
 });
 
@@ -24,6 +30,16 @@ const submit = (): void => {
     <AuthCard :title="MESSAGES.customerUi.auth.login.title" :subtitle="MESSAGES.customerUi.auth.login.subtitle">
         <v-alert v-if="status" type="success" variant="tonal" density="comfortable" class="mb-4">
             {{ status }}
+        </v-alert>
+
+        <v-alert v-if="stagingPrefill" type="success" variant="tonal" density="comfortable" class="mb-4">
+            {{ D.prefillNotice }}
+        </v-alert>
+        <v-alert v-else-if="stagingAccounts" type="info" variant="tonal" density="comfortable" class="mb-4">
+            <div class="font-weight-bold mb-1">{{ D.loginHintTitle }}</div>
+            <div>{{ D.accountAdmin }}：<code>{{ stagingAccounts.admin }}</code></div>
+            <div>{{ D.accountCustomer }}：<code>{{ stagingAccounts.customer }}</code></div>
+            <div class="text-body-2 mt-1">{{ D.loginHintNote }}</div>
         </v-alert>
 
         <v-form @submit.prevent="submit">
@@ -53,6 +69,7 @@ const submit = (): void => {
                 />
                 <a href="/forgot-password" class="text-body-2">{{ MESSAGES.customerUi.auth.login.forgot }}</a>
             </div>
+            <p v-if="stagingNotes" class="ark-unavailable-note text-right mb-2">{{ D.resetUnavailable }}</p>
             <v-btn
                 type="submit"
                 color="primary"
@@ -70,7 +87,8 @@ const submit = (): void => {
         </div>
 
         <v-btn
-            :href="'/auth/google/redirect'"
+            :href="googleEnabled ? '/auth/google/redirect' : undefined"
+            :disabled="!googleEnabled"
             variant="outlined"
             size="large"
             block
@@ -86,6 +104,7 @@ const submit = (): void => {
             </span>
             {{ MESSAGES.customerUi.auth.login.google }}
         </v-btn>
+        <p v-if="!googleEnabled" class="ark-unavailable-note text-center mt-1">{{ D.notAvailable }}</p>
 
         <template #footer>
             <span class="text-body-2 text-medium-emphasis">{{ MESSAGES.customerUi.auth.login.noAccount }}</span>
@@ -93,3 +112,10 @@ const submit = (): void => {
         </template>
     </AuthCard>
 </template>
+
+<style scoped>
+.ark-unavailable-note {
+    font-size: 0.75rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+</style>

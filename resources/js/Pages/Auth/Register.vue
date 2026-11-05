@@ -3,6 +3,10 @@ import { useForm } from '@inertiajs/vue3';
 import AuthCard from '@/components/auth/AuthCard.vue';
 import { MESSAGES } from '@/constants/messages';
 
+defineProps<{
+    googleEnabled?: boolean;
+}>();
+
 const form = useForm({
     name: '',
     kana: '',
@@ -74,7 +78,7 @@ const submit = (): void => {
             <span>{{ MESSAGES.customerUi.auth.or }}</span>
         </div>
 
-        <v-btn href="/auth/google/redirect" variant="outlined" size="large" block class="ark-google-btn">
+        <v-btn :href="googleEnabled ? '/auth/google/redirect' : undefined" :disabled="!googleEnabled" variant="outlined" size="large" block class="ark-google-btn">
             <span class="ark-google-btn__icon" aria-hidden="true">
                 <svg viewBox="0 0 18 18" width="18" height="18">
                     <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
@@ -85,6 +89,7 @@ const submit = (): void => {
             </span>
             {{ MESSAGES.customerUi.auth.register.google }}
         </v-btn>
+        <p v-if="!googleEnabled" class="ark-unavailable-note text-center mt-1">{{ MESSAGES.customerUi.devMenu.notAvailable }}</p>
 
         <template #footer>
             <span class="text-body-2 text-medium-emphasis">{{ MESSAGES.customerUi.auth.register.hasAccount }}</span>
@@ -92,3 +97,10 @@ const submit = (): void => {
         </template>
     </AuthCard>
 </template>
+
+<style scoped>
+.ark-unavailable-note {
+    font-size: 0.75rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+</style>

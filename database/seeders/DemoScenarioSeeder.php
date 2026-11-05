@@ -126,7 +126,13 @@ final class DemoScenarioSeeder extends Seeder
                 ['email' => $d['email']],
                 ['name' => $d['name'], 'password' => $this->demoPassword, 'email_verified_at' => now()],
             );
-            $user->forceFill(['name' => $d['name'], 'email_verified_at' => $user->email_verified_at ?? now()])->save();
+            // デモ用スタッフは開発管理者と同じく MFA 済み扱い（secret は持たせない）。
+            // お試し環境で「スタッフとしてログイン」をすぐ試せるようにする（Task 11-37）。
+            $user->forceFill([
+                'name' => $d['name'],
+                'email_verified_at' => $user->email_verified_at ?? now(),
+                'two_factor_confirmed_at' => $user->two_factor_confirmed_at ?? now(),
+            ])->save();
             $user->syncRoles([$d['role']]);
 
             $staff[] = Staff::query()->updateOrCreate(

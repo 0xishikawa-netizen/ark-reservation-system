@@ -11,9 +11,18 @@ defineProps<{
         staff: string;
         customer: string;
     };
+    quickLogins: string[];
 }>();
 
 const T = MESSAGES.customerUi.devMenu;
+
+// 「〇〇としてログイン」ボタン。キーはサーバーの DevMenuController::quickLoginAccounts と一致させる。
+const loginHref = (key: string): string => `/login?as=${encodeURIComponent(key)}`;
+const CUSTOMER_LOGINS = [
+    { key: 'customerA', label: T.loginAsCustomerA },
+    { key: 'customerB', label: T.loginAsCustomerB },
+    { key: 'customerC', label: T.loginAsCustomerC },
+];
 </script>
 
 <template>
@@ -33,19 +42,37 @@ const T = MESSAGES.customerUi.devMenu;
                     <v-card variant="outlined" class="dev-menu__card">
                         <v-btn color="primary" variant="flat" size="large" block href="/booking">{{ T.booking }}</v-btn>
                         <p class="dev-menu__note">{{ T.bookingNote }}</p>
+                        <p class="dev-menu__unavailable">{{ T.cardPaymentUnavailable }}</p>
                     </v-card>
                     <v-card variant="outlined" class="dev-menu__card">
-                        <v-btn color="primary" variant="outlined" size="large" block href="/login">{{ T.login }}</v-btn>
-                        <p class="dev-menu__note">{{ T.loginNote }}</p>
-                        <v-btn variant="text" size="small" href="/register">{{ T.register }}</v-btn>
+                        <v-btn
+                            v-for="c in CUSTOMER_LOGINS.filter((x) => quickLogins.includes(x.key))"
+                            :key="c.key"
+                            color="primary"
+                            variant="outlined"
+                            size="large"
+                            block
+                            :href="loginHref(c.key)"
+                        >
+                            {{ c.label }}
+                        </v-btn>
+                        <p class="dev-menu__note">{{ T.quickLoginNote }}</p>
+                        <p class="dev-menu__unavailable">{{ T.googleUnavailable }}</p>
+                        <p class="dev-menu__unavailable">{{ T.resetUnavailable }}</p>
+                    </v-card>
+                    <v-card variant="outlined" class="dev-menu__card">
+                        <v-btn variant="tonal" size="large" block href="/register">{{ T.register }}</v-btn>
+                        <p class="dev-menu__unavailable">{{ T.registerNote }}</p>
                     </v-card>
                 </section>
 
                 <section class="dev-menu__section">
                     <h2 class="dev-menu__heading">{{ T.storeHeading }}</h2>
                     <v-card variant="outlined" class="dev-menu__card">
-                        <v-btn color="secondary" variant="flat" size="large" block href="/admin">{{ T.admin }}</v-btn>
+                        <v-btn v-if="quickLogins.includes('admin')" color="secondary" variant="flat" size="large" block :href="loginHref('admin')">{{ T.loginAsAdmin }}</v-btn>
+                        <v-btn v-if="quickLogins.includes('staff')" color="secondary" variant="outlined" size="large" block :href="loginHref('staff')">{{ T.loginAsStaff }}</v-btn>
                         <p class="dev-menu__note">{{ T.adminNote }}</p>
+                        <p class="dev-menu__note">{{ T.quickLoginNote }}</p>
                     </v-card>
                 </section>
 
@@ -58,7 +85,7 @@ const T = MESSAGES.customerUi.devMenu;
                                 <td><code>{{ accounts.admin }}</code></td>
                             </tr>
                             <tr>
-                                <th>{{ T.accountStaff }}</th>
+                                <th>{{ T.accountStaffReady }}</th>
                                 <td><code>{{ accounts.staff }}</code></td>
                             </tr>
                             <tr>
@@ -119,6 +146,11 @@ const T = MESSAGES.customerUi.devMenu;
 .dev-menu__heading {
     font-size: 1.125rem;
     font-weight: 700;
+}
+
+.dev-menu__unavailable {
+    font-size: 0.75rem;
+    color: rgba(var(--v-theme-on-surface), 0.55);
 }
 
 .dev-menu__card {
