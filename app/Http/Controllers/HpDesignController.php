@@ -20,6 +20,23 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 final class HpDesignController extends Controller
 {
+    /** 拡張子ごとの Content-Type（見本ページで使うものだけ）。 */
+    private const MIME_TYPES = [
+        'html' => 'text/html; charset=UTF-8',
+        'htm' => 'text/html; charset=UTF-8',
+        'css' => 'text/css; charset=UTF-8',
+        'js' => 'text/javascript; charset=UTF-8',
+        'svg' => 'image/svg+xml',
+        'json' => 'application/json',
+        'pdf' => 'application/pdf',
+        'png' => 'image/png',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'webp' => 'image/webp',
+        'gif' => 'image/gif',
+        'woff2' => 'font/woff2',
+    ];
+
     /** フォルダの中で最初に開くファイルの拡張子（優先順）。 */
     private const ENTRY_EXTENSIONS = ['html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif'];
 
@@ -37,7 +54,16 @@ final class HpDesignController extends Controller
         // フォルダの外（../ など）は返さない。
         abort_if($file === null || $file === false || ! is_file($file) || ! str_starts_with($file, $dir.DIRECTORY_SEPARATOR), 404);
 
-        return response()->file($file, ['X-Robots-Tag' => 'noindex, nofollow']);
+        $headers = ['X-Robots-Tag' => 'noindex, nofollow'];
+
+        // 中身からの推測だと CSS / JS が text/plain になり、nosniff のせいでブラウザが読み込まないため拡張子で決める。
+        $type = self::MIME_TYPES[strtolower(pathinfo($file, PATHINFO_EXTENSION))] ?? null;
+
+        if ($type !== null) {
+            $headers['Content-Type'] = $type;
+        }
+
+        return response()->file($file, $headers);
     }
 
     /**

@@ -10,3 +10,8 @@
 
 ページは Laravel 経由で配信され、お試し環境の Basic 認証の内側にある（検索除けあり）。
 本番（production）では開発用メニューごと無効なので表示されない。
+
+## 今ある案
+
+- `サンプル案/` … 今の HP を元にした改善案（15 ページ）。`python3 tools/hp-designs/build_sample.py` で生成する。
+- `サンプル案2/` … Codex に作ってもらう案（依頼書：`docs/hp-redesign/CODEX_BRIEF.md`）。

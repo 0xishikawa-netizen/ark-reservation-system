@@ -69,7 +69,7 @@ final class HpDesignTest extends TestCase
             ->assertHeader('X-Robots-Tag', 'noindex, nofollow')
             ->assertHeaderMissing('Content-Security-Policy');
 
-        $this->get('/hp-designs/A案/style.css')->assertOk();
+        $this->get('/hp-designs/A案/style.css')->assertOk()->assertHeader('Content-Type', 'text/css; charset=UTF-8');
         $this->get('/hp-designs/A案')->assertOk();
     }
 
