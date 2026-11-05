@@ -6,11 +6,6 @@ import { MESSAGES } from '@/constants/messages';
 defineProps<{
     appName: string;
     environment: string;
-    accounts: {
-        admin: string;
-        staff: string;
-        customer: string;
-    };
     quickLogins: string[];
 }>();
 
@@ -74,27 +69,6 @@ const CUSTOMER_LOGINS = [
                         <p class="dev-menu__note">{{ T.adminNote }}</p>
                         <p class="dev-menu__note">{{ T.quickLoginNote }}</p>
                     </v-card>
-                </section>
-
-                <section class="dev-menu__section">
-                    <h2 class="dev-menu__heading">{{ T.accountsHeading }}</h2>
-                    <v-table density="compact">
-                        <tbody>
-                            <tr>
-                                <th>{{ T.accountAdmin }}</th>
-                                <td><code>{{ accounts.admin }}</code></td>
-                            </tr>
-                            <tr>
-                                <th>{{ T.accountStaffReady }}</th>
-                                <td><code>{{ accounts.staff }}</code></td>
-                            </tr>
-                            <tr>
-                                <th>{{ T.accountCustomer }}</th>
-                                <td><code>{{ accounts.customer }}</code></td>
-                            </tr>
-                        </tbody>
-                    </v-table>
-                    <p class="dev-menu__note">{{ T.passwordNote }}</p>
                 </section>
 
                 <section class="dev-menu__section">

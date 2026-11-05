@@ -93,7 +93,7 @@ final class StagingEnvironmentTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('DevMenu')
                 ->where('environment', 'staging')
-                ->where('accounts.admin', config('dev_admin.email')));
+                ->has('quickLogins', 5));
     }
 
     public function test_demo_password_keeps_local_default_outside_staging(): void

@@ -22,7 +22,6 @@ final class DevMenuController extends Controller
         return Inertia::render('DevMenu', [
             'appName' => config('app.name'),
             'environment' => app()->environment(),
-            'accounts' => self::accounts(),
             'quickLogins' => array_keys(self::quickLoginAccounts()),
         ]);
     }
