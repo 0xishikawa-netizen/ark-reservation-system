@@ -5,7 +5,8 @@
 #   bash staging-deploy.sh <パッケージ.tar.gz> <アプリの置き場所> <サブドメインの公開フォルダ> [--seed]
 #   例: bash staging-deploy.sh ~/ark-staging.tar.gz ~/ark-stg ~/public_html/stg.ark-conditioning.com --seed
 #
-# - アプリ本体は公開フォルダの外（<アプリの置き場所>）に置き、公開フォルダは public/ へのリンクにする。
+# - アプリ本体は公開フォルダの外（<アプリの置き場所>）に置き、公開フォルダには public/ の中身をコピーする
+#   （index.php だけはアプリ本体を読み込む入口に置き換える）。public_html 自体が書き込み禁止でも動く。
 # - .env は <アプリの置き場所>/.env を使う（初回は .env.staging.example から作って値を埋める）。
 # - WordPress のフォルダ（wp-config.php がある所）には絶対に触らない。見つけたら止まる。
 # - --seed は初回だけ。DB を作り直してデモデータを入れる（既存データは消える）。
@@ -29,6 +30,13 @@ case "$DOCROOT" in
     *) fail "公開フォルダ $DOCROOT がお試し用サブドメインに見えません（名前に stg を含めてください）。" ;;
 esac
 [ -f "$PACKAGE" ] || fail "パッケージ $PACKAGE が見つかりません。"
+[ -d "$DOCROOT" ] || fail "公開フォルダ $DOCROOT がありません。先にコントロールパネルでサブドメインを作ってください。"
+[ -w "$DOCROOT" ] || fail "公開フォルダ $DOCROOT に書き込めません。"
+# 2 回目以降は目印ファイルがある。初回は空か、お名前.com の初期ファイルだけのときに限る。
+if [ ! -f "$DOCROOT/.ark-staging" ]; then
+    leftover=$(find "$DOCROOT" -mindepth 1 -maxdepth 1 ! -name 'index.html' ! -name '.htaccess' ! -name '.user.ini' | head -1)
+    [ -n "$leftover" ] && fail "$DOCROOT に既存のファイルがあります（$leftover）。中身を確認してから空にしてください。"
+fi
 
 "$PHP" -r 'exit(version_compare(PHP_VERSION, "8.3.0", ">=") ? 0 : 1);' \
     || fail "PHP 8.3 以上が必要です（今: $("$PHP" -r 'echo PHP_VERSION;')）。PHP=/usr/bin/php8.3 のように指定して再実行してください。"
@@ -69,17 +77,16 @@ fi
 "$PHP" artisan route:cache
 "$PHP" artisan view:cache
 
-# --- 公開フォルダを public/ へ向ける ---------------------------------------
-if [ -L "$DOCROOT" ]; then
-    ln -sfn "$APP_DIR/public" "$DOCROOT"
-elif [ -d "$DOCROOT" ]; then
-    # 中身が空か、お名前.com の初期ファイルだけなら退避してリンクに置き換える
-    leftover=$(find "$DOCROOT" -mindepth 1 -maxdepth 1 ! -name 'index.html' ! -name '.htaccess' | head -1)
-    [ -n "$leftover" ] && fail "$DOCROOT に既存のファイルがあります（$leftover）。中身を確認してから空にしてください。"
-    mv "$DOCROOT" "${DOCROOT}.bak.$(date +%Y%m%d%H%M%S)"
-    ln -s "$APP_DIR/public" "$DOCROOT"
-else
-    ln -s "$APP_DIR/public" "$DOCROOT"
-fi
+# --- 公開フォルダへ入口ファイルを置く ---------------------------------------
+# お名前.com の初期ページは退避（初回のみ）
+[ -f "$DOCROOT/.ark-staging" ] || { [ -f "$DOCROOT/index.html" ] && mv "$DOCROOT/index.html" "$DOCROOT/index.html.bak"; }
+rm -rf "$DOCROOT/build"
+cp -R "$APP_DIR/public/." "$DOCROOT/"
+# index.php はアプリ本体（公開フォルダの外）を読み込むだけにする。__DIR__ は読み込まれた側の場所になる。
+cat > "$DOCROOT/index.php" <<PHP
+<?php
+require '$APP_DIR/public/index.php';
+PHP
+echo "ARK staging: $APP_DIR" > "$DOCROOT/.ark-staging"
 
 echo "完了: $(grep -E '^APP_URL=' .env | cut -d= -f2-)/dev-menu を開いてください。"

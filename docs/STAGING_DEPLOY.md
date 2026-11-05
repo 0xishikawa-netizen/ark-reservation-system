@@ -11,7 +11,7 @@
 | Web サーバー | `www1008.onamae.ne.jp`（PHP 8.3 選択済み） |
 | DB サーバー | `mysql1002.onamae.ne.jp`（MySQL 5.7.44、`explicit_defaults_for_timestamp=OFF`。Task 11-35 で対応済み） |
 | お試し用 DB | `64ssq_ark_test`（WordPress 用 `64ssq_ark_db` とは別） |
-| SSH | 鍵認証のみ（パスワード認証不可） |
+| SSH | 鍵認証のみ。`www1008.onamae.ne.jp` ポート `8022`、ユーザー `r2630422`（2026-11-05 接続確認。CLI は PHP 8.3.35、拡張は揃っている、git あり・composer なし、`public_html` 自体は書き込み禁止） |
 
 MySQL 5.7 の制約：外部予約連携の送信（`SKIP LOCKED`）は動かない、DB の CHECK 制約は効かない。お試し環境では外部連携を使わないので影響なし。本番は MySQL 8 系が前提。
 
@@ -62,11 +62,13 @@ bash ~/staging-deploy.sh ~/ark-staging.tar.gz ~/ark-stg <公開フォルダ> --s
 | `APP_KEY` / `PII_LOOKUP_KEY` | 空のままで OK（スクリプトが自動で作る） |
 
 ```bash
-# 2 回目：DB を作り、デモデータを入れ、公開フォルダを ARK に向ける
+# 2 回目：DB を作り、デモデータを入れ、公開フォルダに ARK の入口ファイルを置く
 bash ~/staging-deploy.sh ~/ark-staging.tar.gz ~/ark-stg <公開フォルダ> --seed
 ```
 
 `完了: https://stg.ark-conditioning.com/dev-menu を開いてください。` と出れば成功。
+
+アプリ本体は `~/ark-stg`（公開フォルダの外）に置かれ、公開フォルダには入口の `index.php`（本体を読み込むだけ）と画面の部品（`build/` など）だけがコピーされる。お名前.com の初期ページ `index.html` は `index.html.bak` に退避される。
 
 ## 5. 確認
 
@@ -96,5 +98,4 @@ cd ~/ark-stg && php artisan schedule:run >> /dev/null 2>&1
 |---|---|
 | 500 エラー | `~/ark-stg/storage/logs/` の最新ログ。`.env` の DB 設定。 |
 | 共通 ID / パスワードを入れても何度も聞かれる | サーバーが認証ヘッダーを PHP に渡していない可能性。`.env` の `STAGING_BASIC_AUTH_*` を空にして `php artisan config:cache` し、代わりにコントロールパネルのアクセス制限（Basic 認証）機能を使う。 |
-| 公開フォルダがリンクにできない（Forbidden） | サーバーがシンボリックリンクを許可していない可能性。開発側に連絡（公開フォルダへ `public/` の中身をコピーする方式に切り替える）。 |
 | 画面が崩れる・真っ白 | パッケージ作成前に `npm run build` したか。 |
