@@ -17,6 +17,7 @@ use App\Listeners\AuditAuthEvents;
 use App\Models\Customer;
 use App\Support\Settings\Settings;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Laravel\Cashier\Cashier;
@@ -88,8 +89,25 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         self::assertNoStripeLiveKeys();
+        self::forceHttpsWhenAppUrlIsHttps();
 
         Event::subscribe(AuditAuthEvents::class);
+    }
+
+    /**
+     * レンタルサーバー（お名前.com 等）は TLS を手前で終端し、PHP には http で届く。
+     * そのままだと画面の部品の URL が http になりブラウザに止められるため、
+     * APP_URL が https の環境（local / testing 以外）では URL を常に https で作る。
+     */
+    public static function forceHttpsWhenAppUrlIsHttps(): void
+    {
+        if (app()->environment(['local', 'testing'])) {
+            return;
+        }
+
+        if (Str::startsWith((string) config('app.url'), 'https://')) {
+            URL::forceScheme('https');
+        }
     }
 
     public static function assertNoStripeLiveKeys(): void

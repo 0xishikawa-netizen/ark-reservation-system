@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Staging;
 
 use App\Models\User;
+use App\Providers\AppServiceProvider;
 use Database\Seeders\DevelopmentAdminSeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\Support\DemoPassword;
@@ -128,5 +129,15 @@ final class StagingEnvironmentTest extends TestCase
         $hash = (string) User::query()->where('email', config('dev_admin.email'))->value('password');
         $this->assertTrue(Hash::check('staging-pass-1234', $hash));
         $this->assertFalse(Hash::check('password', $hash));
+    }
+
+    public function test_urls_use_https_in_staging_when_app_url_is_https(): void
+    {
+        $this->actAsStaging();
+        config(['app.url' => 'https://stg.example.test']);
+
+        AppServiceProvider::forceHttpsWhenAppUrlIsHttps();
+
+        $this->assertStringStartsWith('https://', url('/build/app.js'));
     }
 }
