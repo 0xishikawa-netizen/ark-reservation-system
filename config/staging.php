@@ -23,6 +23,10 @@ return [
     // staging のデモ Seeder が使う共通パスワード（12 文字以上必須）。
     'demo_password' => env('STAGING_DEMO_PASSWORD'),
 
+    // HP デザイン案（実装イメージ）の置き場所（Task 11-38）。リポジトリの hp-designs/ に
+    // `<案名>/index.html`（または `<案名>.url`）を置くと開発用メニューに並び、デプロイで一緒に配置される。
+    'hp_designs_path' => env('STAGING_HP_DESIGNS_PATH', base_path('hp-designs')),
+
     // パスワードの最小文字数。
     'demo_password_min_length' => 12,
 ];

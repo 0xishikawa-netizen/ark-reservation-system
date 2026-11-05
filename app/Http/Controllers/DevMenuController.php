@@ -23,6 +23,7 @@ final class DevMenuController extends Controller
             'appName' => config('app.name'),
             'environment' => app()->environment(),
             'quickLogins' => array_keys(self::quickLoginAccounts()),
+            'hpDesigns' => HpDesignController::designs(),
         ]);
     }
 

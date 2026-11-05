@@ -454,6 +454,10 @@ export const CUSTOMER_MESSAGES = {
         resetUnavailable: 'パスワード再設定メール：今はできません（お試し環境ではメールを送りません）',
         registerNote: '確認メールは届きません。登録後の画面のボタンで確認を完了できます。',
         prefillNotice: '開発用メニューから入力済みにしました。「ログイン」を押してください。',
+        hpDesignsHeading: 'HP デザイン案（実際に作るとこうなる見本）',
+        hpDesignsEmpty: 'まだ見本はありません。デザインが届いたら、案ごとに見本ページを作ってここに並べます。',
+        hpDesignsNote: '外部のリンク（Canva・Figma など）は新しいタブで開きます。',
+        hpDesignOpen: '{name} を見る',
     },
     /** 管理画面のヘッダーメニュー（layouts/AdminLayout・settingsNavigation・reportNavigation） */
     navigation: {

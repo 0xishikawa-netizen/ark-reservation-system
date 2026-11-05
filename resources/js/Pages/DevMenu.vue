@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { MESSAGES } from '@/constants/messages';
+import { fillMessage } from '@/utils/message';
 
 // お試し環境の開発用メニュー（Task 11-36）。サーバー側で local / staging かつ有効時のみ表示。
 defineProps<{
     appName: string;
     environment: string;
     quickLogins: string[];
+    hpDesigns: { name: string; url: string; external: boolean }[];
 }>();
 
 const T = MESSAGES.customerUi.devMenu;
@@ -68,6 +70,29 @@ const CUSTOMER_LOGINS = [
                         <v-btn v-if="quickLogins.includes('staff')" color="secondary" variant="outlined" size="large" block :href="loginHref('staff')">{{ T.loginAsStaff }}</v-btn>
                         <p class="dev-menu__note">{{ T.adminNote }}</p>
                         <p class="dev-menu__note">{{ T.quickLoginNote }}</p>
+                    </v-card>
+                </section>
+
+                <section class="dev-menu__section">
+                    <h2 class="dev-menu__heading">{{ T.hpDesignsHeading }}</h2>
+                    <v-card variant="outlined" class="dev-menu__card">
+                        <template v-if="hpDesigns.length > 0">
+                            <v-btn
+                                v-for="d in hpDesigns"
+                                :key="d.url"
+                                color="primary"
+                                variant="tonal"
+                                size="large"
+                                block
+                                :href="d.url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                {{ fillMessage(T.hpDesignOpen, { name: d.name }) }}
+                            </v-btn>
+                            <p class="dev-menu__note">{{ T.hpDesignsNote }}</p>
+                        </template>
+                        <p v-else class="dev-menu__note">{{ T.hpDesignsEmpty }}</p>
                     </v-card>
                 </section>
 

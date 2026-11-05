@@ -62,6 +62,7 @@ use App\Http\Controllers\Customer\SecurityController as CustomerSecurityControll
 use App\Http\Controllers\Customer\TicketController as CustomerTicketPageController;
 use App\Http\Controllers\DevMenuController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\HpDesignController;
 use App\Http\Controllers\Reserve\ReserveController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Middleware\AdminAccess;
@@ -74,6 +75,8 @@ Route::get('/', HomeController::class)->name('home');
 
 // お試し環境の開発用メニュー。local / staging かつ STAGING_DEV_MENU=true のときだけ表示（Task 11-36）。
 Route::get('dev-menu', DevMenuController::class)->name('dev-menu');
+// HP デザイン案（開発用メニューと同じ条件。Basic 認証の内側・Task 11-38）。
+Route::get('hp-designs/{design}/{path?}', HpDesignController::class)->where('path', '.*')->name('hp-designs');
 
 // Stripe webhook。署名検証で認証するため auth を掛けない。
 // CSRF は bootstrap/app.php で除外。Stripe の retry を阻害する rate limit は付けない。

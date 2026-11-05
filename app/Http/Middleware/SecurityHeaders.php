@@ -34,7 +34,11 @@ class SecurityHeaders
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Permissions-Policy', $this->permissionsPolicy($isAdmin));
-        $response->headers->set('Content-Security-Policy', $this->contentSecurityPolicy($isAdmin));
+
+        // HP デザイン案（お試し環境だけの外部制作 HTML）は外部フォント等を読むため ARK の CSP を掛けない（Task 11-38）。
+        if (! $request->is('hp-designs/*')) {
+            $response->headers->set('Content-Security-Policy', $this->contentSecurityPolicy($isAdmin));
+        }
 
         if ($isAdmin) {
             $response->headers->set('X-Frame-Options', 'DENY');
