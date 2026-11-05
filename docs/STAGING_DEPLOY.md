@@ -15,6 +15,8 @@
 
 MySQL 5.7 の制約：外部予約連携の送信（`SKIP LOCKED`）は動かない、DB の CHECK 制約は効かない。お試し環境では外部連携を使わないので影響なし。本番は MySQL 8 系が前提。
 
+2026-11-05 にこの手順で `https://stg.ark-conditioning.com` へ初回デプロイ済み（DB ユーザーはお試し専用の `64ssq_stg`、共通 ID は `stg_ark`）。
+
 ## 1. お名前.com のコントロールパネルでやること（初回だけ）
 
 1. **SSH の鍵を作る**：「サーバー」→「SSH」→「はじめる」→「key の新規自動作成」。
@@ -58,7 +60,7 @@ bash ~/staging-deploy.sh ~/ark-staging.tar.gz ~/ark-stg <公開フォルダ> --s
 | `STAGING_BASIC_AUTH_USER` / `STAGING_BASIC_AUTH_PASSWORD` | 関係者に配る共通 ID / パスワード |
 | `STAGING_DEMO_PASSWORD` | テスト用アカウント共通のパスワード（12 文字以上） |
 | `ADMIN_ALERT_EMAIL` | 自分のメールアドレス（必須。空だと起動しない。お試しでは実際には送られない） |
-| `STRIPE_KEY` / `STRIPE_SECRET` | Stripe ダッシュボード（テストモード）の `pk_test_...` / `sk_test_...` |
+| `STRIPE_KEY` / `STRIPE_SECRET` | Stripe ダッシュボード（テストモード）の `pk_test_...` / `sk_test_...`。未取得なら空のままで OK（スクリプトがダミー値を入れる。決済画面だけ使えない） |
 | `APP_KEY` / `PII_LOOKUP_KEY` | 空のままで OK（スクリプトが自動で作る） |
 
 ```bash

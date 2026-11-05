@@ -55,6 +55,9 @@ chmod 600 .env
 grep -qE '^APP_ENV=staging' .env || fail ".env の APP_ENV が staging ではありません。"
 grep -qE '^DB_DATABASE=64ssq_ark_db' .env && fail ".env の DB が WordPress の DB（64ssq_ark_db）になっています。"
 grep -qE '^ADMIN_ALERT_EMAIL=.+' .env || fail ".env の ADMIN_ALERT_EMAIL が空です（空だと起動できません）。"
+# Stripe キーが空だと起動時に止まる。テストキー未取得ならダミーを入れる（決済画面だけ使えない）。
+grep -qE '^STRIPE_KEY=.+' .env || sed -i -E 's/^STRIPE_KEY=.*/STRIPE_KEY=pk_test_dummy/' .env
+grep -qE '^STRIPE_SECRET=.+' .env || sed -i -E 's/^STRIPE_SECRET=.*/STRIPE_SECRET=sk_test_dummy/' .env
 
 mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
 chmod -R u+rwX storage bootstrap/cache
