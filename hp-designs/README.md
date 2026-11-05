@@ -14,4 +14,4 @@
 ## 今ある案
 
 - `サンプル案/` … 今の HP を元にした改善案（15 ページ）。`python3 tools/hp-designs/build_sample.py` で生成する。
-- `サンプル案2/` … Codex に作ってもらう案（依頼書：`docs/hp-redesign/CODEX_BRIEF.md`）。
+- `サンプル案2/` … Codex が作った案（15 ページ。依頼書：`docs/hp-redesign/CODEX_BRIEF.md`、説明：`サンプル案2/README.md`）。
